@@ -1,8 +1,8 @@
 package com.dust.wxclawbackfront.ilnk.media;
 
-import com.openilink.model.CDNMedia;
-import com.openilink.model.ImageItem;
-import org.springframework.beans.factory.annotation.Value;
+import com.github.wechat.ilink.sdk.ILinkClient;
+import com.github.wechat.ilink.sdk.core.model.ImageItem;
+import com.github.wechat.ilink.sdk.core.model.MessageItem;
 import org.springframework.stereotype.Service;
 
 import java.util.Base64;
@@ -10,16 +10,11 @@ import java.util.Base64;
 @Service
 public class WechatCdnMediaService {
 
-    private final WechatCdnClient cdnClient;
-    private final TempMediaStore mediaStore;
-
-    public WechatCdnMediaService(TempMediaStore mediaStore,
-                                 @Value("${wxclaw.wechat.cdn.base-url:https://novac2c.cdn.weixin.qq.com/c2c}") String cdnBaseUrl) {
-        this.cdnClient = new WechatCdnClient(cdnBaseUrl);
-        this.mediaStore = mediaStore;
-    }
-
-    public ResolvedImage resolveImage(ImageItem imageItem) {
+    public ResolvedImage resolveImage(ILinkClient client, MessageItem messageItem) {
+        if (messageItem == null) {
+            return null;
+        }
+        ImageItem imageItem = messageItem.getImage_item();
         if (imageItem == null) {
             return null;
         }
@@ -27,27 +22,30 @@ public class WechatCdnMediaService {
             return ResolvedImage.direct(imageItem.getUrl().trim());
         }
 
-        CDNMedia media = imageItem.getMedia();
-        if (media == null || media.getEncryptQueryParam() == null || media.getEncryptQueryParam().isBlank()) {
-            return null;
-        }
-        String encryptQueryParam = media.getEncryptQueryParam().trim();
-        String aesKey = null;
-        if (media.getAesKey() != null && !media.getAesKey().isBlank()) {
-            aesKey = media.getAesKey();
-        } else if (imageItem.getAesKey() != null && !imageItem.getAesKey().isBlank()) {
-            aesKey = imageItem.getAesKey();
-        }
-        if (aesKey == null || aesKey.isBlank()) {
+        byte[] plain = downloadWithSdk(client, messageItem);
+        if (plain == null || plain.length == 0) {
             return null;
         }
 
-        byte[] encrypted = cdnClient.downloadEncrypted(encryptQueryParam);
-        byte[] plain = WechatCdnCrypto.decryptAes128EcbPkcs7(encrypted, aesKey);
         ImageInfo info = guessImageInfo(plain);
-        TempMediaStore.MediaRef ref = mediaStore.put(plain, info.contentType(), info.ext());
         String dataUrl = "data:" + info.contentType() + ";base64," + Base64.getEncoder().encodeToString(plain);
-        return ResolvedImage.decrypted(dataUrl, encryptQueryParam, ref.localPath(), info.contentType());
+        String encryptQueryParam = imageItem.getMedia() == null ? null : imageItem.getMedia().getEncrypt_query_param();
+        return ResolvedImage.decrypted(dataUrl, encryptQueryParam, info.contentType());
+    }
+
+    private byte[] downloadWithSdk(ILinkClient client, MessageItem messageItem) {
+        if (client == null || messageItem == null) {
+            return null;
+        }
+        try {
+            return client.downloadImageThumbFromMessageItem(messageItem);
+        } catch (Exception ignored) {
+        }
+        try {
+            return client.downloadImageFromMessageItem(messageItem);
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private static ImageInfo guessImageInfo(byte[] bytes) {
@@ -73,13 +71,13 @@ public class WechatCdnMediaService {
     private record ImageInfo(String contentType, String ext) {
     }
 
-    public record ResolvedImage(String accessibleUrl, String encryptQueryParam, boolean decrypted, String localPath, String contentType) {
+    public record ResolvedImage(String accessibleUrl, String encryptQueryParam, boolean decrypted, String contentType) {
         static ResolvedImage direct(String url) {
-            return new ResolvedImage(url, null, false, null, null);
+            return new ResolvedImage(url, null, false, null);
         }
 
-        static ResolvedImage decrypted(String relativeUrl, String encryptQueryParam, String localPath, String contentType) {
-            return new ResolvedImage(relativeUrl, encryptQueryParam, true, localPath, contentType);
+        static ResolvedImage decrypted(String relativeUrl, String encryptQueryParam, String contentType) {
+            return new ResolvedImage(relativeUrl, encryptQueryParam, true, contentType);
         }
     }
 }

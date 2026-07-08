@@ -17,7 +17,6 @@ public class AiChatTrace {
     private String imageModel;
     private String imageDescription;
     private String imageLlmRequestJson;
-    private String imageLocalPath;
     private String userText;
     private String requestText;
     private String replyText;

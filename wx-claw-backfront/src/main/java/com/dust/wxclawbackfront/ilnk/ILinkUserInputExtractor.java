@@ -3,51 +3,48 @@ package com.dust.wxclawbackfront.ilnk;
 import com.dust.wxclawbackfront.ai.tools.ImageHandler;
 import com.dust.wxclawbackfront.ai.tools.ImageUnderstandingResult;
 import com.dust.wxclawbackfront.ilnk.media.WechatCdnMediaService;
-import com.openilink.model.MessageItem;
-import com.openilink.model.MessageItemType;
-import com.openilink.model.WeixinMessage;
-import com.openilink.util.MessageHelper;
-import org.springframework.beans.factory.annotation.Value;
+import com.github.wechat.ilink.sdk.ILinkClient;
+import com.github.wechat.ilink.sdk.core.model.MessageItem;
+import com.github.wechat.ilink.sdk.core.model.WeixinMessage;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Component
 public class ILinkUserInputExtractor {
 
+    private static final int MESSAGE_ITEM_TYPE_TEXT = 1;
+    private static final int MESSAGE_ITEM_TYPE_IMAGE = 2;
+
     private final ImageHandler imageHandler;
     private final WechatCdnMediaService cdnMediaService;
-    private final String publicBaseUrl;
 
-    public ILinkUserInputExtractor(ImageHandler imageHandler,
-                                   WechatCdnMediaService cdnMediaService,
-                                   @Value("${wxclaw.public-base-url:http://localhost:8080}") String publicBaseUrl) {
+    public ILinkUserInputExtractor(ImageHandler imageHandler, WechatCdnMediaService cdnMediaService) {
         this.imageHandler = imageHandler;
         this.cdnMediaService = cdnMediaService;
-        this.publicBaseUrl = publicBaseUrl;
     }
 
-    public ILinkUserInput extract(WeixinMessage msg) {
-        List<MessageItem> items = msg == null ? null : msg.getItemList();
+    public ILinkUserInput extract(ILinkClient client, WeixinMessage msg) {
+        List<MessageItem> items = msg == null ? null : msg.getItem_list();
         if (items == null || items.isEmpty()) {
             return null;
         }
 
         for (MessageItem item : items) {
-            if (item == null || item.getType() == null) {
+            if (item == null) {
                 continue;
             }
-            if (item.getType() == MessageItemType.IMAGE && item.getImageItem() != null) {
-                WechatCdnMediaService.ResolvedImage resolved = cdnMediaService.resolveImage(item.getImageItem());
+            if (item.getType() == MESSAGE_ITEM_TYPE_IMAGE && item.getImage_item() != null) {
+                WechatCdnMediaService.ResolvedImage resolved = cdnMediaService.resolveImage(client, item);
                 String url = resolved == null ? null : resolved.accessibleUrl();
-                String localPath = resolved == null ? null : resolved.localPath();
-                String userText = MessageHelper.extractText(msg);
+                String userText = extractText(msg);
                 String description = null;
                 String model = null;
                 String requestJson = null;
                 String error = null;
                 if (url != null && !url.isBlank()) {
-                    ImageUnderstandingResult result = imageHandler.understandByUrl(toAbsoluteUrlIfNeeded(url), userText);
+                    ImageUnderstandingResult result = imageHandler.understandByUrl(url, userText);
                     if (result != null) {
                         description = result.getDescription();
                         model = result.getModel();
@@ -56,13 +53,13 @@ public class ILinkUserInputExtractor {
                     }
                 }
                 if (error != null && !error.isBlank()) {
-                    return ILinkUserInput.image(url, model, description, requestJson, localPath, "图片理解失败: " + error);
+                    return ILinkUserInput.image(url, model, description, requestJson, "图片理解失败: " + error);
                 }
-                return ILinkUserInput.image(url, model, description, requestJson, localPath, null);
+                return ILinkUserInput.image(url, model, description, requestJson, null);
             }
         }
 
-        String text = MessageHelper.extractText(msg);
+        String text = extractText(msg);
         if (text != null && !text.isBlank()) {
             String trimmed = text.trim();
             if (!trimmed.isEmpty()) {
@@ -70,37 +67,40 @@ public class ILinkUserInputExtractor {
             }
         }
 
-        MessageItemType type = null;
         for (MessageItem item : items) {
-            if (item != null && item.getType() != null && item.getType() != MessageItemType.NONE) {
-                type = item.getType();
-                break;
+            if (item != null && item.getType() != 0) {
+                return ILinkUserInput.unsupported(getMessageTypeName(item.getType()));
             }
         }
-        if (type == null) {
-            return null;
-        }
-        return ILinkUserInput.unsupported(type.name());
+        return null;
     }
 
-    private String toAbsoluteUrlIfNeeded(String url) {
-        if (url == null || url.isBlank()) {
-            return url;
+    public String extractText(WeixinMessage msg) {
+        List<MessageItem> items = msg == null ? null : msg.getItem_list();
+        if (items == null || items.isEmpty()) {
+            return null;
         }
-        String trimmed = url.trim();
-        if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-            return trimmed;
+        List<String> parts = new ArrayList<>();
+        for (MessageItem item : items) {
+            if (item == null || item.getType() != MESSAGE_ITEM_TYPE_TEXT || item.getText_item() == null) {
+                continue;
+            }
+            String text = item.getText_item().getText();
+            if (text != null && !text.isBlank()) {
+                parts.add(text.trim());
+            }
         }
-        if (trimmed.startsWith("data:")) {
-            return trimmed;
+        if (parts.isEmpty()) {
+            return null;
         }
-        String base = publicBaseUrl == null ? "" : publicBaseUrl.trim();
-        if (base.endsWith("/") && trimmed.startsWith("/")) {
-            return base.substring(0, base.length() - 1) + trimmed;
-        }
-        if (!base.endsWith("/") && !trimmed.startsWith("/")) {
-            return base + "/" + trimmed;
-        }
-        return base + trimmed;
+        return String.join("\n", parts);
+    }
+
+    private static String getMessageTypeName(int type) {
+        return switch (type) {
+            case MESSAGE_ITEM_TYPE_TEXT -> "TEXT";
+            case MESSAGE_ITEM_TYPE_IMAGE -> "IMAGE";
+            default -> "TYPE_" + type;
+        };
     }
 }

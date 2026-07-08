@@ -13,7 +13,6 @@ public final class ILinkUserInput {
     private final String imageModel;
     private final String imageDescription;
     private final String imageLlmRequestJson;
-    private final String imageLocalPath;
     private final String error;
 
     private ILinkUserInput(String messageItemType,
@@ -24,7 +23,6 @@ public final class ILinkUserInput {
                            String imageModel,
                            String imageDescription,
                            String imageLlmRequestJson,
-                           String imageLocalPath,
                            String error) {
         this.messageItemType = messageItemType;
         this.displayText = displayText;
@@ -34,15 +32,14 @@ public final class ILinkUserInput {
         this.imageModel = imageModel;
         this.imageDescription = imageDescription;
         this.imageLlmRequestJson = imageLlmRequestJson;
-        this.imageLocalPath = imageLocalPath;
         this.error = error;
     }
 
     public static ILinkUserInput text(String text) {
-        return new ILinkUserInput("TEXT", text, text, text, null, null, null, null, null, null);
+        return new ILinkUserInput("TEXT", text, text, text, null, null, null, null, null);
     }
 
-    public static ILinkUserInput image(String url, String model, String description, String imageLlmRequestJson, String imageLocalPath, String error) {
+    public static ILinkUserInput image(String url, String model, String description, String imageLlmRequestJson, String error) {
         String display = "[IMAGE]";
         String persist;
         if (description != null && !description.isBlank()) {
@@ -60,13 +57,13 @@ public final class ILinkUserInput {
             prompt = "用户发送了一张图片。图片内容描述如下：\n" + description + "\n请用中文基于上述描述回复用户。";
         }
 
-        return new ILinkUserInput("IMAGE", display, prompt, persist, url, model, description, imageLlmRequestJson, imageLocalPath, error);
+        return new ILinkUserInput("IMAGE", display, prompt, persist, url, model, description, imageLlmRequestJson, error);
     }
 
     public static ILinkUserInput unsupported(String type) {
         String display = "[UNSUPPORTED:" + type + "]";
         String prompt = "用户发送了非文本消息类型：" + type + "。请用中文礼貌回复：目前仅支持文字与图片，其他类型暂不支持。";
-        return new ILinkUserInput(type, display, prompt, display, null, null, null, null, null, null);
+        return new ILinkUserInput(type, display, prompt, display, null, null, null, null, null);
     }
 
     private static String truncate(String text, int maxLen) {

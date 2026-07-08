@@ -8,12 +8,9 @@ import com.dust.wxclawbackfront.ai.trace.AiChatTraceStore;
 import com.dust.wxclawbackfront.ai.tools.AIContentAccumulator;
 import com.dust.wxclawbackfront.ai.tools.TextSanitizer;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.openilink.ILinkClient;
-import com.openilink.auth.LoginCallbacks;
-import com.openilink.model.WeixinMessage;
-import com.openilink.model.response.LoginResult;
-import com.openilink.monitor.MonitorOptions;
-import com.openilink.util.MessageHelper;
+import com.github.wechat.ilink.sdk.ILinkClient;
+import com.github.wechat.ilink.sdk.core.config.ILinkConfig;
+import com.github.wechat.ilink.sdk.core.model.WeixinMessage;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -42,6 +39,11 @@ public class ILinkBotService {
     private final boolean imageDirectReply;
     private final int maxHistoryMessages;
     private final int maxTraceFieldChars;
+    private final long ilinkConnectTimeoutMs;
+    private final long ilinkReadTimeoutMs;
+    private final long ilinkWriteTimeoutMs;
+    private final long ilinkLoginTimeoutMs;
+    private final long ilinkPollIdleMs;
 
     public ILinkBotService(AiConversationCrudService crudService,
                            ChatHandler chatHandler,
@@ -51,7 +53,12 @@ public class ILinkBotService {
                            ObjectMapper objectMapper,
                            @Value("${wxclaw.ai.image.direct-reply:true}") boolean imageDirectReply,
                            @Value("${wxclaw.ai.context.max-history-messages:20}") int maxHistoryMessages,
-                           @Value("${wxclaw.ai.trace.max-field-chars:4000}") int maxTraceFieldChars) {
+                           @Value("${wxclaw.ai.trace.max-field-chars:4000}") int maxTraceFieldChars,
+                           @Value("${wxclaw.ilink.connect-timeout-ms:15000}") long ilinkConnectTimeoutMs,
+                           @Value("${wxclaw.ilink.read-timeout-ms:35000}") long ilinkReadTimeoutMs,
+                           @Value("${wxclaw.ilink.write-timeout-ms:15000}") long ilinkWriteTimeoutMs,
+                           @Value("${wxclaw.ilink.login-timeout-ms:180000}") long ilinkLoginTimeoutMs,
+                           @Value("${wxclaw.ilink.poll-idle-ms:200}") long ilinkPollIdleMs) {
         this.crudService = crudService;
         this.chatHandler = chatHandler;
         this.accumulatorProvider = accumulatorProvider;
@@ -61,48 +68,63 @@ public class ILinkBotService {
         this.imageDirectReply = imageDirectReply;
         this.maxHistoryMessages = maxHistoryMessages;
         this.maxTraceFieldChars = maxTraceFieldChars;
+        this.ilinkConnectTimeoutMs = ilinkConnectTimeoutMs;
+        this.ilinkReadTimeoutMs = ilinkReadTimeoutMs;
+        this.ilinkWriteTimeoutMs = ilinkWriteTimeoutMs;
+        this.ilinkLoginTimeoutMs = ilinkLoginTimeoutMs;
+        this.ilinkPollIdleMs = ilinkPollIdleMs;
     }
 
     public void runILinkMonitor() {
-        String bufFile = ILinkBufStore.env("BUF_FILE").orElse("sync_buf.dat");
-        String token = ILinkBufStore.env("ILINK_TOKEN").orElse("");
-        ILinkClient client = ILinkClient.builder().token(token).build();
-
-        String initialBuf = ILinkBufStore.readFile(bufFile).orElse(null);
-
-        LoginResult result = client.loginWithQR(new LoginCallbacks() {
-            @Override
-            public void onQRCode(String qrCodeUrl) {
-                System.out.println("请扫码: " + qrCodeUrl);
-            }
-
-            @Override
-            public void onScanned() {
-                System.out.println("已扫码，请在微信上确认...");
-            }
-
-            @Override
-            public void onExpired(int attempt, int maxAttempts) {
-                System.out.println("二维码已过期，正在刷新 (" + attempt + "/" + maxAttempts + ")");
-            }
-        });
-
-        if (!result.isConnected()) {
-            System.err.println("登录失败: " + result.getMessage());
-            return;
-        }
-
-        AtomicBoolean stopFlag = new AtomicBoolean(false);
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> stopFlag.set(true)));
-
-        MonitorOptions options = MonitorOptions.builder()
-                .initialBuf(initialBuf)
-                .onBufUpdate(buf -> ILinkBufStore.writeFile(bufFile, buf))
-                .onError(err -> System.err.println("监听错误: " + err.getMessage()))
-                .onSessionExpired(() -> System.err.println("会话已过期，请重新登录"))
+        ILinkConfig config = ILinkConfig.builder()
+                .connectTimeoutMs(ilinkConnectTimeoutMs)
+                .readTimeoutMs(ilinkReadTimeoutMs)
+                .writeTimeoutMs(ilinkWriteTimeoutMs)
+                .loginTimeoutMs(ilinkLoginTimeoutMs)
+                .heartbeatEnabled(false)
                 .build();
 
-        client.monitor(msg -> onMessage(client, msg), options, stopFlag);
+        ILinkClient client = ILinkClient.builder()
+                .config(config)
+                .build();
+        AtomicBoolean stopFlag = new AtomicBoolean(false);
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            stopFlag.set(true);
+            try {
+                client.close();
+            } catch (Exception ignored) {
+            }
+        }));
+
+        try {
+            String qrCodeContent = client.executeLogin();
+            System.out.println("请扫码登录：");
+            System.out.println(qrCodeContent);
+            client.getLoginFuture().get();
+            System.out.println("iLink 登录成功，开始监听消息...");
+
+            while (!stopFlag.get()) {
+                try {
+                    List<WeixinMessage> messages = client.getUpdates();
+                    if (messages != null) {
+                        for (WeixinMessage msg : messages) {
+                            onMessage(client, msg);
+                        }
+                    }
+                } catch (Exception ex) {
+                    System.err.println("监听错误: " + ex.getMessage());
+                    sleepQuietly(1000L);
+                }
+                sleepQuietly(ilinkPollIdleMs);
+            }
+        } catch (Exception ex) {
+            System.err.println("iLink 启动失败: " + ex.getMessage());
+        } finally {
+            try {
+                client.close();
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     private void onMessage(ILinkClient client, WeixinMessage msg) {
@@ -110,20 +132,16 @@ public class ILinkBotService {
             return;
         }
 
-        String userId = msg.getFromUserId();
-        String contextToken = msg.getContextToken();
-        if (userId != null && !userId.isBlank() && contextToken != null && !contextToken.isBlank()) {
-            client.setContextToken(userId, contextToken);
-        }
-
+        String userId = msg.getFrom_user_id();
+        String contextToken = msg.getContext_token();
         String sessionId = userId;
         if (sessionId == null || sessionId.isBlank()) {
             return;
         }
 
-        ILinkUserInput userInput = userInputExtractor.extract(msg);
+        ILinkUserInput userInput = userInputExtractor.extract(client, msg);
         if (userInput == null) {
-            String trimmed = MessageHelper.extractText(msg);
+            String trimmed = userInputExtractor.extractText(msg);
             if (trimmed == null || trimmed.isBlank()) {
                 return;
             }
@@ -148,7 +166,6 @@ public class ILinkBotService {
         trace.setImageModel(userInput.getImageModel());
         trace.setImageDescription(clipTrace(userInput.getImageDescription()));
         trace.setImageLlmRequestJson(clipTrace(userInput.getImageLlmRequestJson()));
-        trace.setImageLocalPath(userInput.getImageLocalPath());
         trace.setUserText(userInput.getDisplayText());
 
         String reply;
@@ -178,11 +195,7 @@ public class ILinkBotService {
             trace.setResponseTimeMs(responseTime);
             traceStore.add(trace);
 
-            if (contextToken != null && !contextToken.isBlank()) {
-                client.sendText(userId, reply, contextToken);
-            } else {
-                client.push(userId, reply);
-            }
+            client.sendText(userId, reply);
         } catch (Exception ex) {
             int responseTime = (int) Duration.between(start, Instant.now()).toMillis();
             crudService.appendMessage(sessionId, MESSAGE_TYPE_ASSISTANT, null, null, responseTime, ex.getMessage());
@@ -195,6 +208,17 @@ public class ILinkBotService {
             traceStore.add(trace);
 
             System.err.println("发送失败: " + ex.getMessage());
+        }
+    }
+
+    private void sleepQuietly(long millis) {
+        if (millis <= 0) {
+            return;
+        }
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
         }
     }
 
