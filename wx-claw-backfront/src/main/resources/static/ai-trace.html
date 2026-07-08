@@ -538,6 +538,10 @@
         const ilinkJson = toText(t.ilinkMessageJson);
         const llmRequestJson = toText(t.llmRequestJson);
         const imageLlmRequestJson = toText(t.imageLlmRequestJson);
+        const generatedImageRequestJson = toText(t.generatedImageRequestJson);
+        const generatedImageResponseJson = toText(t.generatedImageResponseJson);
+        const ttsRequestJson = toText(t.ttsRequestJson);
+        const ttsResponseJson = toText(t.ttsResponseJson);
 
         el.detailBody.innerHTML = `
           <div class="kv">
@@ -548,6 +552,9 @@
             <div>messageItemType</div><div>${toText(t.messageItemType) || "-"}</div>
             <div>imageUrl</div><div>${toText(t.imageUrl) || "-"}</div>
             <div>imageModel</div><div>${toText(t.imageModel) || "-"}</div>
+            <div>generatedImageUrl</div><div>${toText(t.generatedImageUrl) || "-"}</div>
+            <div>ttsPlayTimeMs</div><div>${toText(t.ttsPlayTimeMs) || "-"}</div>
+            <div>ttsSampleRate</div><div>${toText(t.ttsSampleRate) || "-"}</div>
           </div>
 
           <div class="monoBox">
@@ -572,6 +579,38 @@
               <button class="ghost" data-copy="imageDescription">复制</button>
             </div>
             <pre>${toText(t.imageDescription) || "-"}</pre>
+          </div>
+
+          <div class="monoBox">
+            <div class="monoHead">
+              <span>generatedImageRequestJson</span>
+              <button class="ghost" data-copy="generatedImageRequestJson">复制</button>
+            </div>
+            <pre>${generatedImageRequestJson || "-"}</pre>
+          </div>
+
+          <div class="monoBox">
+            <div class="monoHead">
+              <span>generatedImageResponseJson</span>
+              <button class="ghost" data-copy="generatedImageResponseJson">复制</button>
+            </div>
+            <pre>${generatedImageResponseJson || "-"}</pre>
+          </div>
+
+          <div class="monoBox">
+            <div class="monoHead">
+              <span>ttsRequestJson</span>
+              <button class="ghost" data-copy="ttsRequestJson">复制</button>
+            </div>
+            <pre>${ttsRequestJson || "-"}</pre>
+          </div>
+
+          <div class="monoBox">
+            <div class="monoHead">
+              <span>ttsResponseJson</span>
+              <button class="ghost" data-copy="ttsResponseJson">复制</button>
+            </div>
+            <pre>${ttsResponseJson || "-"}</pre>
           </div>
 
           <div class="monoBox">
@@ -637,6 +676,10 @@
             if (kind === "imageDescription") copyText(toText(t.imageDescription));
             if (kind === "llmRequestJson") copyText(llmRequestJson);
             if (kind === "imageLlmRequestJson") copyText(imageLlmRequestJson);
+            if (kind === "generatedImageRequestJson") copyText(generatedImageRequestJson);
+            if (kind === "generatedImageResponseJson") copyText(generatedImageResponseJson);
+            if (kind === "ttsRequestJson") copyText(ttsRequestJson);
+            if (kind === "ttsResponseJson") copyText(ttsResponseJson);
             if (kind === "raw") copyText(raw);
           });
         });

@@ -1,7 +1,7 @@
 package com.dust.wxclawbackfront.ilnk;
 
-import com.dust.wxclawbackfront.ai.tools.ImageHandler;
-import com.dust.wxclawbackfront.ai.tools.ImageUnderstandingResult;
+import com.dust.wxclawbackfront.ai.tools.image.ImageHandler;
+import com.dust.wxclawbackfront.ai.tools.image.ImageUnderstandingResult;
 import com.dust.wxclawbackfront.ilnk.media.WechatCdnMediaService;
 import com.github.wechat.ilink.sdk.ILinkClient;
 import com.github.wechat.ilink.sdk.core.model.MessageItem;
@@ -104,3 +104,4 @@ public class ILinkUserInputExtractor {
         };
     }
 }
+

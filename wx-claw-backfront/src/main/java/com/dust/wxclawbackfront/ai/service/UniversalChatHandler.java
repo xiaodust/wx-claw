@@ -1,8 +1,8 @@
 package com.dust.wxclawbackfront.ai.service;
 
 import com.dust.wxclawbackfront.ai.dao.entity.AiMessage;
-import com.dust.wxclawbackfront.ai.tools.AIContentAccumulator;
-import com.dust.wxclawbackfront.ai.tools.TextSanitizer;
+import com.dust.wxclawbackfront.ai.tools.chat.AIContentAccumulator;
+import com.dust.wxclawbackfront.ai.tools.shared.TextSanitizer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.ai.chat.client.ChatClient;
@@ -179,3 +179,4 @@ public class UniversalChatHandler implements ChatHandler {
         return sb.toString();
     }
 }
+
