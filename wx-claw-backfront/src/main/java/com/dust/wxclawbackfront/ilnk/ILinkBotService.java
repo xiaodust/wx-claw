@@ -2,15 +2,16 @@ package com.dust.wxclawbackfront.ilnk;
 
 import com.dust.wxclawbackfront.ai.dao.entity.AiMessage;
 import com.dust.wxclawbackfront.ai.service.AiConversationCrudService;
-import com.dust.wxclawbackfront.ai.service.ChatHandler;
-import com.dust.wxclawbackfront.ai.tools.chat.AIContentAccumulator;
-import com.dust.wxclawbackfront.ai.tools.image.ImageGenerationHandler;
-import com.dust.wxclawbackfront.ai.tools.image.ImageGenerationIntentDetector;
-import com.dust.wxclawbackfront.ai.tools.image.ImageGenerationResult;
+import com.dust.wxclawbackfront.ai.service.chat.ChatHandler;
+import com.dust.wxclawbackfront.ai.service.chat.AIContentAccumulator;
+import com.dust.wxclawbackfront.ai.service.image.ImageGenerationHandler;
+import com.dust.wxclawbackfront.ai.service.image.ImageGenerationIntentDetector;
+import com.dust.wxclawbackfront.ai.service.image.ImageGenerationResult;
+import com.dust.wxclawbackfront.ai.tools.shared.UserContextHolder;
 import com.dust.wxclawbackfront.ai.tools.shared.TextSanitizer;
-import com.dust.wxclawbackfront.ai.tools.voice.VolcTtsHandler;
-import com.dust.wxclawbackfront.ai.tools.voice.VolcTtsResult;
-import com.dust.wxclawbackfront.ai.tools.voice.VoiceIntentDetector;
+import com.dust.wxclawbackfront.ai.service.voice.VolcTtsHandler;
+import com.dust.wxclawbackfront.ai.service.voice.VolcTtsResult;
+import com.dust.wxclawbackfront.ai.service.voice.VoiceIntentDetector;
 import com.dust.wxclawbackfront.ai.trace.AiChatTrace;
 import com.dust.wxclawbackfront.ai.trace.AiChatTraceStore;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -58,6 +59,8 @@ public class ILinkBotService {
     private final long ilinkWriteTimeoutMs;
     private final long ilinkLoginTimeoutMs;
     private final long ilinkPollIdleMs;
+    
+    private volatile ILinkClient activeClient;
 
     public ILinkBotService(AiConversationCrudService crudService,
                            ChatHandler chatHandler,
@@ -98,6 +101,13 @@ public class ILinkBotService {
         this.ilinkLoginTimeoutMs = ilinkLoginTimeoutMs;
         this.ilinkPollIdleMs = ilinkPollIdleMs;
     }
+    
+    /**
+     * 获取当前活跃的 ILinkClient 实例（用于提醒功能主动发送消息）
+     */
+    public ILinkClient getActiveClient() {
+        return activeClient;
+    }
 
     public void runILinkMonitor() {
         ILinkConfig config = ILinkConfig.builder()
@@ -111,9 +121,11 @@ public class ILinkBotService {
         ILinkClient client = ILinkClient.builder()
                 .config(config)
                 .build();
+        this.activeClient = client;
         AtomicBoolean stopFlag = new AtomicBoolean(false);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             stopFlag.set(true);
+
             try {
                 client.close();
             } catch (Exception ignored) {
@@ -147,6 +159,7 @@ public class ILinkBotService {
                 client.close();
             } catch (Exception ignored) {
             }
+            this.activeClient = null;
         }
     }
 
@@ -162,6 +175,17 @@ public class ILinkBotService {
             return;
         }
 
+        // 设置当前用户ID到ThreadLocal，供AI工具（如提醒功能）使用
+        UserContextHolder.setUserId(userId);
+        try {
+            processMessage(client, msg, userId, contextToken, sessionId);
+        } finally {
+            // 清理ThreadLocal，防止内存泄漏
+            UserContextHolder.clear();
+        }
+    }
+
+    private void processMessage(ILinkClient client, WeixinMessage msg, String userId, String contextToken, String sessionId) {
         ILinkUserInput userInput = userInputExtractor.extract(client, msg);
         if (userInput == null) {
             String trimmed = userInputExtractor.extractText(msg);
@@ -226,6 +250,9 @@ public class ILinkBotService {
                 trace.setToolName(accumulator.getToolName());
                 trace.setToolRequest(clipTrace(accumulator.getToolRequest()));
                 trace.setToolResponse(clipTrace(accumulator.getToolResponse()));
+                trace.setAgentTraceJson(clipTrace(accumulator.getAgentTraceJson()));
+                trace.setAgentRounds(accumulator.getAgentRounds());
+                trace.setAgentCompleted(accumulator.getAgentCompleted());
 
                 VolcTtsResult ttsResult = volcTtsHandler.synthesize(spokenText);
                 trace.setTtsRequestJson(clipTrace(ttsResult.getRequestJson()));
@@ -277,6 +304,9 @@ public class ILinkBotService {
                 trace.setToolName(accumulator.getToolName());
                 trace.setToolRequest(clipTrace(accumulator.getToolRequest()));
                 trace.setToolResponse(clipTrace(accumulator.getToolResponse()));
+                trace.setAgentTraceJson(clipTrace(accumulator.getAgentTraceJson()));
+                trace.setAgentRounds(accumulator.getAgentRounds());
+                trace.setAgentCompleted(accumulator.getAgentCompleted());
             }
             int responseTime = (int) Duration.between(start, Instant.now()).toMillis();
             crudService.appendMessage(sessionId, MESSAGE_TYPE_ASSISTANT, reply, null, responseTime, null);
@@ -307,6 +337,15 @@ public class ILinkBotService {
             }
             if (trace.getToolResponse() == null || trace.getToolResponse().isBlank()) {
                 trace.setToolResponse(clipTrace(accumulator.getToolResponse()));
+            }
+            if (trace.getAgentTraceJson() == null || trace.getAgentTraceJson().isBlank()) {
+                trace.setAgentTraceJson(clipTrace(accumulator.getAgentTraceJson()));
+            }
+            if (trace.getAgentRounds() == null) {
+                trace.setAgentRounds(accumulator.getAgentRounds());
+            }
+            if (trace.getAgentCompleted() == null) {
+                trace.setAgentCompleted(accumulator.getAgentCompleted());
             }
             trace.setResponseTimeMs(responseTime);
             trace.setErrorMsg(ex.getMessage());

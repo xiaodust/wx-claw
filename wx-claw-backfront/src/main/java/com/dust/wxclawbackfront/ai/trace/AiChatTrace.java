@@ -15,6 +15,9 @@ public class AiChatTrace {
     private String toolName;
     private String toolRequest;
     private String toolResponse;
+    private String agentTraceJson;
+    private Integer agentRounds;
+    private Boolean agentCompleted;
     private String messageItemType;
     private String imageUrl;
     private String imageModel;

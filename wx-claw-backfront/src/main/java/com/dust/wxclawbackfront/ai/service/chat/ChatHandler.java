@@ -1,7 +1,6 @@
-package com.dust.wxclawbackfront.ai.service;
+package com.dust.wxclawbackfront.ai.service.chat;
 
 import com.dust.wxclawbackfront.ai.dao.entity.AiMessage;
-import com.dust.wxclawbackfront.ai.tools.chat.AIContentAccumulator;
 
 import java.util.List;
 

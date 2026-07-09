@@ -1,15 +1,19 @@
-package com.dust.wxclawbackfront.ai.service;
+package com.dust.wxclawbackfront.ai.service.chat;
 
+import com.dust.wxclawbackfront.ai.agent.AgentChatResult;
+import com.dust.wxclawbackfront.ai.agent.AgentLlmCaller;
+import com.dust.wxclawbackfront.ai.agent.ToolPollingAgent;
 import com.dust.wxclawbackfront.ai.dao.entity.AiMessage;
-import com.dust.wxclawbackfront.ai.tools.chat.AIContentAccumulator;
 import com.dust.wxclawbackfront.ai.tools.shared.AiToolInvocationStore;
 import com.dust.wxclawbackfront.ai.tools.shared.TextSanitizer;
 import com.dust.wxclawbackfront.ai.tools.time.TimeTools;
 import com.dust.wxclawbackfront.ai.tools.weather.WeatherTools;
+import com.dust.wxclawbackfront.ai.tools.web.WebSearchTools;
+import com.dust.wxclawbackfront.ai.tools.reminder.ReminderTools;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -19,7 +23,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 @Service
 public class UniversalChatHandler implements ChatHandler {
@@ -34,13 +37,19 @@ public class UniversalChatHandler implements ChatHandler {
     private final ObjectMapper objectMapper;
     private final TimeTools timeTools;
     private final WeatherTools weatherTools;
+    private final WebSearchTools webSearchTools;
+    private final ReminderTools reminderTools;
     private final AiToolInvocationStore toolInvocationStore;
+    private final ToolPollingAgent toolPollingAgent;
 
     public UniversalChatHandler(ChatClient.Builder chatClientBuilder,
                                 ObjectMapper objectMapper,
                                 TimeTools timeTools,
                                 WeatherTools weatherTools,
+                                WebSearchTools webSearchTools,
+                                ReminderTools reminderTools,
                                 AiToolInvocationStore toolInvocationStore,
+                                ToolPollingAgent toolPollingAgent,
                                 @Value("${spring.ai.openai.chat.model:}") String model,
                                 @Value("${wxclaw.ai.thinking.type:disabled}") String thinkingType,
                                 @Value("${wxclaw.ai.chat.max-tokens:1024}") int maxTokens,
@@ -57,19 +66,47 @@ public class UniversalChatHandler implements ChatHandler {
         this.maxMessageChars = maxMessageChars;
         this.timeTools = timeTools;
         this.weatherTools = weatherTools;
+        this.webSearchTools = webSearchTools;
+        this.reminderTools = reminderTools;
         this.toolInvocationStore = toolInvocationStore;
+        this.toolPollingAgent = toolPollingAgent;
     }
+
     @Override
     public String chat(String userMessage, List<AiMessage> historyMessages, AIContentAccumulator accumulator) {
         String requestText = buildRequestText(userMessage, historyMessages, maxContextChars, maxMessageChars);
         String llmRequestJson = buildTextOnlyRequestJson(model, requestText, thinkingType);
-        if (toolInvocationStore != null) {
-            toolInvocationStore.reset();
-        }
+
         if (accumulator != null) {
             accumulator.setRequestText(requestText);
             accumulator.setModel(model);
             accumulator.setLlmRequestJson(llmRequestJson);
+        }
+
+        AgentChatResult result = toolPollingAgent.run(userMessage, requestText, this::chatOnce);
+
+        if (accumulator != null) {
+            accumulator.setFinalContent(result.content());
+            if (result.invocations() != null && !result.invocations().isEmpty()) {
+                accumulator.setToolName(toolPollingAgent.joinToolNames(result.invocations()));
+                accumulator.setToolRequest(toolPollingAgent.toJsonSafely(result.invocations().stream()
+                        .map(AiToolInvocationStore.Invocation::toolRequest)
+                        .toList()));
+                accumulator.setToolResponse(toolPollingAgent.toJsonSafely(result.invocations().stream()
+                        .map(AiToolInvocationStore.Invocation::toolResponse)
+                        .toList()));
+            }
+            accumulator.setAgentRounds(result.rounds() == null ? 0 : result.rounds().size());
+            accumulator.setAgentCompleted(result.completed());
+            accumulator.setAgentTraceJson(toolPollingAgent.toJsonSafely(result.rounds()));
+        }
+
+        return result.content();
+    }
+
+    private AgentLlmCaller.LlmCallResult chatOnce(String requestText) {
+        if (toolInvocationStore != null) {
+            toolInvocationStore.reset();
         }
         ChatClient.ChatClientRequestSpec spec = chatClient.prompt();
         OpenAiChatOptions.Builder optionsBuilder = OpenAiChatOptions.builder();
@@ -86,39 +123,12 @@ public class UniversalChatHandler implements ChatHandler {
             optionsBuilder = optionsBuilder.timeout(timeout);
         }
         spec = spec.options(optionsBuilder);
-        spec = spec.tools(timeTools, weatherTools);
+        spec = spec.tools(timeTools, weatherTools, webSearchTools, reminderTools);
         String content = spec.user(requestText)
                 .call()
                 .content();
-
-        if (accumulator != null) {
-            accumulator.setFinalContent(content);
-            if (toolInvocationStore != null) {
-                List<AiToolInvocationStore.Invocation> invocations = toolInvocationStore.drain();
-                if (!invocations.isEmpty()) {
-                    accumulator.setToolName(invocations.stream()
-                            .map(AiToolInvocationStore.Invocation::toolName)
-                            .distinct()
-                            .collect(Collectors.joining(",")));
-                    accumulator.setToolRequest(toJsonSafely(invocations.stream()
-                            .map(AiToolInvocationStore.Invocation::toolRequest)
-                            .toList()));
-                    accumulator.setToolResponse(toJsonSafely(invocations.stream()
-                            .map(AiToolInvocationStore.Invocation::toolResponse)
-                            .toList()));
-                }
-            }
-        }
-
-        return content;
-}
-
-    private String toJsonSafely(Object value) {
-        try {
-            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(value);
-        } catch (Exception ex) {
-            return null;
-        }
+        List<AiToolInvocationStore.Invocation> invocations = toolInvocationStore == null ? List.of() : toolInvocationStore.drain();
+        return new AgentLlmCaller.LlmCallResult(content, invocations);
     }
 
     private String buildTextOnlyRequestJson(String model, String text, String thinkingType) {
@@ -219,4 +229,3 @@ public class UniversalChatHandler implements ChatHandler {
         return sb.toString();
     }
 }
-
