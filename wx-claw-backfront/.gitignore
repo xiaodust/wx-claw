@@ -1,4 +1,5 @@
 .m2-temp/
+.m2repo/
 application.yml
 HELP.md
 target/

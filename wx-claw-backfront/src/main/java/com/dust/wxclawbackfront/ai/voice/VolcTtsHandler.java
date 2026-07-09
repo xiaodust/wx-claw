@@ -1,4 +1,4 @@
-package com.dust.wxclawbackfront.ai.service.voice;
+package com.dust.wxclawbackfront.ai.voice;
 
 import com.dust.wxclawbackfront.ai.tools.shared.TextSanitizer;
 import com.fasterxml.jackson.databind.ObjectMapper;

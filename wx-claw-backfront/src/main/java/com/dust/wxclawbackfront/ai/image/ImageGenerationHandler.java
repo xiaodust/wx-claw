@@ -1,4 +1,4 @@
-package com.dust.wxclawbackfront.ai.service.image;
+package com.dust.wxclawbackfront.ai.image;
 
 import com.dust.wxclawbackfront.ai.tools.shared.TextSanitizer;
 import com.fasterxml.jackson.databind.ObjectMapper;

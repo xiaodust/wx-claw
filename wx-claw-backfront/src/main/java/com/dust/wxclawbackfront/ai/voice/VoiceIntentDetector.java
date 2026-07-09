@@ -1,4 +1,4 @@
-package com.dust.wxclawbackfront.ai.service.voice;
+package com.dust.wxclawbackfront.ai.voice;
 
 import org.springframework.stereotype.Component;
 

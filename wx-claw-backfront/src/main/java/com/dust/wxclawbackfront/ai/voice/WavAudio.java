@@ -1,4 +1,4 @@
-package com.dust.wxclawbackfront.ai.service.voice;
+package com.dust.wxclawbackfront.ai.voice;
 
 public record WavAudio(int sampleRate, int bitsPerSample, int channels, int durationMs, byte[] bytes) {
 }

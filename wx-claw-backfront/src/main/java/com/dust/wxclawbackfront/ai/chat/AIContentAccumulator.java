@@ -1,4 +1,4 @@
-package com.dust.wxclawbackfront.ai.service.chat;
+package com.dust.wxclawbackfront.ai.chat;
 
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;

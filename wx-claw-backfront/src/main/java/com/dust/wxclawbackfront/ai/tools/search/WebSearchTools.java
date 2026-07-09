@@ -1,4 +1,4 @@
-package com.dust.wxclawbackfront.ai.tools.web;
+package com.dust.wxclawbackfront.ai.tools.search;
 
 import com.dust.wxclawbackfront.ai.tools.shared.AiToolInvocationStore;
 import org.springframework.ai.tool.annotation.Tool;

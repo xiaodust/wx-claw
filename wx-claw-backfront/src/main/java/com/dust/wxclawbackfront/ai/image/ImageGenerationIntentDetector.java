@@ -1,4 +1,4 @@
-package com.dust.wxclawbackfront.ai.service.image;
+package com.dust.wxclawbackfront.ai.image;
 
 import org.springframework.stereotype.Component;
 
