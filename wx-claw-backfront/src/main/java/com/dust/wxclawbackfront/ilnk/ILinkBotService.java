@@ -8,15 +8,9 @@ import com.dust.wxclawbackfront.ai.tools.image.ImageGenerationHandler;
 import com.dust.wxclawbackfront.ai.tools.image.ImageGenerationIntentDetector;
 import com.dust.wxclawbackfront.ai.tools.image.ImageGenerationResult;
 import com.dust.wxclawbackfront.ai.tools.shared.TextSanitizer;
-import com.dust.wxclawbackfront.ai.tools.time.TimeHandler;
-import com.dust.wxclawbackfront.ai.tools.time.TimeIntentDetector;
-import com.dust.wxclawbackfront.ai.tools.time.TimeResult;
 import com.dust.wxclawbackfront.ai.tools.voice.VolcTtsHandler;
 import com.dust.wxclawbackfront.ai.tools.voice.VolcTtsResult;
 import com.dust.wxclawbackfront.ai.tools.voice.VoiceIntentDetector;
-import com.dust.wxclawbackfront.ai.tools.weather.SeniverseWeatherHandler;
-import com.dust.wxclawbackfront.ai.tools.weather.WeatherIntentDetector;
-import com.dust.wxclawbackfront.ai.tools.weather.WeatherNowResult;
 import com.dust.wxclawbackfront.ai.trace.AiChatTrace;
 import com.dust.wxclawbackfront.ai.trace.AiChatTraceStore;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -54,10 +48,6 @@ public class ILinkBotService {
     private final ImageGenerationHandler imageGenerationHandler;
     private final VoiceIntentDetector voiceIntentDetector;
     private final VolcTtsHandler volcTtsHandler;
-    private final TimeIntentDetector timeIntentDetector;
-    private final TimeHandler timeHandler;
-    private final WeatherIntentDetector weatherIntentDetector;
-    private final SeniverseWeatherHandler weatherHandler;
     private final ObjectMapper objectMapper;
     private final boolean imageDirectReply;
     private final int maxHistoryMessages;
@@ -78,10 +68,6 @@ public class ILinkBotService {
                            ImageGenerationHandler imageGenerationHandler,
                            VoiceIntentDetector voiceIntentDetector,
                            VolcTtsHandler volcTtsHandler,
-                           TimeIntentDetector timeIntentDetector,
-                           TimeHandler timeHandler,
-                           WeatherIntentDetector weatherIntentDetector,
-                           SeniverseWeatherHandler weatherHandler,
                            ObjectMapper objectMapper,
                            @Value("${wxclaw.ai.image.direct-reply:true}") boolean imageDirectReply,
                            @Value("${wxclaw.ai.context.max-history-messages:20}") int maxHistoryMessages,
@@ -101,10 +87,6 @@ public class ILinkBotService {
         this.imageGenerationHandler = imageGenerationHandler;
         this.voiceIntentDetector = voiceIntentDetector;
         this.volcTtsHandler = volcTtsHandler;
-        this.timeIntentDetector = timeIntentDetector;
-        this.timeHandler = timeHandler;
-        this.weatherIntentDetector = weatherIntentDetector;
-        this.weatherHandler = weatherHandler;
         this.objectMapper = objectMapper;
         this.imageDirectReply = imageDirectReply;
         this.maxHistoryMessages = maxHistoryMessages;
@@ -234,21 +216,16 @@ public class ILinkBotService {
                         reply);
                 return;
             } else if (shouldSendVoice(userInput)) {
-                ToolReply toolReply = tryBuildToolReply(userInput, true);
-                String spokenText;
-                if (toolReply != null) {
-                    spokenText = truncateForVoice(toolReply.replyText());
-                    trace.setToolName(toolReply.toolName());
-                    trace.setToolRequest(clipTrace(toolReply.toolRequest()));
-                    trace.setToolResponse(clipTrace(toolReply.toolResponse()));
-                } else {
-                    String voicePrompt = buildVoicePrompt(userInput.getPromptText());
-                    reply = chatHandler.chat(voicePrompt, historyMessages, accumulator);
-                    spokenText = truncateForVoice(reply);
-                    trace.setModel(accumulator.getModel());
-                    trace.setRequestText(clipTrace(accumulator.getRequestText()));
-                    trace.setLlmRequestJson(clipTrace(accumulator.getLlmRequestJson()));
-                }
+                String voicePrompt = buildVoicePrompt(userInput.getPromptText());
+                reply = chatHandler.chat(voicePrompt, historyMessages, accumulator);
+                String spokenText = truncateForVoice(reply);
+
+                trace.setModel(accumulator.getModel());
+                trace.setRequestText(clipTrace(accumulator.getRequestText()));
+                trace.setLlmRequestJson(clipTrace(accumulator.getLlmRequestJson()));
+                trace.setToolName(accumulator.getToolName());
+                trace.setToolRequest(clipTrace(accumulator.getToolRequest()));
+                trace.setToolResponse(clipTrace(accumulator.getToolResponse()));
 
                 VolcTtsResult ttsResult = volcTtsHandler.synthesize(spokenText);
                 trace.setTtsRequestJson(clipTrace(ttsResult.getRequestJson()));
@@ -293,18 +270,13 @@ public class ILinkBotService {
                     && !userInput.getError().isBlank()) {
                 reply = "收到图片，但图片理解失败。请尝试重新发送图片或换一张更清晰的图片。\n错误信息：" + userInput.getError().trim();
             } else {
-                ToolReply toolReply = tryBuildToolReply(userInput, false);
-                if (toolReply != null) {
-                    reply = toolReply.replyText();
-                    trace.setToolName(toolReply.toolName());
-                    trace.setToolRequest(clipTrace(toolReply.toolRequest()));
-                    trace.setToolResponse(clipTrace(toolReply.toolResponse()));
-                } else {
-                    reply = chatHandler.chat(userInput.getPromptText(), historyMessages, accumulator);
-                    trace.setModel(accumulator.getModel());
-                    trace.setRequestText(clipTrace(accumulator.getRequestText()));
-                    trace.setLlmRequestJson(clipTrace(accumulator.getLlmRequestJson()));
-                }
+                reply = chatHandler.chat(userInput.getPromptText(), historyMessages, accumulator);
+                trace.setModel(accumulator.getModel());
+                trace.setRequestText(clipTrace(accumulator.getRequestText()));
+                trace.setLlmRequestJson(clipTrace(accumulator.getLlmRequestJson()));
+                trace.setToolName(accumulator.getToolName());
+                trace.setToolRequest(clipTrace(accumulator.getToolRequest()));
+                trace.setToolResponse(clipTrace(accumulator.getToolResponse()));
             }
             int responseTime = (int) Duration.between(start, Instant.now()).toMillis();
             crudService.appendMessage(sessionId, MESSAGE_TYPE_ASSISTANT, reply, null, responseTime, null);
@@ -326,6 +298,15 @@ public class ILinkBotService {
             }
             if (trace.getLlmRequestJson() == null || trace.getLlmRequestJson().isBlank()) {
                 trace.setLlmRequestJson(clipTrace(accumulator.getLlmRequestJson()));
+            }
+            if (trace.getToolName() == null || trace.getToolName().isBlank()) {
+                trace.setToolName(accumulator.getToolName());
+            }
+            if (trace.getToolRequest() == null || trace.getToolRequest().isBlank()) {
+                trace.setToolRequest(clipTrace(accumulator.getToolRequest()));
+            }
+            if (trace.getToolResponse() == null || trace.getToolResponse().isBlank()) {
+                trace.setToolResponse(clipTrace(accumulator.getToolResponse()));
             }
             trace.setResponseTimeMs(responseTime);
             trace.setErrorMsg(ex.getMessage());
@@ -431,44 +412,5 @@ public class ILinkBotService {
         } catch (Exception ex) {
             return null;
         }
-    }
-
-    private ToolReply tryBuildToolReply(ILinkUserInput userInput, boolean forVoice) {
-        if (userInput == null) {
-            return null;
-        }
-        if (!"TEXT".equalsIgnoreCase(userInput.getMessageItemType())) {
-            return null;
-        }
-        String text = userInput.getDisplayText();
-        if (text == null || text.isBlank()) {
-            return null;
-        }
-        if (timeIntentDetector != null && timeIntentDetector.isTimeIntent(text)) {
-            TimeResult timeResult = timeHandler == null ? null : timeHandler.now();
-            String replyText = timeResult == null ? null : timeResult.getReplyText();
-            if (replyText == null || replyText.isBlank()) {
-                replyText = "时间查询失败。";
-            }
-            String toolRequest = timeResult == null ? null : ("zoneId=" + timeResult.getZoneId());
-            String toolResponse = timeResult == null ? null : toJsonSafely(timeResult);
-            return new ToolReply("time", toolRequest, toolResponse, replyText);
-        }
-        if (weatherIntentDetector != null && weatherIntentDetector.isWeatherIntent(text)) {
-            String loc = weatherIntentDetector.extractLocationOrNull(text);
-            WeatherNowResult result = weatherHandler == null ? null : weatherHandler.now(loc);
-            String replyText = forVoice ? (weatherHandler == null ? null : weatherHandler.formatReplyForVoice(result))
-                    : (weatherHandler == null ? null : weatherHandler.formatReply(result));
-            if (replyText == null || replyText.isBlank()) {
-                replyText = "天气查询失败。";
-            }
-            String toolRequest = result == null ? null : result.getRequestUrl();
-            String toolResponse = result == null ? null : result.getResponseJson();
-            return new ToolReply("weather", toolRequest, toolResponse, replyText);
-        }
-        return null;
-    }
-
-    private record ToolReply(String toolName, String toolRequest, String toolResponse, String replyText) {
     }
 }
