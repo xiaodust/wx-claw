@@ -5,17 +5,20 @@ import com.dust.wxclawbackfront.ai.image.ImageUnderstandingResult;
 import com.dust.wxclawbackfront.ilnk.media.WechatCdnMediaService;
 import com.github.wechat.ilink.sdk.ILinkClient;
 import com.github.wechat.ilink.sdk.core.model.MessageItem;
+import com.github.wechat.ilink.sdk.core.model.VoiceItem;
 import com.github.wechat.ilink.sdk.core.model.WeixinMessage;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
-
+@Slf4j
 @Component
 public class ILinkUserInputExtractor {
 
     private static final int MESSAGE_ITEM_TYPE_TEXT = 1;
     private static final int MESSAGE_ITEM_TYPE_IMAGE = 2;
+    private static final int MESSAGE_ITEM_TYPE_VOICE = 3;
 
     private final ImageHandler imageHandler;
     private final WechatCdnMediaService cdnMediaService;
@@ -82,12 +85,23 @@ public class ILinkUserInputExtractor {
         }
         List<String> parts = new ArrayList<>();
         for (MessageItem item : items) {
-            if (item == null || item.getType() != MESSAGE_ITEM_TYPE_TEXT || item.getText_item() == null) {
+            if (item == null) {
                 continue;
             }
-            String text = item.getText_item().getText();
-            if (text != null && !text.isBlank()) {
-                parts.add(text.trim());
+            if (item.getType() == MESSAGE_ITEM_TYPE_TEXT && item.getText_item() != null) {
+                String text = item.getText_item().getText();
+                if (text != null && !text.isBlank()) {
+                    parts.add(text.trim());
+                }
+            } else if (item.getType() == MESSAGE_ITEM_TYPE_VOICE && item.getVoice_item() != null) {
+                // 微信服务端已经做了语音识别，text 字段包含识别后的文字
+                String voiceText = item.getVoice_item().getText();
+                if (voiceText != null && !voiceText.isBlank()) {
+                    parts.add(voiceText.trim());
+                    log.debug("语音消息已识别为文字: {}", voiceText);
+                } else {
+                    log.warn("语音消息未包含识别文字，可能识别失败或为空语音");
+                }
             }
         }
         if (parts.isEmpty()) {
@@ -100,6 +114,7 @@ public class ILinkUserInputExtractor {
         return switch (type) {
             case MESSAGE_ITEM_TYPE_TEXT -> "TEXT";
             case MESSAGE_ITEM_TYPE_IMAGE -> "IMAGE";
+            case MESSAGE_ITEM_TYPE_VOICE -> "VOICE";
             default -> "TYPE_" + type;
         };
     }
