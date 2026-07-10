@@ -7,6 +7,10 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+### Runtime Data ###
+.ilink-resume-context.json
+wx-claw-backfront.db
+
 ### STS ###
 .apt_generated
 .classpath
