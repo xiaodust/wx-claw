@@ -89,7 +89,7 @@
 
       .grid {
         display: grid;
-        grid-template-columns: 1.35fr 1fr;
+        grid-template-columns: 1fr 1fr;
         gap: 14px;
       }
 
@@ -196,6 +196,11 @@
         border-radius: 12px;
         border: 1px solid var(--stroke);
         background: rgba(0, 0, 0, 0.22);
+      }
+
+      .detailWrap {
+        overflow: auto;
+        max-height: calc(100vh - 220px);
       }
 
       table {
@@ -308,6 +313,10 @@
 
       details {
         margin-top: 10px;
+        border: 1px solid var(--stroke);
+        border-radius: 14px;
+        overflow: hidden;
+        background: rgba(0, 0, 0, 0.15);
       }
 
       summary {
@@ -315,6 +324,30 @@
         color: var(--muted);
         font-family: var(--mono);
         font-size: 12px;
+        padding: 10px 12px;
+        user-select: none;
+        transition: background 120ms ease;
+      }
+
+      summary:hover {
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      details[open] summary {
+        border-bottom: 1px solid var(--stroke);
+      }
+
+      .section {
+        margin-bottom: 16px;
+      }
+
+      .section-title {
+        font-size: 11px;
+        color: var(--faint);
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+        font-weight: 600;
       }
 
       .hint {
@@ -402,8 +435,10 @@
             <strong>追踪详情</strong>
             <span class="hint" id="detailMeta">未选择</span>
           </div>
-          <div class="body" id="detailBody">
-            <div class="hint">点击左侧列表中的任意一条记录查看详情。</div>
+          <div class="body">
+            <div class="detailWrap" id="detailBody">
+              <div class="hint">点击左侧列表中的任意一条记录查看详情。</div>
+            </div>
           </div>
         </div>
       </div>
@@ -414,7 +449,8 @@
         live: true,
         intervalMs: 2000,
         traces: [],
-        selectedKey: null
+        selectedKey: null,
+        lastRenderedKey: null  // 缓存上次渲染的 key
       };
 
       const el = {
@@ -525,8 +561,16 @@
         if (!t) {
           el.detailMeta.textContent = "未选择";
           el.detailBody.innerHTML = `<div class="hint">点击左侧列表中的任意一条记录查看详情。</div>`;
+          state.lastRenderedKey = null;
           return;
         }
+
+        // 如果是同一条记录，跳过重新渲染
+        const currentKey = traceKey(t);
+        if (currentKey === state.lastRenderedKey) {
+          return;
+        }
+        state.lastRenderedKey = currentKey;
 
         const status = isErr(t) ? "失败" : "成功";
         el.detailMeta.textContent = `${status} · ${toText(t.responseTimeMs) || "-"}ms`;
@@ -543,124 +587,209 @@
         const ttsRequestJson = toText(t.ttsRequestJson);
         const ttsResponseJson = toText(t.ttsResponseJson);
 
+        // 判断各个字段是否为空
+        const hasIlink = ilinkJson && ilinkJson !== "-";
+        const hasImageLlm = imageLlmRequestJson && imageLlmRequestJson !== "-";
+        const hasImageDesc = toText(t.imageDescription) && toText(t.imageDescription) !== "-";
+        const hasGenImageReq = generatedImageRequestJson && generatedImageRequestJson !== "-";
+        const hasGenImageResp = generatedImageResponseJson && generatedImageResponseJson !== "-";
+        const hasTtsReq = ttsRequestJson && ttsRequestJson !== "-";
+        const hasTtsResp = ttsResponseJson && ttsResponseJson !== "-";
+        const hasUserText = toText(t.userText) && toText(t.userText) !== "-";
+        const hasLlmReq = llmRequestJson && llmRequestJson !== "-";
+        const hasRequest = requestText && requestText !== "-";
+        const hasReply = replyText && replyText !== "-";
+        const hasError = errorText && errorText !== "-";
+
         el.detailBody.innerHTML = `
-          <div class="kv">
-            <div>timestamp</div><div>${fmtTime(t.timestamp)}</div>
-            <div>sessionId</div><div>${toText(t.sessionId) || "-"}</div>
-            <div>contextToken</div><div>${toText(t.contextToken) || "-"}</div>
-            <div>model</div><div>${toText(t.model) || "-"}</div>
-            <div>messageItemType</div><div>${toText(t.messageItemType) || "-"}</div>
-            <div>imageUrl</div><div>${toText(t.imageUrl) || "-"}</div>
-            <div>imageModel</div><div>${toText(t.imageModel) || "-"}</div>
-            <div>generatedImageUrl</div><div>${toText(t.generatedImageUrl) || "-"}</div>
-            <div>ttsPlayTimeMs</div><div>${toText(t.ttsPlayTimeMs) || "-"}</div>
-            <div>ttsSampleRate</div><div>${toText(t.ttsSampleRate) || "-"}</div>
-          </div>
-
-          <div class="monoBox">
-            <div class="monoHead">
-              <span>ilinkMessageJson</span>
-              <button class="ghost" data-copy="ilink">复制</button>
+          <div class="section">
+            <div class="section-title">基本信息</div>
+            <div class="kv">
+              <div>timestamp</div><div>${fmtTime(t.timestamp)}</div>
+              <div>sessionId</div><div>${toText(t.sessionId) || "-"}</div>
+              <div>contextToken</div><div>${toText(t.contextToken) || "-"}</div>
+              <div>model</div><div>${toText(t.model) || "-"}</div>
+              <div>messageItemType</div><div>${toText(t.messageItemType) || "-"}</div>
             </div>
-            <pre>${ilinkJson || "-"}</pre>
           </div>
 
-          <div class="monoBox">
-            <div class="monoHead">
-              <span>imageLlmRequestJson</span>
-              <button class="ghost" data-copy="imageLlmRequestJson">复制</button>
-            </div>
-            <pre>${imageLlmRequestJson || "-"}</pre>
-          </div>
-
-          <div class="monoBox">
-            <div class="monoHead">
-              <span>imageDescription</span>
-              <button class="ghost" data-copy="imageDescription">复制</button>
-            </div>
-            <pre>${toText(t.imageDescription) || "-"}</pre>
-          </div>
-
-          <div class="monoBox">
-            <div class="monoHead">
-              <span>generatedImageRequestJson</span>
-              <button class="ghost" data-copy="generatedImageRequestJson">复制</button>
-            </div>
-            <pre>${generatedImageRequestJson || "-"}</pre>
-          </div>
-
-          <div class="monoBox">
-            <div class="monoHead">
-              <span>generatedImageResponseJson</span>
-              <button class="ghost" data-copy="generatedImageResponseJson">复制</button>
-            </div>
-            <pre>${generatedImageResponseJson || "-"}</pre>
-          </div>
-
-          <div class="monoBox">
-            <div class="monoHead">
-              <span>ttsRequestJson</span>
-              <button class="ghost" data-copy="ttsRequestJson">复制</button>
-            </div>
-            <pre>${ttsRequestJson || "-"}</pre>
-          </div>
-
-          <div class="monoBox">
-            <div class="monoHead">
-              <span>ttsResponseJson</span>
-              <button class="ghost" data-copy="ttsResponseJson">复制</button>
-            </div>
-            <pre>${ttsResponseJson || "-"}</pre>
-          </div>
-
-          <div class="monoBox">
-            <div class="monoHead">
-              <span>userText</span>
-              <button class="ghost" data-copy="user">复制</button>
-            </div>
-            <pre>${toText(t.userText) || ""}</pre>
-          </div>
-
-          <div class="monoBox">
-            <div class="monoHead">
-              <span>llmRequestJson</span>
-              <button class="ghost" data-copy="llmRequestJson">复制</button>
-            </div>
-            <pre>${llmRequestJson || "-"}</pre>
-          </div>
-
-          <div class="monoBox">
-            <div class="monoHead">
-              <span>requestText</span>
-              <button class="ghost" data-copy="request">复制</button>
-            </div>
-            <pre>${requestText}</pre>
-          </div>
-
-          <div class="monoBox">
-            <div class="monoHead">
-              <span>replyText</span>
-              <button class="ghost" data-copy="reply">复制</button>
-            </div>
-            <pre>${replyText}</pre>
-          </div>
-
-          <div class="monoBox">
-            <div class="monoHead">
-              <span>errorMsg</span>
-              <button class="ghost" data-copy="error">复制</button>
-            </div>
-            <pre style="color: ${errorText ? "var(--err)" : "rgba(255,255,255,0.55)"}">${errorText || "-"}</pre>
-          </div>
-
-          <details>
-            <summary>原始 JSON</summary>
+          ${hasIlink ? `
+          <div class="section">
+            <div class="section-title">iLink 消息结构</div>
             <div class="monoBox">
               <div class="monoHead">
-                <span>raw</span>
-                <button class="ghost" data-copy="raw">复制</button>
+                <span>ilinkMessageJson</span>
+                <button class="ghost" data-copy="ilink">复制</button>
               </div>
-              <pre>${raw}</pre>
+              <pre>${ilinkJson}</pre>
+            </div>
+          </div>
+          ` : ''}
+
+          ${(hasImageLlm || hasImageDesc || toText(t.imageUrl) !== "-" || toText(t.imageModel) !== "-") ? `
+          <details>
+            <summary>🖼️ 图片理解相关 ${hasImageLlm || hasImageDesc ? '' : '(无数据)'}</summary>
+            <div style="padding: 12px;">
+              <div class="kv" style="margin-bottom: 12px;">
+                <div>imageUrl</div><div>${toText(t.imageUrl) || "-"}</div>
+                <div>imageModel</div><div>${toText(t.imageModel) || "-"}</div>
+              </div>
+              ${hasImageLlm ? `
+              <div class="monoBox">
+                <div class="monoHead">
+                  <span>imageLlmRequestJson</span>
+                  <button class="ghost" data-copy="imageLlmRequestJson">复制</button>
+                </div>
+                <pre>${imageLlmRequestJson}</pre>
+              </div>
+              ` : ''}
+              ${hasImageDesc ? `
+              <div class="monoBox">
+                <div class="monoHead">
+                  <span>imageDescription</span>
+                  <button class="ghost" data-copy="imageDescription">复制</button>
+                </div>
+                <pre>${toText(t.imageDescription)}</pre>
+              </div>
+              ` : ''}
+            </div>
+          </details>
+          ` : ''}
+
+          ${(hasGenImageReq || hasGenImageResp || toText(t.generatedImageUrl) !== "-") ? `
+          <details>
+            <summary>🎨 图片生成相关 ${hasGenImageReq || hasGenImageResp ? '' : '(无数据)'}</summary>
+            <div style="padding: 12px;">
+              <div class="kv" style="margin-bottom: 12px;">
+                <div>generatedImageUrl</div><div>${toText(t.generatedImageUrl) || "-"}</div>
+              </div>
+              ${hasGenImageReq ? `
+              <div class="monoBox">
+                <div class="monoHead">
+                  <span>generatedImageRequestJson</span>
+                  <button class="ghost" data-copy="generatedImageRequestJson">复制</button>
+                </div>
+                <pre>${generatedImageRequestJson}</pre>
+              </div>
+              ` : ''}
+              ${hasGenImageResp ? `
+              <div class="monoBox">
+                <div class="monoHead">
+                  <span>generatedImageResponseJson</span>
+                  <button class="ghost" data-copy="generatedImageResponseJson">复制</button>
+                </div>
+                <pre>${generatedImageResponseJson}</pre>
+              </div>
+              ` : ''}
+            </div>
+          </details>
+          ` : ''}
+
+          ${(hasTtsReq || hasTtsResp || toText(t.ttsPlayTimeMs) !== "-" || toText(t.ttsSampleRate) !== "-") ? `
+          <details>
+            <summary>🔊 TTS 相关 ${hasTtsReq || hasTtsResp ? '' : '(无数据)'}</summary>
+            <div style="padding: 12px;">
+              <div class="kv" style="margin-bottom: 12px;">
+                <div>ttsPlayTimeMs</div><div>${toText(t.ttsPlayTimeMs) || "-"}</div>
+                <div>ttsSampleRate</div><div>${toText(t.ttsSampleRate) || "-"}</div>
+              </div>
+              ${hasTtsReq ? `
+              <div class="monoBox">
+                <div class="monoHead">
+                  <span>ttsRequestJson</span>
+                  <button class="ghost" data-copy="ttsRequestJson">复制</button>
+                </div>
+                <pre>${ttsRequestJson}</pre>
+              </div>
+              ` : ''}
+              ${hasTtsResp ? `
+              <div class="monoBox">
+                <div class="monoHead">
+                  <span>ttsResponseJson</span>
+                  <button class="ghost" data-copy="ttsResponseJson">复制</button>
+                </div>
+                <pre>${ttsResponseJson}</pre>
+              </div>
+              ` : ''}
+            </div>
+          </details>
+          ` : ''}
+
+          ${hasUserText || hasLlmReq || hasRequest || hasReply ? `
+          <div class="section">
+            <div class="section-title">对话内容</div>
+            ${hasUserText ? `
+            <div class="monoBox">
+              <div class="monoHead">
+                <span>userText</span>
+                <button class="ghost" data-copy="user">复制</button>
+              </div>
+              <pre>${toText(t.userText)}</pre>
+            </div>
+            ` : ''}
+            ${hasLlmReq ? `
+            <details style="margin-top: 10px;">
+              <summary>📤 llmRequestJson</summary>
+              <div style="padding: 12px;">
+                <div class="monoBox">
+                  <div class="monoHead">
+                    <span>llmRequestJson</span>
+                    <button class="ghost" data-copy="llmRequestJson">复制</button>
+                  </div>
+                  <pre>${llmRequestJson}</pre>
+                </div>
+              </div>
+            </details>
+            ` : ''}
+            ${hasRequest ? `
+            <details style="margin-top: 10px;">
+              <summary>📝 requestText (完整上下文)</summary>
+              <div style="padding: 12px;">
+                <div class="monoBox">
+                  <div class="monoHead">
+                    <span>requestText</span>
+                    <button class="ghost" data-copy="request">复制</button>
+                  </div>
+                  <pre>${requestText}</pre>
+                </div>
+              </div>
+            </details>
+            ` : ''}
+            ${hasReply ? `
+            <div class="monoBox" style="margin-top: 10px;">
+              <div class="monoHead">
+                <span>replyText</span>
+                <button class="ghost" data-copy="reply">复制</button>
+              </div>
+              <pre>${replyText}</pre>
+            </div>
+            ` : ''}
+          </div>
+          ` : ''}
+
+          ${hasError ? `
+          <div class="section">
+            <div class="section-title">错误信息</div>
+            <div class="monoBox">
+              <div class="monoHead">
+                <span>errorMsg</span>
+                <button class="ghost" data-copy="error">复制</button>
+              </div>
+              <pre style="color: var(--err)">${errorText}</pre>
+            </div>
+          </div>
+          ` : ''}
+
+          <details style="margin-top: 16px;">
+            <summary>📋 原始 JSON</summary>
+            <div style="padding: 12px;">
+              <div class="monoBox">
+                <div class="monoHead">
+                  <span>raw</span>
+                  <button class="ghost" data-copy="raw">复制</button>
+                </div>
+                <pre>${raw}</pre>
+              </div>
             </div>
           </details>
         `;
