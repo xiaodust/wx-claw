@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.ai.tools.reminder;
 
+import com.dust.wxclawbackfront.scheduler.DynamicTaskSchedulerService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +26,7 @@ import java.util.Map;
 public class ReminderHandler {
 
     private final ReminderTaskRepository repository;
+    private final DynamicTaskSchedulerService schedulerService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${wxclaw.ai.time.zone:Asia/Shanghai}")
@@ -65,6 +67,9 @@ public class ReminderHandler {
         ReminderTask saved = repository.save(task);
         log.info("创建延迟提醒成功: userId={}, reminderId={}, triggerTime={}, text={}", 
                 userId, saved.getId(), triggerTime, reminderText);
+
+        // 注册到调度器
+        schedulerService.scheduleOnceTask(saved);
 
         return new ReminderCreateResult(true, saved.getId(), 
                 String.format("好的，我会在 %d 分钟后（%s）提醒你：%s", 
@@ -112,6 +117,9 @@ public class ReminderHandler {
             ReminderTask saved = repository.save(task);
             log.info("创建延迟搜索任务成功: userId={}, taskId={}, query={}, triggerTime={}", 
                     userId, saved.getId(), query, triggerTime);
+
+            // 注册到调度器
+            schedulerService.scheduleOnceTask(saved);
 
             return new ReminderCreateResult(true, saved.getId(), 
                     String.format("好的，我会在 %d 分钟后（%s）为你搜索「%s」并推送结果", 
@@ -162,6 +170,9 @@ public class ReminderHandler {
             log.info("创建延迟AI任务成功: userId={}, taskId={}, prompt={}, triggerTime={}", 
                     userId, saved.getId(), prompt, triggerTime);
 
+            // 注册到调度器
+            schedulerService.scheduleOnceTask(saved);
+
             return new ReminderCreateResult(true, saved.getId(), 
                     String.format("好的，我会在 %d 分钟后（%s）自动生成内容并发送给你", 
                             delayMinutes, formatTime(triggerTime)));
@@ -199,11 +210,16 @@ public class ReminderHandler {
         task.setReminderText(reminderText);
         task.setTriggerTime(triggerTime);
         task.setTaskType("DAILY");
+        task.setActionType("REMINDER");
+        task.setCronExpression(String.format("0 %d %d * * ?", minute, hour));
         task.setStatus("PENDING");
 
         ReminderTask saved = repository.save(task);
-        log.info("创建每日提醒成功: userId={}, reminderId={}, triggerTime={}, text={}", 
-                userId, saved.getId(), triggerTime, reminderText);
+        log.info("创建每日提醒成功: userId={}, reminderId={}, cron={}, text={}", 
+                userId, saved.getId(), saved.getCronExpression(), reminderText);
+
+        // 注册到调度器
+        schedulerService.scheduleCronTask(saved);
 
         return new ReminderCreateResult(true, saved.getId(), 
                 String.format("好的，我会每天 %02d:%02d 提醒你：%s（首次提醒：%s）", 
@@ -246,11 +262,16 @@ public class ReminderHandler {
         task.setReminderText(reminderText);
         task.setTriggerTime(triggerTime);
         task.setTaskType("WEEKLY");
+        task.setActionType("REMINDER");
+        task.setCronExpression(String.format("0 %d %d ? * %s", minute, hour, getDayOfWeekCron(dayOfWeek)));
         task.setStatus("PENDING");
 
         ReminderTask saved = repository.save(task);
-        log.info("创建每周提醒成功: userId={}, reminderId={}, triggerTime={}, text={}", 
-                userId, saved.getId(), triggerTime, reminderText);
+        log.info("创建每周提醒成功: userId={}, reminderId={}, cron={}, text={}", 
+                userId, saved.getId(), saved.getCronExpression(), reminderText);
+
+        // 注册到调度器
+        schedulerService.scheduleCronTask(saved);
 
         String dayName = getDayOfWeekName(dayOfWeek);
         return new ReminderCreateResult(true, saved.getId(), 
@@ -284,11 +305,16 @@ public class ReminderHandler {
         task.setReminderText(reminderText);
         task.setTriggerTime(triggerTime);
         task.setTaskType("MONTHLY");
+        task.setActionType("REMINDER");
+        task.setCronExpression(String.format("0 %d %d %d * ?", minute, hour, dayOfMonth));
         task.setStatus("PENDING");
 
         ReminderTask saved = repository.save(task);
-        log.info("创建每月提醒成功: userId={}, reminderId={}, triggerTime={}, text={}", 
-                userId, saved.getId(), triggerTime, reminderText);
+        log.info("创建每月提醒成功: userId={}, reminderId={}, cron={}, text={}", 
+                userId, saved.getId(), saved.getCronExpression(), reminderText);
+
+        // 注册到调度器
+        schedulerService.scheduleCronTask(saved);
 
         return new ReminderCreateResult(true, saved.getId(), 
                 String.format("好的，我会每月%d号 %02d:%02d 提醒你：%s（首次提醒：%s）", 
@@ -386,9 +412,15 @@ public class ReminderHandler {
                     if (!"PENDING".equals(task.getStatus())) {
                         return new ReminderCancelResult(false, "提醒已执行或已取消");
                     }
+                    
+                    // 取消数据库中的任务
                     task.setStatus("CANCELLED");
                     task.setExecutedAt(LocalDateTime.now(ZoneId.of(timeZone)));
                     repository.save(task);
+                    
+                    // 取消调度器中的任务
+                    schedulerService.cancelTask(reminderId);
+                    
                     log.info("取消提醒成功: userId={}, reminderId={}", userId, reminderId);
                     return new ReminderCancelResult(true, "已取消提醒：" + task.getReminderText());
                 })
@@ -421,7 +453,24 @@ public class ReminderHandler {
     }
 
     /**
-     * 创建定时天气推送（每天）
+     * 获取星期几的 Cron 表达式格式
+     * 1=周一 对应 MON, 7=周日 对应 SUN
+     */
+    private String getDayOfWeekCron(int dayOfWeek) {
+        return switch (dayOfWeek) {
+            case 1 -> "MON";
+            case 2 -> "TUE";
+            case 3 -> "WED";
+            case 4 -> "THU";
+            case 5 -> "FRI";
+            case 6 -> "SAT";
+            case 7 -> "SUN";
+            default -> "*";
+        };
+    }
+
+    /**
+     * 创建提醒结果
      */
     @Transactional
     public ReminderCreateResult createDailyWeatherPush(String userId, String location, int hour, int minute, boolean includeForecast) {
@@ -456,11 +505,15 @@ public class ReminderHandler {
             task.setTaskType("DAILY");
             task.setActionType("WEATHER_PUSH");
             task.setActionParams(actionParams);
+            task.setCronExpression(String.format("0 %d %d * * ?", minute, hour));
             task.setStatus("PENDING");
 
             ReminderTask saved = repository.save(task);
-            log.info("创建每日天气推送成功: userId={}, taskId={}, location={}, triggerTime={}", 
-                    userId, saved.getId(), location, triggerTime);
+            log.info("创建每日天气推送成功: userId={}, taskId={}, location={}, cron={}", 
+                    userId, saved.getId(), location, saved.getCronExpression());
+
+            // 注册到调度器
+            schedulerService.scheduleCronTask(saved);
 
             return new ReminderCreateResult(true, saved.getId(), 
                     String.format("好的，我会每天 %02d:%02d 为你推送%s的天气（首次推送：%s）", 
@@ -515,11 +568,15 @@ public class ReminderHandler {
             task.setTaskType("DAILY");
             task.setActionType("EMAIL");
             task.setActionParams(actionParams);
+            task.setCronExpression(String.format("0 %d %d * * ?", minute, hour));
             task.setStatus("PENDING");
 
             ReminderTask saved = repository.save(task);
-            log.info("创建每日邮件任务成功: userId={}, taskId={}, to={}, subject={}, triggerTime={}", 
-                    userId, saved.getId(), to, subject, triggerTime);
+            log.info("创建每日邮件任务成功: userId={}, taskId={}, to={}, subject={}, cron={}", 
+                    userId, saved.getId(), to, subject, saved.getCronExpression());
+
+            // 注册到调度器
+            schedulerService.scheduleCronTask(saved);
 
             return new ReminderCreateResult(true, saved.getId(), 
                     String.format("好的，我会每天 %02d:%02d 给 %s 发送邮件《%s》（首次发送：%s）", 
@@ -567,11 +624,15 @@ public class ReminderHandler {
             task.setTaskType("DAILY");
             task.setActionType("WEB_SEARCH_PUSH");
             task.setActionParams(actionParams);
+            task.setCronExpression(String.format("0 %d %d * * ?", minute, hour));
             task.setStatus("PENDING");
 
             ReminderTask saved = repository.save(task);
-            log.info("创建每日搜索任务成功: userId={}, taskId={}, query={}, triggerTime={}", 
-                    userId, saved.getId(), query, triggerTime);
+            log.info("创建每日搜索任务成功: userId={}, taskId={}, query={}, cron={}", 
+                    userId, saved.getId(), query, saved.getCronExpression());
+
+            // 注册到调度器
+            schedulerService.scheduleCronTask(saved);
 
             return new ReminderCreateResult(true, saved.getId(), 
                     String.format("好的，我会每天 %02d:%02d 为你搜索「%s」并推送结果（首次推送：%s）", 
@@ -617,17 +678,173 @@ public class ReminderHandler {
             task.setTaskType("DAILY");
             task.setActionType("AI_CHAT");
             task.setActionParams(actionParams);
+            task.setCronExpression(String.format("0 %d %d * * ?", minute, hour));
             task.setStatus("PENDING");
 
             ReminderTask saved = repository.save(task);
-            log.info("创建每日AI任务成功: userId={}, taskId={}, prompt={}, triggerTime={}", 
-                    userId, saved.getId(), prompt, triggerTime);
+            log.info("创建每日AI任务成功: userId={}, taskId={}, prompt={}, cron={}", 
+                    userId, saved.getId(), prompt, saved.getCronExpression());
+
+            // 注册到调度器
+            schedulerService.scheduleCronTask(saved);
 
             return new ReminderCreateResult(true, saved.getId(), 
                     String.format("好的，我会每天 %02d:%02d 自动生成内容并发送给你（首次：%s）", 
                             hour, minute, formatTime(triggerTime)));
         } catch (Exception e) {
             log.error("创建AI任务失败", e);
+            return new ReminderCreateResult(false, null, "创建失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 创建每日对话总结（日报）
+     */
+    @Transactional
+    public ReminderCreateResult createDailySummary(String userId, int hour, int minute) {
+        if (userId == null || userId.isBlank()) {
+            return new ReminderCreateResult(false, null, "用户ID为空");
+        }
+        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+            return new ReminderCreateResult(false, null, "时间格式错误（小时0-23，分钟0-59）");
+        }
+
+        try {
+            LocalDateTime now = LocalDateTime.now(ZoneId.of(timeZone));
+            LocalDateTime triggerTime = now.toLocalDate().atTime(hour, minute);
+            
+            if (triggerTime.isBefore(now) || triggerTime.isEqual(now)) {
+                triggerTime = triggerTime.plusDays(1);
+            }
+
+            Map<String, Object> params = new HashMap<>();
+            params.put("summaryType", "DAILY");
+            params.put("startTime", 0L);
+            params.put("endTime", 0L);
+            String actionParams = objectMapper.writeValueAsString(params);
+
+            ReminderTask task = new ReminderTask();
+            task.setUserId(userId);
+            task.setReminderText("每日对话总结（日报）");
+            task.setTriggerTime(triggerTime);
+            task.setTaskType("DAILY");
+            task.setActionType("CONVERSATION_SUMMARY");
+            task.setActionParams(actionParams);
+            task.setCronExpression(String.format("0 %d %d * * ?", minute, hour));
+            task.setStatus("PENDING");
+
+            ReminderTask saved = repository.save(task);
+            schedulerService.scheduleCronTask(saved);
+
+            return new ReminderCreateResult(true, saved.getId(), 
+                    String.format("好的，我会每天 %02d:%02d 为你生成对话日报", hour, minute));
+
+        } catch (Exception e) {
+            log.error("创建每日总结任务失败: userId={}, error={}", userId, e.getMessage(), e);
+            return new ReminderCreateResult(false, null, "创建失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 创建每周对话总结（周报）
+     */
+    @Transactional
+    public ReminderCreateResult createWeeklySummary(String userId, int dayOfWeek, int hour, int minute) {
+        if (userId == null || userId.isBlank()) {
+            return new ReminderCreateResult(false, null, "用户ID为空");
+        }
+        if (dayOfWeek < 1 || dayOfWeek > 7) {
+            return new ReminderCreateResult(false, null, "星期几必须在1-7之间（1=周一，7=周日）");
+        }
+        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+            return new ReminderCreateResult(false, null, "时间格式错误（小时0-23，分钟0-59）");
+        }
+
+        try {
+            LocalDateTime now = LocalDateTime.now(ZoneId.of(timeZone));
+            LocalDateTime triggerTime = now.with(TemporalAdjusters.nextOrSame(DayOfWeek.of(dayOfWeek)))
+                    .with(LocalTime.of(hour, minute));
+            
+            if (triggerTime.isBefore(now) || triggerTime.isEqual(now)) {
+                triggerTime = triggerTime.plusWeeks(1);
+            }
+
+            Map<String, Object> params = new HashMap<>();
+            params.put("summaryType", "WEEKLY");
+            params.put("startTime", 0L);
+            params.put("endTime", 0L);
+            String actionParams = objectMapper.writeValueAsString(params);
+
+            ReminderTask task = new ReminderTask();
+            task.setUserId(userId);
+            task.setReminderText("每周对话总结（周报）");
+            task.setTriggerTime(triggerTime);
+            task.setTaskType("WEEKLY");
+            task.setActionType("CONVERSATION_SUMMARY");
+            task.setActionParams(actionParams);
+            task.setCronExpression(String.format("0 %d %d ? * %s", minute, hour, getDayOfWeekCron(dayOfWeek)));
+            task.setStatus("PENDING");
+
+            ReminderTask saved = repository.save(task);
+            schedulerService.scheduleCronTask(saved);
+
+            return new ReminderCreateResult(true, saved.getId(), 
+                    String.format("好的，我会每周%s %02d:%02d 为你生成对话周报", 
+                            getDayOfWeekName(dayOfWeek), hour, minute));
+
+        } catch (Exception e) {
+            log.error("创建每周总结任务失败: userId={}, error={}", userId, e.getMessage(), e);
+            return new ReminderCreateResult(false, null, "创建失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 创建每月对话总结（月报）
+     */
+    @Transactional
+    public ReminderCreateResult createMonthlySummary(String userId, int dayOfMonth, int hour, int minute) {
+        if (userId == null || userId.isBlank()) {
+            return new ReminderCreateResult(false, null, "用户ID为空");
+        }
+        if (dayOfMonth < 1 || dayOfMonth > 28) {
+            return new ReminderCreateResult(false, null, "每月日期必须在1-28之间（避免月份差异）");
+        }
+        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+            return new ReminderCreateResult(false, null, "时间格式错误（小时0-23，分钟0-59）");
+        }
+
+        try {
+            LocalDateTime now = LocalDateTime.now(ZoneId.of(timeZone));
+            LocalDateTime triggerTime = now.toLocalDate().withDayOfMonth(dayOfMonth).atTime(hour, minute);
+            
+            if (triggerTime.isBefore(now) || triggerTime.isEqual(now)) {
+                triggerTime = triggerTime.plusMonths(1);
+            }
+
+            Map<String, Object> params = new HashMap<>();
+            params.put("summaryType", "MONTHLY");
+            params.put("startTime", 0L);
+            params.put("endTime", 0L);
+            String actionParams = objectMapper.writeValueAsString(params);
+
+            ReminderTask task = new ReminderTask();
+            task.setUserId(userId);
+            task.setReminderText("每月对话总结（月报）");
+            task.setTriggerTime(triggerTime);
+            task.setTaskType("MONTHLY");
+            task.setActionType("CONVERSATION_SUMMARY");
+            task.setActionParams(actionParams);
+            task.setCronExpression(String.format("0 %d %d %d * ?", minute, hour, dayOfMonth));
+            task.setStatus("PENDING");
+
+            ReminderTask saved = repository.save(task);
+            schedulerService.scheduleCronTask(saved);
+
+            return new ReminderCreateResult(true, saved.getId(), 
+                    String.format("好的，我会每月%d号 %02d:%02d 为你生成对话月报", dayOfMonth, hour, minute));
+
+        } catch (Exception e) {
+            log.error("创建每月总结任务失败: userId={}, error={}", userId, e.getMessage(), e);
             return new ReminderCreateResult(false, null, "创建失败：" + e.getMessage());
         }
     }

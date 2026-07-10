@@ -1,6 +1,7 @@
 package com.dust.wxclawbackfront.ilnk.inbound;
 
 import com.dust.wxclawbackfront.ai.chat.ChatHandler;
+import com.dust.wxclawbackfront.ai.dao.entity.AiConversation;
 import com.dust.wxclawbackfront.ai.dao.entity.AiMessage;
 import com.dust.wxclawbackfront.ai.service.AiConversationCrudService;
 import com.dust.wxclawbackfront.ai.chat.AIContentAccumulator;
@@ -79,18 +80,58 @@ public class ILinkMessageDispatcher {
 
         String userId = msg.getFrom_user_id();
         String contextToken = msg.getContext_token();
-        String sessionId = userId;
 
-        if (sessionId == null || sessionId.isBlank()) {
+        if (userId == null || userId.isBlank()) {
             return;
         }
 
         // 设置用户上下文
         UserContextHolder.setUserId(userId);
         try {
+            // 检查是否是新建对话指令
+            String userText = userInputExtractor.extractText(msg);
+            if (isNewConversationIntent(userText)) {
+                handleNewConversation(msg, userId, contextToken);
+                return;
+            }
+
+            // 获取或创建当前用户的活跃会话
+            AiConversation activeConversation = crudService.getOrCreateActiveConversation(userId);
+            String sessionId = activeConversation.getSessionId();
+
             processMessage(msg, userId, contextToken, sessionId);
         } finally {
             UserContextHolder.clear();
+        }
+    }
+
+    private boolean isNewConversationIntent(String text) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        String trimmed = text.trim().toLowerCase();
+        return trimmed.equals("新建对话") 
+                || trimmed.equals("新对话") 
+                || trimmed.equals("开启新对话")
+                || trimmed.equals("清空上下文")
+                || trimmed.equals("重新开始");
+    }
+
+    private void handleNewConversation(WeixinMessage msg, String userId, String contextToken) {
+        try {
+            AiConversation newConversation = crudService.createNewConversation(userId);
+            String reply = "已为你创建新对话。之前的对话历史已保存，需要时可以通过对话列表查看。";
+            
+            crudService.appendMessage(newConversation.getSessionId(), MESSAGE_TYPE_ASSISTANT, reply, null, 0, null);
+            messageSender.sendText(userId, reply);
+            
+            log.info("用户新建对话: userId={}, newSessionId={}", userId, newConversation.getSessionId());
+        } catch (Exception ex) {
+            log.error("新建对话失败: userId={}, error={}", userId, ex.getMessage(), ex);
+            try {
+                messageSender.sendText(userId, "新建对话失败，请稍后再试。");
+            } catch (Exception ignored) {
+            }
         }
     }
 

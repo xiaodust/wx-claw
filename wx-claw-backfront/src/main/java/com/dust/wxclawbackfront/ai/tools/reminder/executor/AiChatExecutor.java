@@ -1,6 +1,6 @@
 package com.dust.wxclawbackfront.ai.tools.reminder.executor;
 
-import com.dust.wxclawbackfront.ai.chat.ChatHandler;
+import com.dust.wxclawbackfront.ai.chat.PlainTextLlmService;
 import com.dust.wxclawbackfront.ai.tools.reminder.ReminderTask;
 import com.dust.wxclawbackfront.ilnk.outbound.ILinkMessageSender;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -9,7 +9,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.util.Collections;
 
 /**
  * AI 自动聊天执行器
@@ -20,7 +19,7 @@ import java.util.Collections;
 @RequiredArgsConstructor
 public class AiChatExecutor implements TaskActionExecutor {
     
-    private final ChatHandler chatHandler;
+    private final PlainTextLlmService plainTextLlmService;
     private final ILinkMessageSender messageSender;
     private final ObjectMapper objectMapper = new ObjectMapper();
     
@@ -40,8 +39,8 @@ public class AiChatExecutor implements TaskActionExecutor {
             log.info("执行AI聊天任务: taskId={}, userId={}, prompt={}", 
                     task.getId(), task.getUserId(), prompt);
             
-            // 调用 ChatHandler 生成内容
-            String aiResponse = chatHandler.chat(prompt, Collections.emptyList(), null);
+            // 调用纯文本 LLM 生成内容
+            String aiResponse = plainTextLlmService.chat(prompt);
             
             if (aiResponse == null || aiResponse.isBlank()) {
                 log.error("AI生成内容为空: taskId={}", task.getId());

@@ -39,6 +39,24 @@ public class AiConversationController {
         return ResponseEntity.ok(toDto(conversation));
     }
 
+    @PostMapping("/new")
+    public ResponseEntity<AiConversationDTO> createNewConversation(@RequestParam(name = "username", required = false) String username) {
+        AiConversation conversation = crudService.createNewConversation(username);
+        return ResponseEntity.ok(toDto(conversation));
+    }
+
+    @GetMapping("/active")
+    public ResponseEntity<AiConversationDTO> getActiveConversation(@RequestParam(name = "username") String username) {
+        if (username == null || username.isBlank()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+        }
+        AiConversation conversation = crudService.getActiveConversation(username.trim());
+        if (conversation == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(toDto(conversation));
+    }
+
     @GetMapping
     public ResponseEntity<List<AiConversationDTO>> listConversations(@RequestParam(name = "username", required = false) String username) {
         List<AiConversationDTO> list = crudService.listConversations(username).stream().map(AiConversationController::toDto).toList();
@@ -104,6 +122,7 @@ public class AiConversationController {
         dto.setId(entity.getId());
         dto.setSessionId(entity.getSessionId());
         dto.setUsername(entity.getUsername());
+        dto.setActive(entity.getActive());
         dto.setMessageCount(entity.getMessageCount());
         dto.setLastMessageTime(entity.getLastMessageTime());
         dto.setCreatedTime(entity.getCreatedTime());

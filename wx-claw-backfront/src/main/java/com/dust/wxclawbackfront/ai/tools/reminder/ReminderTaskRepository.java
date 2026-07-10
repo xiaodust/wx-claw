@@ -13,6 +13,11 @@ import java.util.List;
 public interface ReminderTaskRepository extends JpaRepository<ReminderTask, Long> {
 
     /**
+     * 查询所有指定状态的任务
+     */
+    List<ReminderTask> findByStatus(String status);
+
+    /**
      * 查询到期待执行的任务
      */
     List<ReminderTask> findByStatusAndTriggerTimeBefore(String status, LocalDateTime time);

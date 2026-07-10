@@ -11,5 +11,7 @@ public interface AiConversationRepository extends JpaRepository<AiConversation, 
 
     Optional<AiConversation> findBySessionId(String sessionId);
 
+    Optional<AiConversation> findFirstByUsernameAndActiveTrueOrderByUpdatedTimeDesc(String username);
+
     List<AiConversation> findAllByUsername(String username, Sort sort);
 }
