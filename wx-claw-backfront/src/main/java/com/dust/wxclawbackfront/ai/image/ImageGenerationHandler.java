@@ -35,7 +35,7 @@ public class ImageGenerationHandler {
     public ImageGenerationHandler(ObjectMapper objectMapper,
                                   @Value("${spring.ai.openai.api-key:}") String apiKey,
                                   @Value("${wxclaw.ai.image.generate.url:${spring.ai.openai.base-url:https://ark.cn-beijing.volces.com/api/v3}/images/generations}") String url,
-                                  @Value("${wxclaw.ai.image.generate.timeout:PT60S}") Duration timeout,
+                                  @Value("${wxclaw.ai.image.generate.timeout:PT35S}") Duration timeout,
                                   @Value("${wxclaw.ai.image.generate.wrap-request:false}") boolean wrapRequest,
                                   @Value("${wxclaw.ai.image.generate.model:}") String generationModel,
                                   @Value("${wxclaw.ai.image.generate.size:2K}") String size,
@@ -46,11 +46,11 @@ public class ImageGenerationHandler {
                                   @Value("${wxclaw.ai.image.generate.reply-text:已根据你的描述生成了一张图片，请查收。}") String replyText) {
         this.objectMapper = objectMapper;
         this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(20))
+                .connectTimeout(Duration.ofSeconds(10))
                 .build();
         this.apiKey = apiKey;
         this.url = url;
-        this.timeout = timeout == null ? Duration.ofSeconds(60) : timeout;
+        this.timeout = timeout == null ? Duration.ofSeconds(35) : timeout;
         this.wrapRequest = wrapRequest;
         this.generationModel = generationModel;
         this.size = size;

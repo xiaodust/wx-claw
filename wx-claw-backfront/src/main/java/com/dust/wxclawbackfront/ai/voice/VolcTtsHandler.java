@@ -39,11 +39,11 @@ public class VolcTtsHandler {
 
     public VolcTtsHandler(ObjectMapper objectMapper,
                           @Value("${wxclaw.ai.tts.url:https://openspeech.bytedance.com/api/v3/tts/create}") String url,
-                          @Value("${wxclaw.ai.tts.timeout:PT120S}") Duration timeout,
+                          @Value("${wxclaw.ai.tts.timeout:PT30S}") Duration timeout,
                           @Value("${wxclaw.ai.tts.api-key:}") String apiKey,
                           @Value("${wxclaw.ai.tts.model:seed-audio-1.0}") String model,
                           @Value("${wxclaw.ai.tts.output-format:mp3}") String outputFormat,
-                          @Value("${wxclaw.ai.tts.sample-rate:48000}") Integer sampleRate,
+                          @Value("${wxclaw.ai.tts.sample-rate:24000}") Integer sampleRate,
                           @Value("${wxclaw.ai.tts.pitch-rate:0}") Integer pitchRate,
                           @Value("${wxclaw.ai.tts.speech-rate:0}") Integer speechRate,
                           @Value("${wxclaw.ai.tts.loudness-rate:0}") Integer loudnessRate,
@@ -52,10 +52,10 @@ public class VolcTtsHandler {
                           @Value("${wxclaw.ai.tts.ilink.bits-per-sample:16}") int ilinkBitsPerSample) {
         this.objectMapper = objectMapper;
         this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(15))
+                .connectTimeout(Duration.ofSeconds(8))
                 .build();
         this.url = url;
-        this.timeout = timeout == null ? Duration.ofSeconds(120) : timeout;
+        this.timeout = timeout == null ? Duration.ofSeconds(30) : timeout;
         this.apiKey = apiKey;
         this.model = model;
         this.outputFormat = outputFormat;

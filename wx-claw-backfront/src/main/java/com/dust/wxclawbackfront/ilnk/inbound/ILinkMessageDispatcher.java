@@ -18,7 +18,9 @@ import com.dust.wxclawbackfront.ai.trace.AiChatTraceStore;
 import com.dust.wxclawbackfront.ilnk.ILinkUserInput;
 import com.dust.wxclawbackfront.ilnk.ILinkUserInputExtractor;
 import com.dust.wxclawbackfront.ilnk.outbound.ILinkMessageSender;
+import com.dust.wxclawbackfront.ilnk.runtime.ILinkRuntimeManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.wechat.ilink.sdk.ILinkClient;
 import com.github.wechat.ilink.sdk.core.model.WeixinMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -72,6 +74,7 @@ public class ILinkMessageDispatcher {
     private final VolcTtsHandler volcTtsHandler;
     private final ILinkMessageSender messageSender;
     private final ObjectMapper objectMapper;
+    private final ILinkRuntimeManager runtimeManager;
 
     @Value("${wxclaw.ai.image.direct-reply:true}")
     private boolean imageDirectReply;
@@ -160,7 +163,8 @@ public class ILinkMessageDispatcher {
     }
 
     private void processMessage(WeixinMessage msg, String userId, String contextToken, String sessionId) {
-        ILinkUserInput userInput = userInputExtractor.extract(null, msg);
+        ILinkClient client = runtimeManager.getActiveClient();
+        ILinkUserInput userInput = userInputExtractor.extract(client, msg);
         if (userInput == null) {
             String trimmed = userInputExtractor.extractText(msg);
             if (trimmed == null || trimmed.isBlank()) {
