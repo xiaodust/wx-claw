@@ -35,16 +35,16 @@ public class UniversalChatHandler implements ChatHandler {
     @Value("${wxclaw.ai.thinking.type:disabled}")
     private String thinkingType;
 
-    @Value("${wxclaw.ai.chat.max-tokens:1024}")
+    @Value("${wxclaw.ai.chat.max-tokens:768}")
     private int maxTokens;
 
-    @Value("${wxclaw.ai.chat.timeout:PT35S}")
+    @Value("${wxclaw.ai.chat.timeout:PT25S}")
     private Duration timeout;
 
-    @Value("${wxclaw.ai.context.max-chars:12000}")
+    @Value("${wxclaw.ai.context.max-chars:7000}")
     private int maxContextChars;
 
-    @Value("${wxclaw.ai.context.max-message-chars:1200}")
+    @Value("${wxclaw.ai.context.max-message-chars:800}")
     private int maxMessageChars;
 
     public UniversalChatHandler(ChatClient.Builder chatClientBuilder,
@@ -57,10 +57,10 @@ public class UniversalChatHandler implements ChatHandler {
                                 SkillLoader skillLoader,
                                 @Value("${spring.ai.openai.chat.model:}") String model,
                                 @Value("${wxclaw.ai.thinking.type:disabled}") String thinkingType,
-                                @Value("${wxclaw.ai.chat.max-tokens:1024}") int maxTokens,
-                                @Value("${wxclaw.ai.chat.timeout:PT35S}") Duration timeout,
-                                @Value("${wxclaw.ai.context.max-chars:12000}") int maxContextChars,
-                                @Value("${wxclaw.ai.context.max-message-chars:1200}") int maxMessageChars) {
+                                @Value("${wxclaw.ai.chat.max-tokens:768}") int maxTokens,
+                                @Value("${wxclaw.ai.chat.timeout:PT25S}") Duration timeout,
+                                @Value("${wxclaw.ai.context.max-chars:7000}") int maxContextChars,
+                                @Value("${wxclaw.ai.context.max-message-chars:800}") int maxMessageChars) {
         this.chatClient = chatClientBuilder.build();
         this.toolInvocationStore = toolInvocationStore;
         this.toolPollingAgent = toolPollingAgent;

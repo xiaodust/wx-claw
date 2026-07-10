@@ -63,7 +63,15 @@ public class SkillLoader {
             // 拼接所有 skill，用分隔符分开
             StringBuilder sb = new StringBuilder();
             sb.append("# AI Skills\n\n");
-            sb.append("你拥有以下专项技能（skills），当用户意图匹配时，请按照对应 skill 的指引来调用工具和组织回复：\n\n");
+            sb.append("以下是针对特定场景的专项指引（skills）。这些 skill 是对你已有能力的**补充说明**，**不影响你的其他核心能力**");
+            sb.append("（如语音生成、图片理解、图片生成、工具调用等）。\n\n");
+            sb.append("当用户意图匹配某个 skill 场景时，请优先参考该 skill 的指引来调用工具和组织回复。");
+            sb.append("对于 skill 未覆盖的场景，请按你的正常能力处理。\n\n");
+            sb.append("**重要提醒**：\n");
+            sb.append("- 你**具备语音生成能力**，当用户要求发送语音/音频时，请正常生成语音回复\n");
+            sb.append("- 你**具备图片理解能力**，当用户发送图片时，请正常分析并回复\n");
+            sb.append("- 你**具备图片生成能力**，当用户要求生成/画图时，请正常生成图片\n");
+            sb.append("- 这些能力不受以下 skills 列表的限制\n\n");
             sb.append("---\n\n");
             
             for (int i = 0; i < skillContents.size(); i++) {

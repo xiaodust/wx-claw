@@ -33,6 +33,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 
 /**
  * ILink 入站消息处理器
@@ -45,6 +50,16 @@ public class ILinkMessageDispatcher {
 
     private static final int MESSAGE_TYPE_USER = 0;
     private static final int MESSAGE_TYPE_ASSISTANT = 1;
+
+    private static final ScheduledExecutorService WAIT_NOTICE_EXECUTOR =
+            Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
+                @Override
+                public Thread newThread(Runnable r) {
+                    Thread thread = new Thread(r, "ai-wait-notice");
+                    thread.setDaemon(true);
+                    return thread;
+                }
+            });
 
     private final AiConversationCrudService crudService;
     private final ChatHandler chatHandler;
@@ -61,7 +76,7 @@ public class ILinkMessageDispatcher {
     @Value("${wxclaw.ai.image.direct-reply:true}")
     private boolean imageDirectReply;
 
-    @Value("${wxclaw.ai.context.max-history-messages:20}")
+    @Value("${wxclaw.ai.context.max-history-messages:12}")
     private int maxHistoryMessages;
 
     @Value("${wxclaw.ai.trace.max-field-chars:4000}")
@@ -69,6 +84,15 @@ public class ILinkMessageDispatcher {
 
     @Value("${wxclaw.ai.tts.max-reply-chars:220}")
     private int ttsMaxReplyChars;
+
+    @Value("${wxclaw.ai.wait-notice.enabled:true}")
+    private boolean waitNoticeEnabled;
+
+    @Value("${wxclaw.ai.wait-notice.delay-seconds:5}")
+    private int waitNoticeDelaySeconds;
+
+    @Value("${wxclaw.ai.wait-notice.text:我正在处理中，可能还需要几秒，请稍等一下。}")
+    private String waitNoticeText;
 
     /**
      * 处理入站消息
@@ -154,6 +178,7 @@ public class ILinkMessageDispatcher {
         AIContentAccumulator accumulator = accumulatorProvider.getObject();
         Instant start = Instant.now();
         AiChatTrace trace = buildTrace(msg, userId, contextToken, sessionId, userInput);
+        ScheduledFuture<?> waitNoticeFuture = scheduleWaitNotice(userId);
 
         String reply;
         try {
@@ -191,6 +216,8 @@ public class ILinkMessageDispatcher {
 
         } catch (Exception ex) {
             handleError(ex, userId, sessionId, trace, accumulator, start);
+        } finally {
+            cancelWaitNotice(waitNoticeFuture);
         }
     }
 
@@ -363,6 +390,29 @@ public class ILinkMessageDispatcher {
             return t;
         }
         return t.substring(0, limit);
+    }
+
+    private ScheduledFuture<?> scheduleWaitNotice(String userId) {
+        if (!waitNoticeEnabled || userId == null || userId.isBlank()) {
+            return null;
+        }
+        int delay = waitNoticeDelaySeconds <= 0 ? 5 : waitNoticeDelaySeconds;
+        String text = (waitNoticeText == null || waitNoticeText.isBlank())
+                ? "我正在处理中，可能还需要几秒，请稍等一下。"
+                : waitNoticeText.trim();
+        return WAIT_NOTICE_EXECUTOR.schedule(() -> {
+            try {
+                messageSender.sendText(userId, text);
+            } catch (Exception ex) {
+                log.debug("发送等待提示失败: userId={}, error={}", userId, ex.getMessage());
+            }
+        }, delay, TimeUnit.SECONDS);
+    }
+
+    private void cancelWaitNotice(ScheduledFuture<?> future) {
+        if (future != null) {
+            future.cancel(false);
+        }
     }
 
     private static List<AiMessage> normalizeHistory(List<AiMessage> historyMessages, int maxMessages) {
