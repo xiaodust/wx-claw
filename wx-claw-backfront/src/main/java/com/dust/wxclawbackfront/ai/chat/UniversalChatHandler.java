@@ -27,6 +27,7 @@ public class UniversalChatHandler implements ChatHandler {
     private final LlmRequestJsonBuilder jsonBuilder;
     private final LlmToolRegistry toolRegistry;
     private final ChatTraceAssembler traceAssembler;
+    private final SkillLoader skillLoader;
 
     @Value("${spring.ai.openai.chat.model:}")
     private String model;
@@ -53,6 +54,7 @@ public class UniversalChatHandler implements ChatHandler {
                                 LlmRequestJsonBuilder jsonBuilder,
                                 LlmToolRegistry toolRegistry,
                                 ChatTraceAssembler traceAssembler,
+                                SkillLoader skillLoader,
                                 @Value("${spring.ai.openai.chat.model:}") String model,
                                 @Value("${wxclaw.ai.thinking.type:disabled}") String thinkingType,
                                 @Value("${wxclaw.ai.chat.max-tokens:1024}") int maxTokens,
@@ -66,6 +68,7 @@ public class UniversalChatHandler implements ChatHandler {
         this.jsonBuilder = jsonBuilder;
         this.toolRegistry = toolRegistry;
         this.traceAssembler = traceAssembler;
+        this.skillLoader = skillLoader;
         this.model = model;
         this.thinkingType = thinkingType;
         this.maxTokens = maxTokens;
@@ -116,9 +119,16 @@ public class UniversalChatHandler implements ChatHandler {
         spec = spec.options(optionsBuilder);
         spec = spec.tools(toolRegistry.getAllTools());
 
-        String content = spec.user(requestText)
-                .call()
-                .content();
+        // 注入 skill system prompt（如果有）
+        String skillPrompt = skillLoader.getSkillSystemPrompt();
+        ChatClient.ChatClientRequestSpec finalSpec;
+        if (skillPrompt != null && !skillPrompt.isBlank()) {
+            finalSpec = spec.system(skillPrompt).user(requestText);
+        } else {
+            finalSpec = spec.user(requestText);
+        }
+
+        String content = finalSpec.call().content();
 
         List<AiToolInvocationStore.Invocation> invocations = toolInvocationStore == null ? List.of() : toolInvocationStore.drain();
         return new AgentLlmCaller.LlmCallResult(content, invocations);

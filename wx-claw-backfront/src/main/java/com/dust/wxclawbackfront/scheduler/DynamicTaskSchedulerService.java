@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
@@ -51,11 +52,11 @@ public class DynamicTaskSchedulerService {
         }
 
         Instant triggerInstant = task.getTriggerTime().atZone(ZoneId.of(timeZone)).toInstant();
-        
-        // 如果触发时间已过，立即执行
+
+        // 触发时间已过：此时 iLink 可能尚未登录完成，不在此处立即执行以免发送失败。
+        // 该任务会在 iLink 登录成功后由 runOverdueOnceTasks() 统一补偿执行。
         if (triggerInstant.isBefore(Instant.now())) {
-            log.warn("任务触发时间已过，立即执行: taskId={}, triggerTime={}", task.getId(), task.getTriggerTime());
-            executeTask(task);
+            log.warn("任务触发时间已过，等待连接就绪后补偿执行: taskId={}, triggerTime={}", task.getId(), task.getTriggerTime());
             return;
         }
 
@@ -212,5 +213,36 @@ public class DynamicTaskSchedulerService {
      */
     public int getScheduledTaskCount() {
         return scheduledTasks.size();
+    }
+
+    /**
+     * 补偿执行触发时间已过的一次性任务。
+     * 应在 iLink 登录成功、消息发送通道就绪后调用，避免连接未就绪时发送失败。
+     */
+    public void runOverdueOnceTasks() {
+        LocalDateTime now = LocalDateTime.now(ZoneId.of(timeZone));
+        List<ReminderTask> overdueTasks = repository.findByStatusAndTriggerTimeBefore("PENDING", now);
+
+        int count = 0;
+        for (ReminderTask task : overdueTasks) {
+            if (!"ONE_TIME".equals(task.getTaskType())) {
+                continue;
+            }
+
+            ScheduledFuture<?> future = scheduledTasks.remove(task.getId());
+            if (future != null) {
+                future.cancel(false);
+            }
+
+            log.info("补偿执行过期一次性任务: taskId={}, triggerTime={}", task.getId(), task.getTriggerTime());
+            executeTask(task);
+            count++;
+        }
+
+        if (count > 0) {
+            log.info("过期一次性任务补偿执行完成，共处理 {} 个", count);
+        } else {
+            log.info("没有需要补偿执行的过期一次性任务");
+        }
     }
 }

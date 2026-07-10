@@ -2,7 +2,9 @@ package com.dust.wxclawbackfront.ilnk;
 
 import com.dust.wxclawbackfront.ilnk.inbound.ILinkMessageDispatcher;
 import com.dust.wxclawbackfront.ilnk.runtime.ILinkRuntimeManager;
+import com.dust.wxclawbackfront.scheduler.DynamicTaskSchedulerService;
 import com.github.wechat.ilink.sdk.ILinkClient;
+import com.github.wechat.ilink.sdk.core.exception.SessionExpiredException;
 import com.github.wechat.ilink.sdk.core.model.WeixinMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +25,7 @@ public class ILinkBotService {
 
     private final ILinkRuntimeManager runtimeManager;
     private final ILinkMessageDispatcher messageDispatcher;
+    private final DynamicTaskSchedulerService taskSchedulerService;
 
     @Value("${wxclaw.ilink.poll-idle-ms:200}")
     private long pollIdleMs;
@@ -38,6 +41,13 @@ public class ILinkBotService {
             client = runtimeManager.createAndLogin();
             runtimeManager.registerShutdownHook(client, stopFlag);
 
+            // 连接就绪后，补偿执行登录前已到期但因未连接而未发送的一次性任务
+            try {
+                taskSchedulerService.runOverdueOnceTasks();
+            } catch (Exception ex) {
+                log.error("补偿执行过期任务失败: {}", ex.getMessage(), ex);
+            }
+
             log.info("开始监听消息...");
 
             while (!stopFlag.get()) {
@@ -48,6 +58,12 @@ public class ILinkBotService {
                             messageDispatcher.dispatch(msg);
                         }
                     }
+                } catch (SessionExpiredException ex) {
+                    log.error("登录会话已过期，需要重新扫码登录: {}", ex.getMessage());
+                    // 删除旧的恢复上下文文件，避免下次启动时继续尝试用过期凭证恢复
+                    runtimeManager.deleteResumeContext();
+                    // 跳出循环，触发外层重新登录（如果有重启机制的话）
+                    break;
                 } catch (Exception ex) {
                     log.warn("监听错误: {}", ex.getMessage());
                     sleepQuietly(1000L);

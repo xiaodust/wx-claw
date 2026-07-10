@@ -1,0 +1,18 @@
+{
+  "loginContext" : {
+    "botToken" : "b9246ed5df82@im.bot:060000326ee665f016e1aee234d0569b2e62be",
+    "userId" : "o9cq80-3mszu9GU960OoUfsELiLs@im.wechat",
+    "botId" : "b9246ed5df82@im.bot",
+    "baseUrl" : "https://ilinkai.weixin.qq.com"
+  },
+  "updatesCursor" : "ChAIARCRtYvX9DMY2rSL1/QzEjpiOTI0NmVkNWRmODJAaW0uYm90OjA2MDAwMDMyNmVlNjY1ZjAxNmUxYWVlMjM0ZDA1NjliMmU2MmJl",
+  "conversationContexts" : [ {
+    "botId" : "b9246ed5df82@im.bot",
+    "userId" : "o9cq80-3mszu9GU960OoUfsELiLs@im.wechat",
+    "latestContextToken" : "AARzJWAFAAABAAAAAADEa3ugci8y51ZBYJxQaiAAAAB+9905Q6UiugPBawU3n3cyzQX+LkN8ofRzsCZYN0mt7ggFikg5jsaYZ0ZDr8Tr+iAzCrsT27TlL9qqttZrgOTmIwWB7sJX",
+    "typingTicket" : null,
+    "lastUpdatedAt" : 1783667808217,
+    "sourceMessageId" : 7481245024731679368,
+    "sourceMessageTime" : 1783667808626
+  } ]
+}
