@@ -48,6 +48,179 @@ public class ReminderTools {
     }
 
     /**
+     * 创建延迟网络搜索推送
+     */
+    @Tool(name = "create_delay_web_search",
+          description = "创建一次性延迟网络搜索推送。在指定分钟数后自动搜索并推送结果。适用于'过X分钟帮我搜索'、'X分钟后推送XX资讯'等场景。")
+    public ReminderCreateToolResult createDelayWebSearch(String query, String freshness, int count, int delayMinutes) {
+        String userId = UserContextHolder.getUserId();
+        if (userId == null) {
+            return new ReminderCreateToolResult(false, null, "无法获取用户信息");
+        }
+
+        ReminderHandler.ReminderCreateResult result = reminderHandler.createDelayWebSearch(userId, query, freshness, count, delayMinutes);
+        
+        String args = String.format("query=%s, delayMinutes=%d", query, delayMinutes);
+        invocationStore.add("create_delay_web_search", args, result.message());
+
+        return new ReminderCreateToolResult(result.success(), result.reminderId(), result.message());
+    }
+
+    /**
+     * 创建延迟 AI 聊天
+     */
+    @Tool(name = "create_delay_ai_chat",
+          description = "创建一次性延迟 AI 自动聊天。在指定分钟数后让 AI 根据提示词自动生成内容并发送。适用于'过X分钟让AI给我...'、'X分钟后AI自动...'等场景。")
+    public ReminderCreateToolResult createDelayAiChat(String prompt, int delayMinutes) {
+        String userId = UserContextHolder.getUserId();
+        if (userId == null) {
+            return new ReminderCreateToolResult(false, null, "无法获取用户信息");
+        }
+
+        ReminderHandler.ReminderCreateResult result = reminderHandler.createDelayAiChat(userId, prompt, delayMinutes);
+        
+        String args = String.format("prompt=%s, delayMinutes=%d", prompt, delayMinutes);
+        invocationStore.add("create_delay_ai_chat", args, result.message());
+
+        return new ReminderCreateToolResult(result.success(), result.reminderId(), result.message());
+    }
+
+    /**
+     * 创建每天定时提醒
+     */
+    @Tool(name = "create_daily_reminder",
+          description = "创建每天定时提醒。适用于需要每天固定时间提醒的场景。")
+    public ReminderCreateToolResult createDailyReminder(String reminderText, int hour, int minute) {
+        String userId = UserContextHolder.getUserId();
+        if (userId == null) {
+            return new ReminderCreateToolResult(false, null, "无法获取用户信息");
+        }
+
+        ReminderHandler.ReminderCreateResult result = reminderHandler.createDailyReminder(userId, reminderText, hour, minute);
+        
+        String args = String.format("reminderText=%s, hour=%d, minute=%d", reminderText, hour, minute);
+        invocationStore.add("create_daily_reminder", args, result.message());
+
+        return new ReminderCreateToolResult(result.success(), result.reminderId(), result.message());
+    }
+
+
+
+    /**
+     * 创建每周定时提醒
+     */
+    @Tool(name = "create_weekly_reminder",
+          description = "创建每周定时提醒。适用于需要每周固定时间提醒的场景。dayOfWeek: 1-7（1=周一，7=周日）")
+    public ReminderCreateToolResult createWeeklyReminder(String reminderText, int dayOfWeek, int hour, int minute) {
+        String userId = UserContextHolder.getUserId();
+        if (userId == null) {
+            return new ReminderCreateToolResult(false, null, "无法获取用户信息");
+        }
+
+        ReminderHandler.ReminderCreateResult result = reminderHandler.createWeeklyReminder(userId, reminderText, dayOfWeek, hour, minute);
+        
+        String args = String.format("reminderText=%s, dayOfWeek=%d, hour=%d, minute=%d", reminderText, dayOfWeek, hour, minute);
+        invocationStore.add("create_weekly_reminder", args, result.message());
+
+        return new ReminderCreateToolResult(result.success(), result.reminderId(), result.message());
+    }
+
+    /**
+     * 创建每月定时提醒
+     */
+    @Tool(name = "create_monthly_reminder",
+          description = "创建每月定时提醒。适用于需要每月固定日期提醒的场景。dayOfMonth: 1-31")
+    public ReminderCreateToolResult createMonthlyReminder(String reminderText, int dayOfMonth, int hour, int minute) {
+        String userId = UserContextHolder.getUserId();
+        if (userId == null) {
+            return new ReminderCreateToolResult(false, null, "无法获取用户信息");
+        }
+
+        ReminderHandler.ReminderCreateResult result = reminderHandler.createMonthlyReminder(userId, reminderText, dayOfMonth, hour, minute);
+        
+        String args = String.format("reminderText=%s, dayOfMonth=%d, hour=%d, minute=%d", reminderText, dayOfMonth, hour, minute);
+        invocationStore.add("create_monthly_reminder", args, result.message());
+
+        return new ReminderCreateToolResult(result.success(), result.reminderId(), result.message());
+    }
+
+    /**
+     * 创建每天定时天气推送
+     */
+    @Tool(name = "schedule_daily_weather",
+          description = "创建每天定时天气推送。每天固定时间自动推送指定地点的天气信息。")
+    public ReminderCreateToolResult scheduleDailyWeather(String location, int hour, int minute, boolean includeForecast) {
+        String userId = UserContextHolder.getUserId();
+        if (userId == null) {
+            return new ReminderCreateToolResult(false, null, "无法获取用户信息");
+        }
+
+        ReminderHandler.ReminderCreateResult result = reminderHandler.createDailyWeatherPush(userId, location, hour, minute, includeForecast);
+        
+        String args = String.format("location=%s, hour=%d, minute=%d, includeForecast=%b", location, hour, minute, includeForecast);
+        invocationStore.add("schedule_daily_weather", args, result.message());
+
+        return new ReminderCreateToolResult(result.success(), result.reminderId(), result.message());
+    }
+
+    /**
+     * 创建每天定时邮件发送
+     */
+    @Tool(name = "schedule_daily_email",
+          description = "创建每天定时邮件发送。每天固定时间自动发送邮件到指定邮箱。")
+    public ReminderCreateToolResult scheduleDailyEmail(String to, String subject, String content, int hour, int minute, boolean isHtml) {
+        String userId = UserContextHolder.getUserId();
+        if (userId == null) {
+            return new ReminderCreateToolResult(false, null, "无法获取用户信息");
+        }
+
+        ReminderHandler.ReminderCreateResult result = reminderHandler.createDailyEmail(userId, to, subject, content, hour, minute, isHtml);
+        
+        String args = String.format("to=%s, subject=%s, hour=%d, minute=%d", to, subject, hour, minute);
+        invocationStore.add("schedule_daily_email", args, result.message());
+
+        return new ReminderCreateToolResult(result.success(), result.reminderId(), result.message());
+    }
+
+    /**
+     * 创建每天定时网络搜索推送
+     */
+    @Tool(name = "schedule_daily_web_search",
+          description = "创建每天定时网络搜索推送。每天固定时间自动搜索指定关键词并推送结果。")
+    public ReminderCreateToolResult scheduleDailyWebSearch(String query, String freshness, int count, int hour, int minute) {
+        String userId = UserContextHolder.getUserId();
+        if (userId == null) {
+            return new ReminderCreateToolResult(false, null, "无法获取用户信息");
+        }
+
+        ReminderHandler.ReminderCreateResult result = reminderHandler.createDailyWebSearch(userId, query, freshness, count, hour, minute);
+        
+        String args = String.format("query=%s, hour=%d, minute=%d", query, hour, minute);
+        invocationStore.add("schedule_daily_web_search", args, result.message());
+
+        return new ReminderCreateToolResult(result.success(), result.reminderId(), result.message());
+    }
+
+    /**
+     * 创建每天定时 AI 聊天
+     */
+    @Tool(name = "schedule_daily_ai_chat",
+          description = "创建每天定时 AI 自动聊天。每天固定时间让 AI 根据提示词自动生成内容并发送。")
+    public ReminderCreateToolResult scheduleDailyAiChat(String prompt, int hour, int minute) {
+        String userId = UserContextHolder.getUserId();
+        if (userId == null) {
+            return new ReminderCreateToolResult(false, null, "无法获取用户信息");
+        }
+
+        ReminderHandler.ReminderCreateResult result = reminderHandler.createDailyAiChat(userId, prompt, hour, minute);
+        
+        String args = String.format("prompt=%s, hour=%d, minute=%d", prompt, hour, minute);
+        invocationStore.add("schedule_daily_ai_chat", args, result.message());
+
+        return new ReminderCreateToolResult(result.success(), result.reminderId(), result.message());
+    }
+
+    /**
      * 查询用户的待执行提醒列表
      */
     @Tool(name = "reminder_list", description = "查询当前用户的待执行提醒列表。当用户问\"我有哪些提醒\"、\"查看我的提醒\"等时调用。")

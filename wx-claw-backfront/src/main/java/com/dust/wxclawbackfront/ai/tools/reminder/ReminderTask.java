@@ -30,6 +30,18 @@ public class ReminderTask {
     private String reminderText;
 
     /**
+     * 动作类型：REMINDER(提醒), EMAIL(邮件), WEATHER_PUSH(天气推送), NEWS_PUSH(新闻推送), AI_CHAT(AI对话)
+     */
+    @Column(length = 50)
+    private String actionType;
+
+    /**
+     * 动作参数（JSON格式）
+     */
+    @Column(columnDefinition = "TEXT")
+    private String actionParams;
+
+    /**
      * 触发时间
      */
     @Column(nullable = false)
