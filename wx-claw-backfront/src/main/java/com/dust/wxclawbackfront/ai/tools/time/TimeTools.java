@@ -26,7 +26,7 @@ public class TimeTools implements AiToolProvider {
         this.invocationStore = invocationStore;
     }
 
-    @Tool(name = "time_now", description = "获取当前时间（默认 Asia/Shanghai）。当用户询问“现在几点/当前时间/今天日期/星期几”等时使用。")
+    @Tool(name = "time_now", description = "获取当前时间（默认 Asia/Shanghai）。仅当用户明确询问'现在几点'、'当前时间'、'今天日期'、'星期几'等时间相关问题时使用。注意：闲聊问候如'在干嘛'、'你好'等不要调用此工具。")
     public TimeToolResult now() {
         TimeResult result = timeHandler.now();
         String response = result == null ? null : result.getReplyText();

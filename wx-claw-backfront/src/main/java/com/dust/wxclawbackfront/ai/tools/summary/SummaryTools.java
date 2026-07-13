@@ -34,7 +34,7 @@ public class SummaryTools implements AiToolProvider {
      * 即时生成日报
      */
     @Tool(name = "generate_daily_summary_now",
-          description = "【必须调用】立即生成用户昨日的对话日报。当用户要求总结对话、生成日报时，必须调用此工具，不要自行根据上下文总结。此工具会从数据库查询完整的历史对话记录进行总结，而不仅仅是当前上下文的内容。无需任何参数。")
+          description = "生成昨日对话日报。仅当用户明确要求'总结昨天'、'生成日报'、'总结今天的对话'时调用。此工具会从数据库查询历史记录进行完整总结。注意：普通聊天问候不要调用此工具。")
     public SummaryToolResult generateDailySummaryNow() {
         String userId = UserContextHolder.getUserId();
         
@@ -57,7 +57,7 @@ public class SummaryTools implements AiToolProvider {
      * 即时生成周报
      */
     @Tool(name = "generate_weekly_summary_now",
-          description = "【必须调用】立即生成用户上周的对话周报。当用户要求总结上周对话、生成周报时，必须调用此工具，不要自行根据上下文总结。此工具会从数据库查询完整的历史对话记录进行总结。无需任何参数。")
+          description = "生成上周对话周报。仅当用户明确要求'总结上周'、'生成周报'时调用。此工具会从数据库查询历史记录进行完整总结。注意：普通聊天问候不要调用此工具。")
     public SummaryToolResult generateWeeklySummaryNow() {
         String userId = UserContextHolder.getUserId();
         
@@ -80,7 +80,7 @@ public class SummaryTools implements AiToolProvider {
      * 即时生成月报
      */
     @Tool(name = "generate_monthly_summary_now",
-          description = "【必须调用】立即生成用户上月的对话月报。当用户要求总结上月对话、生成月报时，必须调用此工具，不要自行根据上下文总结。此工具会从数据库查询完整的历史对话记录进行总结。无需任何参数。")
+          description = "生成上月对话月报。仅当用户明确要求'总结上个月'、'生成月报'时调用。此工具会从数据库查询历史记录进行完整总结。注意：普通聊天问候不要调用此工具。")
     public SummaryToolResult generateMonthlySummaryNow() {
         String userId = UserContextHolder.getUserId();
         
@@ -103,7 +103,7 @@ public class SummaryTools implements AiToolProvider {
      * 即时生成自定义时间范围总结
      */
     @Tool(name = "generate_custom_summary_now",
-          description = "【必须调用】立即生成指定时间范围内的对话总结。当用户要求总结过去某段时间的对话时，必须调用此工具，不要自行根据上下文总结。此工具会从数据库查询完整的历史对话记录进行总结。参数 hours 是要总结的小时数（1-720，最多30天）。")
+          description = "生成指定时间范围内的对话总结。仅当用户明确要求'总结过去X小时'、'最近X小时聊了什么'时调用。参数hours是要总结的小时数（1-720）。注意：普通聊天问候不要调用此工具。")
     public SummaryToolResult generateCustomSummaryNow(int hours) {
         String userId = UserContextHolder.getUserId();
         

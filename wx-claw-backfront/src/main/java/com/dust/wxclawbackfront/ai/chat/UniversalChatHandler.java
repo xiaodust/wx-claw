@@ -15,6 +15,9 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * 通用聊天处理器
@@ -100,11 +103,35 @@ public class UniversalChatHandler implements ChatHandler {
         return result.content();
     }
 
+    private static final ExecutorService PROMPT_EXECUTOR = Executors.newFixedThreadPool(2);
+
     private AgentLlmCaller.LlmCallResult chatOnce(String requestText) {
         if (toolInvocationStore != null) {
             toolInvocationStore.reset();
         }
 
+        // 并行获取 skill prompt 和 memory prompt
+        String userId = UserContextHolder.getUserId();
+        CompletableFuture<String> skillFuture = CompletableFuture.supplyAsync(
+                () -> skillLoader.getSkillSystemPrompt(), PROMPT_EXECUTOR);
+        CompletableFuture<String> memoryFuture = CompletableFuture.supplyAsync(
+                () -> userMemoryService.buildMemoryPrompt(userId), PROMPT_EXECUTOR);
+
+        // 等待两者完成
+        String skillPrompt = skillFuture.join();
+        String memoryPrompt = memoryFuture.join();
+
+        // 构建 system prompt
+        StringBuilder systemPromptBuilder = new StringBuilder();
+        if (skillPrompt != null && !skillPrompt.isBlank()) {
+            systemPromptBuilder.append(skillPrompt);
+        }
+        if (memoryPrompt != null && !memoryPrompt.isBlank()) {
+            systemPromptBuilder.append(memoryPrompt);
+        }
+        String systemPrompt = systemPromptBuilder.toString();
+
+        // 构建请求
         ChatClient.ChatClientRequestSpec spec = chatClient.prompt();
         OpenAiChatOptions.Builder optionsBuilder = OpenAiChatOptions.builder();
 
@@ -123,17 +150,6 @@ public class UniversalChatHandler implements ChatHandler {
 
         spec = spec.options(optionsBuilder);
         spec = spec.tools(toolRegistry.getAllTools());
-
-        // 注入 skill system prompt + 用户记忆
-        String skillPrompt = skillLoader.getSkillSystemPrompt();
-        String memoryPrompt = userMemoryService.buildMemoryPrompt(UserContextHolder.getUserId());
-        String systemPrompt = "";
-        if (skillPrompt != null && !skillPrompt.isBlank()) {
-            systemPrompt = skillPrompt;
-        }
-        if (memoryPrompt != null && !memoryPrompt.isBlank()) {
-            systemPrompt = systemPrompt + memoryPrompt;
-        }
 
         ChatClient.ChatClientRequestSpec finalSpec;
         if (!systemPrompt.isBlank()) {
