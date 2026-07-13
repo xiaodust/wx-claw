@@ -1,6 +1,7 @@
 package com.dust.wxclawbackfront.ilnk.inbound;
 
 import com.dust.wxclawbackfront.ai.chat.ChatHandler;
+import com.dust.wxclawbackfront.ai.chat.CommandHandler;
 import com.dust.wxclawbackfront.ai.dao.entity.AiConversation;
 import com.dust.wxclawbackfront.ai.dao.entity.AiMessage;
 import com.dust.wxclawbackfront.ai.service.AiConversationCrudService;
@@ -65,6 +66,7 @@ public class ILinkMessageDispatcher {
 
     private final AiConversationCrudService crudService;
     private final ChatHandler chatHandler;
+    private final CommandHandler commandHandler;
     private final ObjectProvider<AIContentAccumulator> accumulatorProvider;
     private final AiChatTraceStore traceStore;
     private final ILinkUserInputExtractor userInputExtractor;
@@ -122,6 +124,12 @@ public class ILinkMessageDispatcher {
                 return;
             }
 
+            // 检查是否是 # 命令
+            if (commandHandler.isCommand(userText)) {
+                handleCommand(userText, userId);
+                return;
+            }
+
             // 获取或创建当前用户的活跃会话
             AiConversation activeConversation = crudService.getOrCreateActiveConversation(userId);
             String sessionId = activeConversation.getSessionId();
@@ -157,6 +165,25 @@ public class ILinkMessageDispatcher {
             log.error("新建对话失败: userId={}, error={}", userId, ex.getMessage(), ex);
             try {
                 messageSender.sendText(userId, "新建对话失败，请稍后再试。");
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    /**
+     * 处理 # 命令
+     */
+    private void handleCommand(String commandText, String userId) {
+        try {
+            String reply = commandHandler.handle(commandText);
+            if (reply != null) {
+                messageSender.sendText(userId, reply);
+                log.info("处理命令: userId={}, command={}", userId, commandText);
+            }
+        } catch (Exception ex) {
+            log.error("处理命令失败: userId={}, command={}, error={}", userId, commandText, ex.getMessage(), ex);
+            try {
+                messageSender.sendText(userId, "命令处理失败，请稍后再试。");
             } catch (Exception ignored) {
             }
         }
