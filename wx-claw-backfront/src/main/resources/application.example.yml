@@ -1,0 +1,136 @@
+# WX-Claw 项目配置模板
+# 复制此文件为 application.yml 并填入实际配置值
+
+spring:
+  application:
+    name: wx-claw-backfront
+
+  # AI 模型配置
+  ai:
+    openai:
+      api-key: ${AI_API_KEY:your-api-key-here}
+      base-url: ${AI_BASE_URL:https://ark.cn-beijing.volces.com/api/v3}
+      chat:
+        model: ${AI_CHAT_MODEL:doubao-seed-evolving}
+        temperature: 0.7
+      image:
+        model: ${AI_IMAGE_MODEL:doubao-seed-2-1-pro-260628}
+    thinking:
+      type: disabled
+
+  # 数据库配置（SQLite）
+  datasource:
+    url: jdbc:sqlite:wx-claw-backfront.db
+    driver-class-name: org.sqlite.JDBC
+
+  # JPA 配置
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.community.dialect.SQLiteDialect
+
+  # 邮件服务配置
+  mail:
+    host: ${MAIL_HOST:smtp.qq.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:your-email@qq.com}
+    password: ${MAIL_PASSWORD:your-email-password}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+      mail.smtp.starttls.required: true
+      mail.smtp.timeout: 5000
+
+wxclaw:
+  # ILink 配置
+  ilink:
+    monitor:
+      enabled: true
+
+  ai:
+    # 图片生成配置
+    image:
+      generate:
+        model: doubao-seedream-4-5-251128
+
+    # TTS 语音合成配置
+    tts:
+      api-key: ${TTS_API_KEY:your-tts-api-key}
+      url: https://openspeech.bytedance.com/api/v3/tts/create
+      model: seed-audio-1.0
+      output-format: wav
+      sample-rate: 24000
+      pitch-rate: 0
+      speech-rate: 0
+      loudness-rate: 0
+      max-voice-ms: 60000
+
+    # 时间配置
+    time:
+      zone: Asia/Shanghai
+
+    # 网络搜索配置（博查）
+    web-search:
+      bocha:
+        api-key: ${BOCHA_API_KEY:your-bocha-api-key}
+        url: https://api.bochaai.com/v1/web-search
+        timeout: PT15S
+        default-count: 5
+        default-summary: true
+        default-freshness: noLimit
+
+    # 天气服务配置（心知天气）
+    weather:
+      default-location: beijing
+      source-text: 数据来源：心知天气
+      seniverse:
+        key: ${SENIVERSE_KEY:your-seniverse-key}
+        now-url: https://api.seniverse.com/v3/weather/now.json
+        daily-url: https://api.seniverse.com/v3/weather/daily.json
+        timeout: PT10S
+        language: zh-Hans
+        unit: c
+
+    # 聊天配置
+    chat:
+      max-rounds: 5
+      max-tokens: 768
+      timeout: PT25S
+    context:
+      max-chars: 7000
+      max-message-chars: 800
+
+  # 提醒功能配置
+  reminder:
+    enabled: true
+    max-delay-days: 30
+    retry-failed: true
+    max-retry-count: 3
+
+  # 邮件功能配置
+  mail:
+    enabled: true
+    whitelist:
+      - "*"
+    rate-limit: 5
+
+  # 日志配置
+  log:
+    level: info
+
+# ===========================================
+# 环境变量配置说明
+# ===========================================
+# AI_API_KEY        - AI 模型 API 密钥
+# AI_BASE_URL       - AI 模型 API 地址
+# AI_CHAT_MODEL     - 聊天模型名称
+# AI_IMAGE_MODEL    - 图片理解模型名称
+# MAIL_HOST         - 邮件服务器地址
+# MAIL_PORT         - 邮件服务器端口
+# MAIL_USERNAME     - 邮箱账号
+# MAIL_PASSWORD     - 邮箱密码/授权码
+# TTS_API_KEY       - TTS 语音合成 API 密钥
+# BOCHA_API_KEY     - 博查搜索 API 密钥
+# SENIVERSE_KEY     - 心知天气 API 密钥

@@ -29,6 +29,10 @@ Thumbs.db
 *.db
 *.sqlite
 
+# Application config (contains secrets)
+application.yml
+application-local.yml
+
 # Temporary files
 *.tmp
 *.swp
