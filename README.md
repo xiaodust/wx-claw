@@ -80,7 +80,7 @@
 ### 1. 克隆项目
 
 ```bash
-# 有可达仓库
+# GitLab 仓库
 git clone https://codeserver.youkeda.com/dustheart/wx-claw.git
 
 # 或 GitHub 镜像
