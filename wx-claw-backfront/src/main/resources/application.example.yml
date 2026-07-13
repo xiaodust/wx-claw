@@ -50,10 +50,16 @@ wxclaw:
       enabled: true
 
   ai:
-    # 图片生成配置
+    # 图片生成配置（SiliconFlow API - Kolors 模型）
     image:
       generate:
-        model: doubao-seedream-4-5-251128
+        use-siliconflow: true
+        url: https://api.siliconflow.cn/v1/images/generations
+        api-key: ${SILICONFLOW_API_KEY:your-siliconflow-api-key}
+        model: Kwai-Kolors/Kolors
+        image-size: 1024x1024
+        num-inference-steps: 20
+        guidance-scale: 7.5
 
     # TTS 语音合成配置
     tts:
@@ -123,14 +129,15 @@ wxclaw:
 # ===========================================
 # 环境变量配置说明
 # ===========================================
-# AI_API_KEY        - AI 模型 API 密钥
-# AI_BASE_URL       - AI 模型 API 地址
-# AI_CHAT_MODEL     - 聊天模型名称
-# AI_IMAGE_MODEL    - 图片理解模型名称
-# MAIL_HOST         - 邮件服务器地址
-# MAIL_PORT         - 邮件服务器端口
-# MAIL_USERNAME     - 邮箱账号
-# MAIL_PASSWORD     - 邮箱密码/授权码
-# TTS_API_KEY       - TTS 语音合成 API 密钥
-# BOCHA_API_KEY     - 博查搜索 API 密钥
-# SENIVERSE_KEY     - 心知天气 API 密钥
+# AI_API_KEY           - AI 模型 API 密钥
+# AI_BASE_URL          - AI 模型 API 地址
+# AI_CHAT_MODEL        - 聊天模型名称
+# AI_IMAGE_MODEL       - 图片理解模型名称
+# SILICONFLOW_API_KEY  - SiliconFlow 图片生成 API 密钥
+# MAIL_HOST            - 邮件服务器地址
+# MAIL_PORT            - 邮件服务器端口
+# MAIL_USERNAME        - 邮箱账号
+# MAIL_PASSWORD        - 邮箱密码/授权码
+# TTS_API_KEY          - TTS 语音合成 API 密钥
+# BOCHA_API_KEY        - 博查搜索 API 密钥
+# SENIVERSE_KEY        - 心知天气 API 密钥

@@ -5,7 +5,6 @@ import com.dust.wxclawbackfront.ai.image.ImageUnderstandingResult;
 import com.dust.wxclawbackfront.ilnk.media.WechatCdnMediaService;
 import com.github.wechat.ilink.sdk.ILinkClient;
 import com.github.wechat.ilink.sdk.core.model.MessageItem;
-import com.github.wechat.ilink.sdk.core.model.VoiceItem;
 import com.github.wechat.ilink.sdk.core.model.WeixinMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
