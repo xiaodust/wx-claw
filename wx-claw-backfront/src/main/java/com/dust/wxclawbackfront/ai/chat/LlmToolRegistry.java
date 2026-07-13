@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.ai.chat;
 
+import com.dust.wxclawbackfront.ai.tools.memory.MemoryTools;
 import com.dust.wxclawbackfront.ai.tools.mail.MailTools;
 import com.dust.wxclawbackfront.ai.tools.reminder.ReminderTools;
 import com.dust.wxclawbackfront.ai.tools.time.TimeTools;
@@ -23,16 +24,19 @@ public class LlmToolRegistry {
     private final WebSearchTools webSearchTools;
     private final ReminderTools reminderTools;
     private final MailTools mailTools;
+    private final MemoryTools memoryTools;
 
     public LlmToolRegistry(TimeTools timeTools,
                           WeatherTools weatherTools,
                           WebSearchTools webSearchTools,
                           ReminderTools reminderTools,
+                          MemoryTools memoryTools,
                           @Autowired(required = false) MailTools mailTools) {
         this.timeTools = timeTools;
         this.weatherTools = weatherTools;
         this.webSearchTools = webSearchTools;
         this.reminderTools = reminderTools;
+        this.memoryTools = memoryTools;
         this.mailTools = mailTools;
     }
 
@@ -46,6 +50,7 @@ public class LlmToolRegistry {
         tools.add(weatherTools);
         tools.add(webSearchTools);
         tools.add(reminderTools);
+        tools.add(memoryTools);
         if (mailTools != null) {
             tools.add(mailTools);
         }

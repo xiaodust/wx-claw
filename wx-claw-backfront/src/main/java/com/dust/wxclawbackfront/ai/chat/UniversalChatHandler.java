@@ -4,7 +4,9 @@ import com.dust.wxclawbackfront.ai.agent.AgentChatResult;
 import com.dust.wxclawbackfront.ai.agent.AgentLlmCaller;
 import com.dust.wxclawbackfront.ai.agent.ToolPollingAgent;
 import com.dust.wxclawbackfront.ai.dao.entity.AiMessage;
+import com.dust.wxclawbackfront.ai.tools.memory.UserMemoryService;
 import com.dust.wxclawbackfront.ai.tools.shared.AiToolInvocationStore;
+import com.dust.wxclawbackfront.ai.tools.shared.UserContextHolder;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,6 +30,7 @@ public class UniversalChatHandler implements ChatHandler {
     private final LlmToolRegistry toolRegistry;
     private final ChatTraceAssembler traceAssembler;
     private final SkillLoader skillLoader;
+    private final UserMemoryService userMemoryService;
 
     @Value("${spring.ai.openai.chat.model:}")
     private String model;
@@ -55,6 +58,7 @@ public class UniversalChatHandler implements ChatHandler {
                                 LlmToolRegistry toolRegistry,
                                 ChatTraceAssembler traceAssembler,
                                 SkillLoader skillLoader,
+                                UserMemoryService userMemoryService,
                                 @Value("${spring.ai.openai.chat.model:}") String model,
                                 @Value("${wxclaw.ai.thinking.type:disabled}") String thinkingType,
                                 @Value("${wxclaw.ai.chat.max-tokens:768}") int maxTokens,
@@ -69,6 +73,7 @@ public class UniversalChatHandler implements ChatHandler {
         this.toolRegistry = toolRegistry;
         this.traceAssembler = traceAssembler;
         this.skillLoader = skillLoader;
+        this.userMemoryService = userMemoryService;
         this.model = model;
         this.thinkingType = thinkingType;
         this.maxTokens = maxTokens;
@@ -119,11 +124,20 @@ public class UniversalChatHandler implements ChatHandler {
         spec = spec.options(optionsBuilder);
         spec = spec.tools(toolRegistry.getAllTools());
 
-        // 注入 skill system prompt（如果有）
+        // 注入 skill system prompt + 用户记忆
         String skillPrompt = skillLoader.getSkillSystemPrompt();
-        ChatClient.ChatClientRequestSpec finalSpec;
+        String memoryPrompt = userMemoryService.buildMemoryPrompt(UserContextHolder.getUserId());
+        String systemPrompt = "";
         if (skillPrompt != null && !skillPrompt.isBlank()) {
-            finalSpec = spec.system(skillPrompt).user(requestText);
+            systemPrompt = skillPrompt;
+        }
+        if (memoryPrompt != null && !memoryPrompt.isBlank()) {
+            systemPrompt = systemPrompt + memoryPrompt;
+        }
+
+        ChatClient.ChatClientRequestSpec finalSpec;
+        if (!systemPrompt.isBlank()) {
+            finalSpec = spec.system(systemPrompt).user(requestText);
         } else {
             finalSpec = spec.user(requestText);
         }
