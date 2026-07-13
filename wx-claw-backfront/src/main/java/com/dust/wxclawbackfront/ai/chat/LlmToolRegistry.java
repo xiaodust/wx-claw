@@ -1,43 +1,36 @@
 package com.dust.wxclawbackfront.ai.chat;
 
-import com.dust.wxclawbackfront.ai.tools.memory.MemoryTools;
-import com.dust.wxclawbackfront.ai.tools.mail.MailTools;
-import com.dust.wxclawbackfront.ai.tools.reminder.ReminderTools;
-import com.dust.wxclawbackfront.ai.tools.time.TimeTools;
-import com.dust.wxclawbackfront.ai.tools.weather.WeatherTools;
-import com.dust.wxclawbackfront.ai.tools.search.WebSearchTools;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.dust.wxclawbackfront.ai.tools.shared.AiToolProvider;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * LLM 工具注册器
- * 集中管理所有可用的 AI 工具
+ * 自动发现所有实现 AiToolProvider 接口的工具
  */
+@Slf4j
 @Component
 public class LlmToolRegistry {
 
-    private final TimeTools timeTools;
-    private final WeatherTools weatherTools;
-    private final WebSearchTools webSearchTools;
-    private final ReminderTools reminderTools;
-    private final MailTools mailTools;
-    private final MemoryTools memoryTools;
+    private final List<AiToolProvider> toolProviders;
 
-    public LlmToolRegistry(TimeTools timeTools,
-                          WeatherTools weatherTools,
-                          WebSearchTools webSearchTools,
-                          ReminderTools reminderTools,
-                          MemoryTools memoryTools,
-                          @Autowired(required = false) MailTools mailTools) {
-        this.timeTools = timeTools;
-        this.weatherTools = weatherTools;
-        this.webSearchTools = webSearchTools;
-        this.reminderTools = reminderTools;
-        this.memoryTools = memoryTools;
-        this.mailTools = mailTools;
+    /**
+     * Spring 自动注入所有实现 AiToolProvider 接口的 Bean
+     */
+    public LlmToolRegistry(List<AiToolProvider> toolProviders) {
+        this.toolProviders = toolProviders.stream()
+                .sorted(Comparator.comparingInt(AiToolProvider::getOrder))
+                .collect(Collectors.toList());
+        
+        log.info("已注册 {} 个工具提供者: {}", 
+                toolProviders.size(),
+                toolProviders.stream()
+                        .map(p -> p.getClass().getSimpleName() + "(order=" + p.getOrder() + ")")
+                        .collect(Collectors.joining(", ")));
     }
 
     /**
@@ -45,35 +38,8 @@ public class LlmToolRegistry {
      * @return 工具数组
      */
     public Object[] getAllTools() {
-        List<Object> tools = new ArrayList<>();
-        tools.add(timeTools);
-        tools.add(weatherTools);
-        tools.add(webSearchTools);
-        tools.add(reminderTools);
-        tools.add(memoryTools);
-        if (mailTools != null) {
-            tools.add(mailTools);
-        }
-        return tools.toArray();
-    }
-
-    public TimeTools getTimeTools() {
-        return timeTools;
-    }
-
-    public WeatherTools getWeatherTools() {
-        return weatherTools;
-    }
-
-    public WebSearchTools getWebSearchTools() {
-        return webSearchTools;
-    }
-
-    public ReminderTools getReminderTools() {
-        return reminderTools;
-    }
-
-    public MailTools getMailTools() {
-        return mailTools;
+        return toolProviders.stream()
+                .map(AiToolProvider::getTool)
+                .toArray();
     }
 }

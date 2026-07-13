@@ -1,13 +1,24 @@
 package com.dust.wxclawbackfront.ai.tools.search;
 
 import com.dust.wxclawbackfront.ai.tools.shared.AiToolInvocationStore;
+import com.dust.wxclawbackfront.ai.tools.shared.AiToolProvider;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 
 @Component
-public class WebSearchTools {
+public class WebSearchTools implements AiToolProvider {
+
+    @Override
+    public Object getTool() {
+        return this;
+    }
+
+    @Override
+    public int getOrder() {
+        return 30;
+    }
 
     private final BochaWebSearchHandler searchHandler;
     private final AiToolInvocationStore invocationStore;

@@ -1,6 +1,7 @@
 package com.dust.wxclawbackfront.ai.tools.memory;
 
 import com.dust.wxclawbackfront.ai.tools.shared.AiToolInvocationStore;
+import com.dust.wxclawbackfront.ai.tools.shared.AiToolProvider;
 import com.dust.wxclawbackfront.ai.tools.shared.UserContextHolder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,7 +18,17 @@ import java.util.List;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class MemoryTools {
+public class MemoryTools implements AiToolProvider {
+
+    @Override
+    public Object getTool() {
+        return this;
+    }
+
+    @Override
+    public int getOrder() {
+        return 50;
+    }
 
     private final UserMemoryService memoryService;
     private final AiToolInvocationStore invocationStore;

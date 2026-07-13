@@ -1,6 +1,7 @@
 package com.dust.wxclawbackfront.ai.tools.reminder;
 
 import com.dust.wxclawbackfront.ai.tools.shared.AiToolInvocationStore;
+import com.dust.wxclawbackfront.ai.tools.shared.AiToolProvider;
 import com.dust.wxclawbackfront.ai.tools.shared.UserContextHolder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,7 +17,17 @@ import java.util.stream.Collectors;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class ReminderTools {
+public class ReminderTools implements AiToolProvider {
+
+    @Override
+    public Object getTool() {
+        return this;
+    }
+
+    @Override
+    public int getOrder() {
+        return 40;
+    }
 
     private final ReminderHandler reminderHandler;
     private final AiToolInvocationStore invocationStore;
@@ -274,82 +285,6 @@ public class ReminderTools {
                 result.message());
 
         return new ReminderCancelToolResult(result.success(), result.message());
-    }
-
-    /**
-     * 创建每日对话总结（日报）
-     */
-    @Tool(name = "create_daily_summary", description = "为用户创建每日对话总结任务（日报）。AI会在每天指定时间自动总结前一天的对话内容并推送。参数：hour(小时0-23)、minute(分钟0-59)。")
-    public ReminderCreateToolResult createDailySummary(int hour, int minute) {
-        String userId = UserContextHolder.getUserId();
-        
-        log.info("AI调用 create_daily_summary: userId={}, hour={}, minute={}", userId, hour, minute);
-
-        if (userId == null || userId.isBlank()) {
-            String errorMsg = "无法获取用户ID";
-            invocationStore.add("create_daily_summary", String.format("hour=%d, minute=%d", hour, minute), errorMsg);
-            return new ReminderCreateToolResult(false, null, errorMsg);
-        }
-
-        ReminderHandler.ReminderCreateResult result = reminderHandler.createDailySummary(userId, hour, minute);
-        
-        invocationStore.add("create_daily_summary",
-                String.format("hour=%d, minute=%d", hour, minute),
-                result.message());
-
-        return new ReminderCreateToolResult(result.success(), result.reminderId(), result.message());
-    }
-
-    /**
-     * 创建每周对话总结（周报）
-     */
-    @Tool(name = "create_weekly_summary", description = "为用户创建每周对话总结任务（周报）。AI会在每周指定时间自动总结上周的对话内容并推送。参数：dayOfWeek(1-7，1=周一，7=周日)、hour(小时0-23)、minute(分钟0-59)。")
-    public ReminderCreateToolResult createWeeklySummary(int dayOfWeek, int hour, int minute) {
-        String userId = UserContextHolder.getUserId();
-        
-        log.info("AI调用 create_weekly_summary: userId={}, dayOfWeek={}, hour={}, minute={}", 
-                userId, dayOfWeek, hour, minute);
-
-        if (userId == null || userId.isBlank()) {
-            String errorMsg = "无法获取用户ID";
-            invocationStore.add("create_weekly_summary", 
-                    String.format("dayOfWeek=%d, hour=%d, minute=%d", dayOfWeek, hour, minute), errorMsg);
-            return new ReminderCreateToolResult(false, null, errorMsg);
-        }
-
-        ReminderHandler.ReminderCreateResult result = reminderHandler.createWeeklySummary(userId, dayOfWeek, hour, minute);
-        
-        invocationStore.add("create_weekly_summary",
-                String.format("dayOfWeek=%d, hour=%d, minute=%d", dayOfWeek, hour, minute),
-                result.message());
-
-        return new ReminderCreateToolResult(result.success(), result.reminderId(), result.message());
-    }
-
-    /**
-     * 创建每月对话总结（月报）
-     */
-    @Tool(name = "create_monthly_summary", description = "为用户创建每月对话总结任务（月报）。AI会在每月指定日期自动总结上月的对话内容并推送。参数：dayOfMonth(每月的第几天，1-28)、hour(小时0-23)、minute(分钟0-59)。")
-    public ReminderCreateToolResult createMonthlySummary(int dayOfMonth, int hour, int minute) {
-        String userId = UserContextHolder.getUserId();
-        
-        log.info("AI调用 create_monthly_summary: userId={}, dayOfMonth={}, hour={}, minute={}", 
-                userId, dayOfMonth, hour, minute);
-
-        if (userId == null || userId.isBlank()) {
-            String errorMsg = "无法获取用户ID";
-            invocationStore.add("create_monthly_summary", 
-                    String.format("dayOfMonth=%d, hour=%d, minute=%d", dayOfMonth, hour, minute), errorMsg);
-            return new ReminderCreateToolResult(false, null, errorMsg);
-        }
-
-        ReminderHandler.ReminderCreateResult result = reminderHandler.createMonthlySummary(userId, dayOfMonth, hour, minute);
-        
-        invocationStore.add("create_monthly_summary",
-                String.format("dayOfMonth=%d, hour=%d, minute=%d", dayOfMonth, hour, minute),
-                result.message());
-
-        return new ReminderCreateToolResult(result.success(), result.reminderId(), result.message());
     }
 
     /**

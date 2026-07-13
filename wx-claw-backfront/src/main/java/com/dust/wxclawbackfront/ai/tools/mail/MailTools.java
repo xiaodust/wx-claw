@@ -1,6 +1,7 @@
 package com.dust.wxclawbackfront.ai.tools.mail;
 
 import com.dust.wxclawbackfront.ai.tools.shared.AiToolInvocationStore;
+import com.dust.wxclawbackfront.ai.tools.shared.AiToolProvider;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
@@ -10,7 +11,17 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ConditionalOnBean(MailHandler.class)
-public class MailTools {
+public class MailTools implements AiToolProvider {
+
+    @Override
+    public Object getTool() {
+        return this;
+    }
+
+    @Override
+    public int getOrder() {
+        return 60;
+    }
 
     private final MailHandler mailHandler;
     private final AiToolInvocationStore invocationStore;
