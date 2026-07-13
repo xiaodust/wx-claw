@@ -3,6 +3,7 @@ package com.dust.wxclawbackfront.ai.chat;
 import com.dust.wxclawbackfront.ai.agent.AgentChatResult;
 import com.dust.wxclawbackfront.ai.agent.ToolPollingAgent;
 import com.dust.wxclawbackfront.ai.tools.shared.AiToolInvocationStore;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Component;
 public class ChatTraceAssembler {
 
     private final ToolPollingAgent toolPollingAgent;
+    private final ObjectMapper objectMapper;
 
     /**
      * 将 agent 执行结果回填到 accumulator
@@ -30,17 +32,25 @@ public class ChatTraceAssembler {
 
         if (result.invocations() != null && !result.invocations().isEmpty()) {
             accumulator.setToolName(toolPollingAgent.joinToolNames(result.invocations()));
-            accumulator.setToolRequest(toolPollingAgent.toJsonSafely(result.invocations().stream()
+            accumulator.setToolRequest(toJsonSafely(result.invocations().stream()
                     .map(AiToolInvocationStore.Invocation::toolRequest)
                     .toList()));
-            accumulator.setToolResponse(toolPollingAgent.toJsonSafely(result.invocations().stream()
+            accumulator.setToolResponse(toJsonSafely(result.invocations().stream()
                     .map(AiToolInvocationStore.Invocation::toolResponse)
                     .toList()));
         }
 
         accumulator.setAgentRounds(result.rounds() == null ? 0 : result.rounds().size());
         accumulator.setAgentCompleted(result.completed());
-        accumulator.setAgentTraceJson(toolPollingAgent.toJsonSafely(result.rounds()));
+        accumulator.setAgentTraceJson(toJsonSafely(result.rounds()));
+    }
+
+    private String toJsonSafely(Object value) {
+        try {
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(value);
+        } catch (Exception ex) {
+            return null;
+        }
     }
 
     /**

@@ -1,6 +1,5 @@
 package com.dust.wxclawbackfront.ai.tools.reminder.executor;
 
-import com.dust.wxclawbackfront.ai.chat.ChatHandler;
 import com.dust.wxclawbackfront.ai.chat.PlainTextLlmService;
 import com.dust.wxclawbackfront.ai.dao.entity.AiMessage;
 import com.dust.wxclawbackfront.ai.dao.repository.AiMessageRepository;
@@ -14,7 +13,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.text.SimpleDateFormat;
-import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 
