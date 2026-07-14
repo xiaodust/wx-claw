@@ -5,6 +5,7 @@ import com.dust.wxclawbackfront.ai.chat.CommandHandler;
 import com.dust.wxclawbackfront.ai.dao.entity.AiConversation;
 import com.dust.wxclawbackfront.ai.dao.entity.AiMessage;
 import com.dust.wxclawbackfront.ai.document.DocumentGenerator;
+import com.dust.wxclawbackfront.ai.ragflow.RagFlowClient;
 import com.dust.wxclawbackfront.ai.service.AiConversationCrudService;
 import com.dust.wxclawbackfront.ai.chat.AIContentAccumulator;
 import com.dust.wxclawbackfront.ai.image.ImageGenerationHandler;
@@ -91,6 +92,7 @@ public class ILinkMessageDispatcher {
     private final ObjectMapper objectMapper;
     private final ILinkRuntimeManager runtimeManager;
     private final DocumentGenerator documentGenerator;
+    private final ObjectProvider<RagFlowClient> ragFlowClientProvider;
 
     @Value("${wxclaw.ai.image.direct-reply:true}")
     private boolean imageDirectReply;
@@ -245,6 +247,11 @@ public class ILinkMessageDispatcher {
                     && userInput.getError() != null
                     && !userInput.getError().isBlank()) {
                 reply = "收到图片，但图片理解失败。请尝试重新发送图片或换一张更清晰的图片。\n错误信息：" + userInput.getError().trim();
+            } else if ("FILE".equalsIgnoreCase(userInput.getMessageItemType())) {
+                reply = handleFileUpload(userInput, userId);
+                if (reply == null || reply.isBlank()) {
+                    reply = "收到文件，但上传到知识库失败。请稍后再试。";
+                }
             } else {
                 reply = chatHandler.chat(userInput.getPromptText(), historyMessages, accumulator);
                 fillTraceFromAccumulator(trace, accumulator);
@@ -374,6 +381,48 @@ public class ILinkMessageDispatcher {
         }, ASYNC_SAVE_EXECUTOR);
     }
 
+    /**
+     * 处理文件上传到知识库
+     */
+    private String handleFileUpload(ILinkUserInput userInput, String userId) {
+        try {
+            RagFlowClient ragFlowClient = ragFlowClientProvider.getIfAvailable();
+            if (ragFlowClient == null) {
+                log.warn("RagFlowClient 不可用，无法上传文件到知识库");
+                return "收到文件，但知识库服务暂不可用。";
+            }
+
+            String fileName = userInput.getFileName();
+            byte[] fileBytes = userInput.getFileBytes();
+            
+            if (fileName == null || fileName.isBlank()) {
+                fileName = "unknown_file";
+            }
+
+            if (fileBytes == null || fileBytes.length == 0) {
+                log.warn("文件内容为空: fileName={}, userId={}", fileName, userId);
+                return "收到文件，但文件内容为空，请重新发送。";
+            }
+
+            log.info("准备上传文件到知识库: fileName={}, size={}, userId={}", fileName, fileBytes.length, userId);
+            
+            // 上传文件到RagFlow
+            RagFlowClient.UploadResult result = ragFlowClient.uploadDocument(fileBytes, fileName);
+            
+            if (result.success()) {
+                log.info("文件上传成功: fileName={}, documentId={}, userId={}", fileName, result.documentId(), userId);
+                return "收到文件：" + fileName + "，已成功上传到知识库。";
+            } else {
+                log.error("文件上传失败: fileName={}, error={}, userId={}", fileName, result.message(), userId);
+                return "收到文件，但上传到知识库失败：" + result.message();
+            }
+            
+        } catch (Exception ex) {
+            log.error("处理文件上传失败: userId={}, error={}", userId, ex.getMessage(), ex);
+            return "收到文件，但处理失败：" + ex.getMessage();
+        }
+    }
+
     private void handleError(Exception ex, String userId, String sessionId, AiChatTrace trace,
                             AIContentAccumulator accumulator, Instant start) {
         int responseTime = (int) Duration.between(start, Instant.now()).toMillis();
@@ -405,6 +454,14 @@ public class ILinkMessageDispatcher {
         trace.setImageDescription(clipTrace(userInput.getImageDescription()));
         trace.setImageLlmRequestJson(clipTrace(userInput.getImageLlmRequestJson()));
         trace.setUserText(userInput.getDisplayText());
+        
+        // 记录文件信息
+        if ("FILE".equalsIgnoreCase(userInput.getMessageItemType())) {
+            trace.setFileUrl(clipTrace(userInput.getFileUrl()));
+            trace.setFileName(userInput.getFileName());
+            trace.setFileSize(userInput.getFileSize());
+        }
+        
         return trace;
     }
 

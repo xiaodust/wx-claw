@@ -4,6 +4,7 @@ import com.dust.wxclawbackfront.ai.image.ImageHandler;
 import com.dust.wxclawbackfront.ai.image.ImageUnderstandingResult;
 import com.dust.wxclawbackfront.ilnk.media.WechatCdnMediaService;
 import com.github.wechat.ilink.sdk.ILinkClient;
+import com.github.wechat.ilink.sdk.core.model.FileItem;
 import com.github.wechat.ilink.sdk.core.model.MessageItem;
 import com.github.wechat.ilink.sdk.core.model.WeixinMessage;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,7 @@ public class ILinkUserInputExtractor {
     private static final int MESSAGE_ITEM_TYPE_TEXT = 1;
     private static final int MESSAGE_ITEM_TYPE_IMAGE = 2;
     private static final int MESSAGE_ITEM_TYPE_VOICE = 3;
+    private static final int MESSAGE_ITEM_TYPE_FILE = 4;
 
     private final ImageHandler imageHandler;
     private final WechatCdnMediaService cdnMediaService;
@@ -58,6 +60,32 @@ public class ILinkUserInputExtractor {
                     return ILinkUserInput.image(url, model, description, requestJson, "图片理解失败: " + error);
                 }
                 return ILinkUserInput.image(url, model, description, requestJson, null);
+            }
+        }
+
+        // 处理文件消息
+        for (MessageItem item : items) {
+            if (item == null) {
+                continue;
+            }
+            if (item.getType() == MESSAGE_ITEM_TYPE_FILE && item.getFile_item() != null) {
+                FileItem fileItem = item.getFile_item();
+                String fileName = fileItem.getFile_name();
+                String fileSize = fileItem.getLen();
+                
+                log.info("收到文件消息: fileName={}, fileSize={}", fileName, fileSize);
+                
+                // 下载文件
+                WechatCdnMediaService.ResolvedFile resolvedFile = cdnMediaService.resolveFile(client, item);
+                byte[] fileBytes = resolvedFile != null ? resolvedFile.fileBytes() : null;
+                
+                if (fileBytes == null || fileBytes.length == 0) {
+                    log.warn("文件下载失败: fileName={}", fileName);
+                    return ILinkUserInput.file(null, fileName, fileSize, null);
+                }
+                
+                log.info("文件下载成功: fileName={}, actualSize={}", fileName, fileBytes.length);
+                return ILinkUserInput.file(null, fileName, fileSize, fileBytes);
             }
         }
 
@@ -114,6 +142,7 @@ public class ILinkUserInputExtractor {
             case MESSAGE_ITEM_TYPE_TEXT -> "TEXT";
             case MESSAGE_ITEM_TYPE_IMAGE -> "IMAGE";
             case MESSAGE_ITEM_TYPE_VOICE -> "VOICE";
+            case MESSAGE_ITEM_TYPE_FILE -> "FILE";
             default -> "TYPE_" + type;
         };
     }

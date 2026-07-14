@@ -35,4 +35,7 @@ public class AiChatTrace {
     private String replyText;
     private Integer responseTimeMs;
     private String errorMsg;
+    private String fileUrl;
+    private String fileName;
+    private String fileSize;
 }

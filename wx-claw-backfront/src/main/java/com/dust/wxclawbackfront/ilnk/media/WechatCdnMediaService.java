@@ -1,12 +1,15 @@
 package com.dust.wxclawbackfront.ilnk.media;
 
 import com.github.wechat.ilink.sdk.ILinkClient;
+import com.github.wechat.ilink.sdk.core.model.FileItem;
 import com.github.wechat.ilink.sdk.core.model.ImageItem;
 import com.github.wechat.ilink.sdk.core.model.MessageItem;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.Base64;
 
+@Slf4j
 @Service
 public class WechatCdnMediaService {
 
@@ -48,6 +51,44 @@ public class WechatCdnMediaService {
         }
     }
 
+    /**
+     * 下载文件
+     */
+    public ResolvedFile resolveFile(ILinkClient client, MessageItem messageItem) {
+        if (messageItem == null) {
+            return null;
+        }
+        FileItem fileItem = messageItem.getFile_item();
+        if (fileItem == null) {
+            return null;
+        }
+
+        String fileName = fileItem.getFile_name();
+        String fileSize = fileItem.getLen();
+
+        // 使用SDK下载文件
+        byte[] fileBytes = downloadFileWithSdk(client, messageItem);
+        if (fileBytes == null || fileBytes.length == 0) {
+            log.warn("文件下载失败: fileName={}", fileName);
+            return null;
+        }
+
+        log.info("文件下载成功: fileName={}, size={}", fileName, fileBytes.length);
+        return new ResolvedFile(fileName, fileSize, fileBytes);
+    }
+
+    private byte[] downloadFileWithSdk(ILinkClient client, MessageItem messageItem) {
+        if (client == null || messageItem == null) {
+            return null;
+        }
+        try {
+            return client.downloadFileFromMessageItem(messageItem);
+        } catch (Exception ex) {
+            log.error("下载文件异常: {}", ex.getMessage());
+            return null;
+        }
+    }
+
     private static ImageInfo guessImageInfo(byte[] bytes) {
         if (bytes == null || bytes.length < 12) {
             return new ImageInfo("image/jpeg", "jpg");
@@ -79,5 +120,8 @@ public class WechatCdnMediaService {
         static ResolvedImage decrypted(String relativeUrl, String encryptQueryParam, String contentType) {
             return new ResolvedImage(relativeUrl, encryptQueryParam, true, contentType);
         }
+    }
+
+    public record ResolvedFile(String fileName, String fileSize, byte[] fileBytes) {
     }
 }

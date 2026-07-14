@@ -209,6 +209,364 @@ public class RagFlowClient {
     }
 
     /**
+     * 上传文档到知识库
+     *
+     * @param file     文件的字节数组
+     * @param fileName 文件名
+     * @return 上传结果
+     */
+    public UploadResult uploadDocument(byte[] file, String fileName) {
+        if (datasetId == null || datasetId.isBlank()) {
+            return new UploadResult(false, null, "未配置 RAGFlow dataset-id");
+        }
+
+        try {
+            String url = baseUrl + "/api/v1/datasets/" + datasetId + "/documents";
+            String boundary = "----WebKitFormBoundary" + System.currentTimeMillis();
+            String lineEnd = "\r\n";
+
+            // 构建 multipart 请求体
+            var outputStream = new java.io.ByteArrayOutputStream();
+
+            // 文件部分
+            outputStream.write(("--" + boundary + lineEnd).getBytes());
+            outputStream.write(("Content-Disposition: form-data; name=\"file\"; filename=\"" + fileName + "\"" + lineEnd).getBytes());
+            outputStream.write(("Content-Type: application/octet-stream" + lineEnd + lineEnd).getBytes());
+            outputStream.write(file);
+            outputStream.write(lineEnd.getBytes());
+
+            // 结束标记
+            outputStream.write(("--" + boundary + "--" + lineEnd).getBytes());
+
+            byte[] requestBody = outputStream.toByteArray();
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofSeconds(60)) // 上传文件可能需要更长时间
+                    .header("Authorization", "Bearer " + apiKey)
+                    .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(requestBody))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            String responseText = response.body();
+
+            log.info("RAGFlow 上传响应: HTTP {}, body={}", response.statusCode(),
+                    responseText != null && responseText.length() > 500 ? responseText.substring(0, 500) + "..." : responseText);
+
+            if (response.statusCode() / 100 != 2) {
+                log.error("RAGFlow 上传失败: HTTP {}, body={}", response.statusCode(), responseText);
+                return new UploadResult(false, null, "RAGFlow 上传失败: HTTP " + response.statusCode());
+            }
+
+            return parseUploadResponse(responseText);
+
+        } catch (Exception ex) {
+            log.error("RAGFlow 上传异常: {}", ex.getMessage(), ex);
+            return new UploadResult(false, null, ex.getMessage());
+        }
+    }
+
+    /**
+     * 解析上传响应
+     */
+    @SuppressWarnings("unchecked")
+    private UploadResult parseUploadResponse(String responseText) {
+        try {
+            // 先尝试解析为Map
+            Object responseObject = objectMapper.readValue(responseText, Object.class);
+            
+            // 如果是数组，取第一个元素
+            if (responseObject instanceof List) {
+                List<Object> responseList = (List<Object>) responseObject;
+                if (responseList.isEmpty()) {
+                    return new UploadResult(false, null, "响应为空数组");
+                }
+                responseObject = responseList.get(0);
+            }
+            
+            // 转换为Map
+            if (!(responseObject instanceof Map)) {
+                log.error("RAGFlow 上传响应格式异常: {}", responseText);
+                return new UploadResult(false, null, "响应格式异常");
+            }
+            
+            Map<String, Object> responseMap = (Map<String, Object>) responseObject;
+
+            // 检查是否有错误响应
+            if (responseMap.containsKey("code") && responseMap.containsKey("message")) {
+                Object code = responseMap.get("code");
+                String message = (String) responseMap.get("message");
+                // 如果 code 不是 0 或 200，表示错误
+                if (code instanceof Number && ((Number) code).intValue() != 0 && ((Number) code).intValue() != 200) {
+                    log.error("RAGFlow 上传返回错误: code={}, message={}", code, message);
+                    return new UploadResult(false, null, "RAGFlow 错误: " + message);
+                }
+            }
+
+            // 提取文档信息
+            Map<String, Object> data = (Map<String, Object>) responseMap.get("data");
+            if (data != null) {
+                String documentId = (String) data.get("id");
+                String documentName = (String) data.get("name");
+                return new UploadResult(true, documentId, "文件上传成功: " + documentName);
+            }
+
+            // 如果没有data字段，尝试直接从响应中提取
+            String documentId = (String) responseMap.get("id");
+            String documentName = (String) responseMap.get("name");
+            if (documentId != null || documentName != null) {
+                return new UploadResult(true, documentId, "文件上传成功: " + documentName);
+            }
+
+            return new UploadResult(true, null, "文件上传成功");
+
+        } catch (Exception ex) {
+            log.error("解析 RAGFlow 上传响应失败: {}", ex.getMessage());
+            return new UploadResult(false, null, "解析响应失败");
+        }
+    }
+
+    /**
+     * 列举知识库中的所有文档
+     *
+     * @return 文档列表
+     */
+    public List<DocumentInfo> listDocuments() {
+        if (datasetId == null || datasetId.isBlank()) {
+            return List.of();
+        }
+
+        try {
+            String url = baseUrl + "/api/v1/datasets/" + datasetId + "/documents";
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(timeout)
+                    .header("Authorization", "Bearer " + apiKey)
+                    .header("Content-Type", "application/json")
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            String responseText = response.body();
+
+            log.info("RAGFlow 列举文档响应: HTTP {}, body={}", response.statusCode(),
+                    responseText != null && responseText.length() > 500 ? responseText.substring(0, 500) + "..." : responseText);
+
+            if (response.statusCode() / 100 != 2) {
+                log.error("RAGFlow 列举文档失败: HTTP {}", response.statusCode());
+                return List.of();
+            }
+
+            return parseDocumentListResponse(responseText);
+
+        } catch (Exception ex) {
+            log.error("RAGFlow 列举文档异常: {}", ex.getMessage(), ex);
+            return List.of();
+        }
+    }
+
+    /**
+     * 删除知识库中的文档
+     *
+     * @param documentIds 文档ID列表
+     * @return 删除结果
+     */
+    public DeleteResult deleteDocuments(List<String> documentIds) {
+        if (datasetId == null || datasetId.isBlank()) {
+            return new DeleteResult(false, "未配置 RAGFlow dataset-id");
+        }
+
+        if (documentIds == null || documentIds.isEmpty()) {
+            return new DeleteResult(false, "文档ID列表不能为空");
+        }
+
+        try {
+            String url = baseUrl + "/api/v1/datasets/" + datasetId + "/documents";
+
+            Map<String, Object> requestBody = Map.of("ids", documentIds);
+            String requestJson = objectMapper.writeValueAsString(requestBody);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(timeout)
+                    .header("Authorization", "Bearer " + apiKey)
+                    .header("Content-Type", "application/json")
+                    .method("DELETE", HttpRequest.BodyPublishers.ofString(requestJson))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            String responseText = response.body();
+
+            log.info("RAGFlow 删除文档响应: HTTP {}, body={}", response.statusCode(),
+                    responseText != null && responseText.length() > 500 ? responseText.substring(0, 500) + "..." : responseText);
+
+            if (response.statusCode() / 100 != 2) {
+                log.error("RAGFlow 删除文档失败: HTTP {}, body={}", response.statusCode(), responseText);
+                return new DeleteResult(false, "RAGFlow 删除失败: HTTP " + response.statusCode());
+            }
+
+            return parseDeleteResponse(responseText);
+
+        } catch (Exception ex) {
+            log.error("RAGFlow 删除文档异常: {}", ex.getMessage(), ex);
+            return new DeleteResult(false, ex.getMessage());
+        }
+    }
+
+    /**
+     * 更新知识库中的文档
+     *
+     * @param documentId 文档ID
+     * @param name       新的文档名称（可选）
+     * @return 更新结果
+     */
+    public UpdateResult updateDocument(String documentId, String name) {
+        if (datasetId == null || datasetId.isBlank()) {
+            return new UpdateResult(false, "未配置 RAGFlow dataset-id");
+        }
+
+        if (documentId == null || documentId.isBlank()) {
+            return new UpdateResult(false, "文档ID不能为空");
+        }
+
+        try {
+            String url = baseUrl + "/api/v1/datasets/" + datasetId + "/documents/" + documentId;
+
+            Map<String, Object> requestBody = new java.util.HashMap<>();
+            if (name != null && !name.isBlank()) {
+                requestBody.put("name", name);
+            }
+
+            String requestJson = objectMapper.writeValueAsString(requestBody);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(timeout)
+                    .header("Authorization", "Bearer " + apiKey)
+                    .header("Content-Type", "application/json")
+                    .method("PATCH", HttpRequest.BodyPublishers.ofString(requestJson))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            String responseText = response.body();
+
+            log.info("RAGFlow 更新文档响应: HTTP {}, body={}", response.statusCode(),
+                    responseText != null && responseText.length() > 500 ? responseText.substring(0, 500) + "..." : responseText);
+
+            if (response.statusCode() / 100 != 2) {
+                log.error("RAGFlow 更新文档失败: HTTP {}, body={}", response.statusCode(), responseText);
+                return new UpdateResult(false, "RAGFlow 更新失败: HTTP " + response.statusCode());
+            }
+
+            return parseUpdateResponse(responseText);
+
+        } catch (Exception ex) {
+            log.error("RAGFlow 更新文档异常: {}", ex.getMessage(), ex);
+            return new UpdateResult(false, ex.getMessage());
+        }
+    }
+
+    /**
+     * 解析文档列表响应
+     */
+    @SuppressWarnings("unchecked")
+    private List<DocumentInfo> parseDocumentListResponse(String responseText) {
+        try {
+            Map<String, Object> responseMap = objectMapper.readValue(responseText, Map.class);
+            if (responseMap == null) {
+                return List.of();
+            }
+
+            Map<String, Object> data = (Map<String, Object>) responseMap.get("data");
+            if (data == null) {
+                return List.of();
+            }
+
+            List<Map<String, Object>> docs = (List<Map<String, Object>>) data.get("docs");
+            if (docs == null) {
+                return List.of();
+            }
+
+            List<DocumentInfo> results = new ArrayList<>();
+            for (Map<String, Object> doc : docs) {
+                String id = (String) doc.get("id");
+                String name = (String) doc.get("name");
+                String status = (String) doc.get("status");
+                Long size = doc.get("size") != null ? ((Number) doc.get("size")).longValue() : null;
+                String chunkMethod = (String) doc.get("chunk_method");
+
+                if (id != null) {
+                    results.add(new DocumentInfo(id, name, status, size, chunkMethod));
+                }
+            }
+
+            return results;
+
+        } catch (Exception ex) {
+            log.error("解析 RAGFlow 文档列表响应失败: {}", ex.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * 解析删除响应
+     */
+    @SuppressWarnings("unchecked")
+    private DeleteResult parseDeleteResponse(String responseText) {
+        try {
+            Map<String, Object> responseMap = objectMapper.readValue(responseText, Map.class);
+            if (responseMap == null) {
+                return new DeleteResult(false, "响应为空");
+            }
+
+            // 检查是否有错误响应
+            if (responseMap.containsKey("code") && responseMap.containsKey("message")) {
+                Object code = responseMap.get("code");
+                String message = (String) responseMap.get("message");
+                if (code instanceof Number && ((Number) code).intValue() != 0 && ((Number) code).intValue() != 200) {
+                    return new DeleteResult(false, "RAGFlow 错误: " + message);
+                }
+            }
+
+            return new DeleteResult(true, "文档删除成功");
+
+        } catch (Exception ex) {
+            log.error("解析 RAGFlow 删除响应失败: {}", ex.getMessage());
+            return new DeleteResult(false, "解析响应失败");
+        }
+    }
+
+    /**
+     * 解析更新响应
+     */
+    @SuppressWarnings("unchecked")
+    private UpdateResult parseUpdateResponse(String responseText) {
+        try {
+            Map<String, Object> responseMap = objectMapper.readValue(responseText, Map.class);
+            if (responseMap == null) {
+                return new UpdateResult(false, "响应为空");
+            }
+
+            // 检查是否有错误响应
+            if (responseMap.containsKey("code") && responseMap.containsKey("message")) {
+                Object code = responseMap.get("code");
+                String message = (String) responseMap.get("message");
+                if (code instanceof Number && ((Number) code).intValue() != 0 && ((Number) code).intValue() != 200) {
+                    return new UpdateResult(false, "RAGFlow 错误: " + message);
+                }
+            }
+
+            return new UpdateResult(true, "文档更新成功");
+
+        } catch (Exception ex) {
+            log.error("解析 RAGFlow 更新响应失败: {}", ex.getMessage());
+            return new UpdateResult(false, "解析响应失败");
+        }
+    }
+
+    /**
      * 解析搜索响应
      */
     @SuppressWarnings("unchecked")
@@ -262,4 +620,24 @@ public class RagFlowClient {
      * 搜索结果
      */
     public record SearchResult(String content, String documentName, Double similarity) {}
+
+    /**
+     * 上传结果
+     */
+    public record UploadResult(boolean success, String documentId, String message) {}
+
+    /**
+     * 文档信息
+     */
+    public record DocumentInfo(String id, String name, String status, Long size, String chunkMethod) {}
+
+    /**
+     * 删除结果
+     */
+    public record DeleteResult(boolean success, String message) {}
+
+    /**
+     * 更新结果
+     */
+    public record UpdateResult(boolean success, String message) {}
 }
