@@ -4,6 +4,7 @@ import com.dust.wxclawbackfront.ai.chat.ChatHandler;
 import com.dust.wxclawbackfront.ai.chat.CommandHandler;
 import com.dust.wxclawbackfront.ai.dao.entity.AiConversation;
 import com.dust.wxclawbackfront.ai.dao.entity.AiMessage;
+import com.dust.wxclawbackfront.ai.document.DocumentGenerator;
 import com.dust.wxclawbackfront.ai.service.AiConversationCrudService;
 import com.dust.wxclawbackfront.ai.chat.AIContentAccumulator;
 import com.dust.wxclawbackfront.ai.image.ImageGenerationHandler;
@@ -89,6 +90,7 @@ public class ILinkMessageDispatcher {
     private final ILinkMessageSender messageSender;
     private final ObjectMapper objectMapper;
     private final ILinkRuntimeManager runtimeManager;
+    private final DocumentGenerator documentGenerator;
 
     @Value("${wxclaw.ai.image.direct-reply:true}")
     private boolean imageDirectReply;
@@ -250,8 +252,19 @@ public class ILinkMessageDispatcher {
 
             int responseTime = (int) Duration.between(start, Instant.now()).toMillis();
 
-            // 先发送消息给用户（减少用户感知的延迟）
-            messageSender.sendText(userId, reply);
+            // 判断是否需要生成文档
+            if (documentGenerator.shouldGenerateDocument(reply)) {
+                String format = isMarkdownRequested(userInput.getDisplayText()) ? "markdown" : "txt";
+                DocumentGenerator.DocumentResult docResult = documentGenerator.generate(reply, format);
+                if (docResult.isSuccess()) {
+                    messageSender.sendFile(userId, docResult.bytes(), docResult.fileName(), "内容较长，已生成文档，请查收。");
+                } else {
+                    messageSender.sendText(userId, reply);
+                }
+            } else {
+                // 先发送消息给用户（减少用户感知的延迟）
+                messageSender.sendText(userId, reply);
+            }
 
             // 异步保存消息和trace
             final String finalReply = reply;
@@ -614,5 +627,18 @@ public class ILinkMessageDispatcher {
         } catch (Exception ex) {
             return null;
         }
+    }
+
+    /**
+     * 判断用户是否请求 markdown 格式的文档
+     */
+    private boolean isMarkdownRequested(String userText) {
+        if (userText == null) {
+            return false;
+        }
+        String text = userText.toLowerCase();
+        return text.contains("markdown") || text.contains("md格式") || text.contains("md文档")
+                || text.contains("markdown格式") || text.contains("markdown文档")
+                || text.contains("返回md") || text.contains("返回markdown");
     }
 }
