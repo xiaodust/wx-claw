@@ -104,6 +104,7 @@ wxclaw:
       max-rounds: 5
       max-tokens: 768
       timeout: PT25S
+      hard-timeout: PT60S
     context:
       max-chars: 7000
       max-message-chars: 800

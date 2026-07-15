@@ -78,6 +78,16 @@ public class ILinkMessageDispatcher {
         }
     });
 
+    // AI 对话执行线程池（用于超时控制）
+    private static final ExecutorService CHAT_EXECUTOR = Executors.newFixedThreadPool(4, new ThreadFactory() {
+        @Override
+        public Thread newThread(Runnable r) {
+            Thread thread = new Thread(r, "ai-chat");
+            thread.setDaemon(true);
+            return thread;
+        }
+    });
+
     private final AiConversationCrudService crudService;
     private final ChatHandler chatHandler;
     private final CommandHandler commandHandler;
@@ -114,6 +124,9 @@ public class ILinkMessageDispatcher {
 
     @Value("${wxclaw.ai.wait-notice.text:我正在处理中，可能还需要几秒，请稍等一下。}")
     private String waitNoticeText;
+
+    @Value("${wxclaw.ai.chat.hard-timeout:PT60S}")
+    private Duration hardTimeout;
 
     /**
      * 处理入站消息
@@ -253,7 +266,7 @@ public class ILinkMessageDispatcher {
                     reply = "收到文件，但上传到知识库失败。请稍后再试。";
                 }
             } else {
-                reply = chatHandler.chat(userInput.getPromptText(), historyMessages, accumulator);
+                reply = chatWithTimeout(userInput.getPromptText(), historyMessages, accumulator, userId);
                 fillTraceFromAccumulator(trace, accumulator);
             }
 
@@ -291,6 +304,69 @@ public class ILinkMessageDispatcher {
             handleError(ex, userId, sessionId, trace, accumulator, start);
         } finally {
             cancelWaitNotice(waitNoticeFuture);
+        }
+    }
+
+    /**
+     * 带超时降级重试的 AI 对话
+     * 第一次超时：发送重试提示，缩减历史消息后重试
+     * 第二次超时：返回超时提示
+     */
+    private String chatWithTimeout(String userMessage, List<AiMessage> historyMessages,
+                                    AIContentAccumulator accumulator, String userId) {
+        // 第一次尝试：完整历史
+        String reply = tryChatWithTimeout(userMessage, historyMessages, accumulator);
+        if (reply != null) {
+            return reply;
+        }
+
+        // 第一次超时，发送重试提示
+        try {
+            messageSender.sendText(userId, "回复耗时较长，正在为你精简上下文重新处理，请稍候...");
+        } catch (Exception ex) {
+            log.warn("发送重试提示失败: {}", ex.getMessage());
+        }
+
+        // 第二次尝试：缩减历史消息（只保留最近2条）
+        List<AiMessage> reducedHistory = normalizeHistory(historyMessages, 2);
+        AIContentAccumulator retryAccumulator = accumulatorProvider.getObject();
+        reply = tryChatWithTimeout(userMessage, reducedHistory, retryAccumulator);
+        if (reply != null) {
+            // 用重试的 accumulator 覆盖原 trace 信息
+            accumulator.setToolName(retryAccumulator.getToolName());
+            accumulator.setToolRequest(retryAccumulator.getToolRequest());
+            accumulator.setToolResponse(retryAccumulator.getToolResponse());
+            accumulator.setAgentTraceJson(retryAccumulator.getAgentTraceJson());
+            accumulator.setAgentRounds(retryAccumulator.getAgentRounds());
+            accumulator.setAgentCompleted(retryAccumulator.getAgentCompleted());
+            return reply;
+        }
+
+        // 第二次也超时，返回超时提示
+        log.warn("AI对话二次超时: userId={}", userId);
+        return "抱歉，当前问题处理时间过长，请尝试简化你的问题或稍后再试。";
+    }
+
+    /**
+     * 单次带超时的 AI 对话尝试
+     * @return 对话结果，超时返回 null
+     */
+    private String tryChatWithTimeout(String userMessage, List<AiMessage> historyMessages,
+                                       AIContentAccumulator accumulator) {
+        long timeoutMs = hardTimeout.toMillis();
+        CompletableFuture<String> future = CompletableFuture.supplyAsync(
+                () -> chatHandler.chat(userMessage, historyMessages, accumulator),
+                CHAT_EXECUTOR
+        );
+        try {
+            return future.get(timeoutMs, TimeUnit.MILLISECONDS);
+        } catch (java.util.concurrent.TimeoutException ex) {
+            future.cancel(true);
+            log.warn("AI对话超时: timeout={}ms", timeoutMs);
+            return null;
+        } catch (Exception ex) {
+            future.cancel(true);
+            throw new RuntimeException("AI对话异常: " + ex.getMessage(), ex);
         }
     }
 
