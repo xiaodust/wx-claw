@@ -6,6 +6,7 @@ import com.dust.wxclawbackfront.ilnk.media.WechatCdnMediaService;
 import com.github.wechat.ilink.sdk.ILinkClient;
 import com.github.wechat.ilink.sdk.core.model.FileItem;
 import com.github.wechat.ilink.sdk.core.model.MessageItem;
+import com.github.wechat.ilink.sdk.core.model.RefMessage;
 import com.github.wechat.ilink.sdk.core.model.WeixinMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -93,6 +94,11 @@ public class ILinkUserInputExtractor {
         if (text != null && !text.isBlank()) {
             String trimmed = text.trim();
             if (!trimmed.isEmpty()) {
+                // 提取引用消息文本
+                String refText = extractRefText(msg);
+                if (refText != null && !refText.isBlank()) {
+                    return ILinkUserInput.textWithQuote(trimmed, refText);
+                }
                 return ILinkUserInput.text(trimmed);
             }
         }
@@ -115,6 +121,7 @@ public class ILinkUserInputExtractor {
             if (item == null) {
                 continue;
             }
+            
             if (item.getType() == MESSAGE_ITEM_TYPE_TEXT && item.getText_item() != null) {
                 String text = item.getText_item().getText();
                 if (text != null && !text.isBlank()) {
@@ -135,6 +142,25 @@ public class ILinkUserInputExtractor {
             return null;
         }
         return String.join("\n", parts);
+    }
+
+    /**
+     * 提取引用消息的文本内容
+     */
+    public String extractRefText(WeixinMessage msg) {
+        List<MessageItem> items = msg == null ? null : msg.getItem_list();
+        if (items == null || items.isEmpty()) {
+            return null;
+        }
+        for (MessageItem item : items) {
+            if (item == null) {
+                continue;
+            }
+            if (item.hasRefMessage()) {
+                return item.getRefMessageText();
+            }
+        }
+        return null;
     }
 
     private static String getMessageTypeName(int type) {

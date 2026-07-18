@@ -51,6 +51,21 @@ public final class ILinkUserInput {
         return new ILinkUserInput("TEXT", text, text, text, null, null, null, null, null, null, null, null, null);
     }
 
+    /**
+     * 创建包含引用消息的文本输入
+     */
+    public static ILinkUserInput textWithQuote(String text, String quotedText) {
+        String display = text;
+        String persist = text;
+        String prompt;
+        if (quotedText != null && !quotedText.isBlank()) {
+            prompt = "用户引用了一段消息：「" + quotedText.trim() + "」\n用户说：" + text;
+        } else {
+            prompt = text;
+        }
+        return new ILinkUserInput("TEXT", display, prompt, persist, null, null, null, null, null, null, null, null, null);
+    }
+
     public static ILinkUserInput image(String url, String model, String description, String imageLlmRequestJson, String error) {
         String display = "[IMAGE]";
         String persist;
