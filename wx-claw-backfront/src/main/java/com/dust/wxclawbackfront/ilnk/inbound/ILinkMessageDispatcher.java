@@ -354,10 +354,16 @@ public class ILinkMessageDispatcher {
     private String tryChatWithTimeout(String userMessage, List<AiMessage> historyMessages,
                                        AIContentAccumulator accumulator) {
         long timeoutMs = hardTimeout.toMillis();
-        CompletableFuture<String> future = CompletableFuture.supplyAsync(
-                () -> chatHandler.chat(userMessage, historyMessages, accumulator),
-                CHAT_EXECUTOR
-        );
+        // 在主线程捕获 userId，传递给子线程（ThreadLocal 不会自动继承）
+        String capturedUserId = UserContextHolder.getUserId();
+        CompletableFuture<String> future = CompletableFuture.supplyAsync(() -> {
+            UserContextHolder.setUserId(capturedUserId);
+            try {
+                return chatHandler.chat(userMessage, historyMessages, accumulator);
+            } finally {
+                UserContextHolder.clear();
+            }
+        }, CHAT_EXECUTOR);
         try {
             return future.get(timeoutMs, TimeUnit.MILLISECONDS);
         } catch (java.util.concurrent.TimeoutException ex) {

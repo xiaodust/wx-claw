@@ -102,10 +102,15 @@ public class UserMemoryService {
      * 构建用户记忆相关的 system prompt 片段
      */
     public String buildMemoryPrompt(String userId) {
-        if (userId == null || userId.isBlank()) return "";
+        if (userId == null || userId.isBlank()) {
+            log.debug("buildMemoryPrompt: userId 为空，跳过加载记忆");
+            return "";
+        }
 
         List<UserProfile> profiles = getProfiles(userId);
         List<UserLearning> learnings = getActiveLearnings(userId);
+
+        log.info("buildMemoryPrompt: userId={}, profiles={}, learnings={}", userId, profiles.size(), learnings.size());
 
         if (profiles.isEmpty() && learnings.isEmpty()) return "";
 
@@ -135,9 +140,19 @@ public class UserMemoryService {
         }
 
         sb.append("## 记忆更新指引\n\n");
-        sb.append("在对话中，如果用户透露了个人信息（如城市、职业、偏好、习惯等），请使用 update_user_profile 工具记录。\n");
-        sb.append("如果用户说\"以后xxx的时候要xxx\"、\"下次记住xxx\"等学习性指令，请使用 add_user_learning 工具记录。\n");
-        sb.append("不要主动询问用户要记录什么，只在用户自然透露时记录。\n");
+        sb.append("【重要】当用户透露个人信息或要求你记住某些事情时，你必须调用工具来保存，而不仅仅是口头回复。\n\n");
+        sb.append("### 何时调用 update_user_profile 工具：\n");
+        sb.append("- 用户透露个人信息：城市、职业、偏好、习惯、作息等\n");
+        sb.append("- 用户说\"我住在北京\"、\"我是程序员\"、\"我喜欢xxx\"等\n");
+        sb.append("- 用户纠正你之前记住的错误信息\n\n");
+        sb.append("### 何时调用 add_user_learning 工具：\n");
+        sb.append("- 用户说\"以后xxx的时候要xxx\"\n");
+        sb.append("- 用户说\"下次记住xxx\"、\"记住xxx\"\n");
+        sb.append("- 用户说\"以后回复要xxx\"、\"总结时要xxx\"\n\n");
+        sb.append("### 调用时机：\n");
+        sb.append("- 在回复用户之前先调用工具保存记忆\n");
+        sb.append("- 不要主动询问用户要记录什么，只在用户自然透露时记录\n");
+        sb.append("- 如果不确定是否应该记录，宁可记录也不要遗漏\n\n");
 
         return sb.toString();
     }
