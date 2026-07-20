@@ -1,10 +1,10 @@
 package com.dust.wxclawbackfront.ai.tools.reminder.executor;
 
-import com.dust.wxclawbackfront.ai.tools.reminder.ReminderTask;
+import com.dust.wxclawbackfront.ai.dao.entity.ReminderTask;
 import com.dust.wxclawbackfront.ai.tools.weather.SeniverseWeatherHandler;
 import com.dust.wxclawbackfront.ai.tools.weather.WeatherForecastResult;
 import com.dust.wxclawbackfront.ai.tools.weather.WeatherNowResult;
-import com.dust.wxclawbackfront.ilnk.outbound.ILinkMessageSender;
+import com.dust.wxclawbackfront.ilink.outbound.ILinkMessageSender;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;

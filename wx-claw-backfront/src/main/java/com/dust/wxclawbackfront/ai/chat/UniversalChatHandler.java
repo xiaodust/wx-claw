@@ -1,12 +1,10 @@
 package com.dust.wxclawbackfront.ai.chat;
 
-import com.dust.wxclawbackfront.ai.agent.AgentChatResult;
-import com.dust.wxclawbackfront.ai.agent.AgentLlmCaller;
-import com.dust.wxclawbackfront.ai.agent.ToolPollingAgent;
 import com.dust.wxclawbackfront.ai.dao.entity.AiMessage;
 import com.dust.wxclawbackfront.ai.tools.memory.UserMemoryService;
 import com.dust.wxclawbackfront.ai.tools.shared.AiToolInvocationStore;
 import com.dust.wxclawbackfront.ai.tools.shared.UserContextHolder;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,17 +19,15 @@ import java.util.concurrent.Executors;
 
 /**
  * 通用聊天处理器
- * 只负责流程编排，具体职责委托给各组件
+ * 使用 Spring AI 原生 function calling，模型自主决定调用哪些工具
  */
+@Slf4j
 @Service
 public class UniversalChatHandler implements ChatHandler {
     private final ChatClient chatClient;
     private final AiToolInvocationStore toolInvocationStore;
-    private final ToolPollingAgent toolPollingAgent;
     private final ChatRequestBuilder requestBuilder;
-    private final LlmRequestJsonBuilder jsonBuilder;
     private final LlmToolRegistry toolRegistry;
-    private final ChatTraceAssembler traceAssembler;
     private final SkillLoader skillLoader;
     private final UserMemoryService userMemoryService;
 
@@ -55,11 +51,8 @@ public class UniversalChatHandler implements ChatHandler {
 
     public UniversalChatHandler(ChatClient.Builder chatClientBuilder,
                                 AiToolInvocationStore toolInvocationStore,
-                                ToolPollingAgent toolPollingAgent,
                                 ChatRequestBuilder requestBuilder,
-                                LlmRequestJsonBuilder jsonBuilder,
                                 LlmToolRegistry toolRegistry,
-                                ChatTraceAssembler traceAssembler,
                                 SkillLoader skillLoader,
                                 UserMemoryService userMemoryService,
                                 @Value("${spring.ai.openai.chat.model:}") String model,
@@ -70,11 +63,8 @@ public class UniversalChatHandler implements ChatHandler {
                                 @Value("${wxclaw.ai.context.max-message-chars:800}") int maxMessageChars) {
         this.chatClient = chatClientBuilder.build();
         this.toolInvocationStore = toolInvocationStore;
-        this.toolPollingAgent = toolPollingAgent;
         this.requestBuilder = requestBuilder;
-        this.jsonBuilder = jsonBuilder;
         this.toolRegistry = toolRegistry;
-        this.traceAssembler = traceAssembler;
         this.skillLoader = skillLoader;
         this.userMemoryService = userMemoryService;
         this.model = model;
@@ -86,42 +76,26 @@ public class UniversalChatHandler implements ChatHandler {
     }
 
     @Override
-    public String chat(String userMessage, List<AiMessage> historyMessages, AIContentAccumulator accumulator) {
+    public String chat(String userMessage, List<AiMessage> historyMessages) {
         // 1. 构建请求文本
         String requestText = requestBuilder.buildRequestText(userMessage, historyMessages, maxContextChars, maxMessageChars);
-        String llmRequestJson = jsonBuilder.buildTextOnlyRequestJson(model, requestText, thinkingType);
 
-        // 2. 设置基础 trace 信息
-        traceAssembler.setBasicInfo(accumulator, requestText, model, llmRequestJson);
-
-        // 3. 执行 agent 调用
-        AgentChatResult result = toolPollingAgent.run(userMessage, requestText, this::chatOnce);
-
-        // 4. 回填 trace
-        traceAssembler.assembleTrace(accumulator, result);
-
-        return result.content();
-    }
-
-    private static final ExecutorService PROMPT_EXECUTOR = Executors.newFixedThreadPool(2);
-
-    private AgentLlmCaller.LlmCallResult chatOnce(String requestText) {
+        // 2. 重置工具调用记录
         if (toolInvocationStore != null) {
             toolInvocationStore.reset();
         }
 
-        // 并行获取 skill prompt 和 memory prompt
+        // 3. 并行获取 skill prompt 和 memory prompt
         String userId = UserContextHolder.getUserId();
         CompletableFuture<String> skillFuture = CompletableFuture.supplyAsync(
                 () -> skillLoader.getSkillSystemPrompt(), PROMPT_EXECUTOR);
         CompletableFuture<String> memoryFuture = CompletableFuture.supplyAsync(
                 () -> userMemoryService.buildMemoryPrompt(userId), PROMPT_EXECUTOR);
 
-        // 等待两者完成
         String skillPrompt = skillFuture.join();
         String memoryPrompt = memoryFuture.join();
 
-        // 构建 system prompt
+        // 4. 构建 system prompt
         StringBuilder systemPromptBuilder = new StringBuilder();
         if (skillPrompt != null && !skillPrompt.isBlank()) {
             systemPromptBuilder.append(skillPrompt);
@@ -131,7 +105,19 @@ public class UniversalChatHandler implements ChatHandler {
         }
         String systemPrompt = systemPromptBuilder.toString();
 
-        // 构建请求
+        // 5. 使用 Spring AI 原生 function calling（模型自主决定调用工具）
+        String content = callWithTools(requestText, systemPrompt);
+
+        // 6. 打印工具调用日志
+        logToolInvocations();
+
+        return content;
+    }
+
+    /**
+     * 使用 Spring AI 原生 function calling 调用 LLM
+     */
+    private String callWithTools(String requestText, String systemPrompt) {
         ChatClient.ChatClientRequestSpec spec = chatClient.prompt();
         OpenAiChatOptions.Builder optionsBuilder = OpenAiChatOptions.builder();
 
@@ -158,9 +144,31 @@ public class UniversalChatHandler implements ChatHandler {
             finalSpec = spec.user(requestText);
         }
 
-        String content = finalSpec.call().content();
-
-        List<AiToolInvocationStore.Invocation> invocations = toolInvocationStore == null ? List.of() : toolInvocationStore.drain();
-        return new AgentLlmCaller.LlmCallResult(content, invocations);
+        return finalSpec.call().content();
     }
+
+    /**
+     * 打印本轮工具调用日志
+     */
+    private void logToolInvocations() {
+        if (toolInvocationStore == null) {
+            return;
+        }
+        List<AiToolInvocationStore.Invocation> invocations = toolInvocationStore.drain();
+        if (!invocations.isEmpty()) {
+            for (AiToolInvocationStore.Invocation inv : invocations) {
+                log.info("工具调用: name={}, request={}, response={}",
+                        inv.toolName(),
+                        truncate(inv.toolRequest(), 200),
+                        truncate(inv.toolResponse(), 200));
+            }
+        }
+    }
+
+    private String truncate(String text, int maxLen) {
+        if (text == null) return "null";
+        return text.length() <= maxLen ? text : text.substring(0, maxLen) + "...";
+    }
+
+    private static final ExecutorService PROMPT_EXECUTOR = Executors.newFixedThreadPool(2);
 }

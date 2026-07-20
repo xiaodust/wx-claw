@@ -1,5 +1,7 @@
 package com.dust.wxclawbackfront.ai.tools.reminder;
 
+import com.dust.wxclawbackfront.ai.dao.entity.ReminderTask;
+import com.dust.wxclawbackfront.ai.dao.repository.ReminderTaskRepository;
 import com.dust.wxclawbackfront.scheduler.DynamicTaskSchedulerService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;

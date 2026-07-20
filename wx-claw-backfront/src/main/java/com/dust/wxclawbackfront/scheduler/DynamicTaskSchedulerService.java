@@ -1,7 +1,7 @@
 package com.dust.wxclawbackfront.scheduler;
 
-import com.dust.wxclawbackfront.ai.tools.reminder.ReminderTask;
-import com.dust.wxclawbackfront.ai.tools.reminder.ReminderTaskRepository;
+import com.dust.wxclawbackfront.ai.dao.entity.ReminderTask;
+import com.dust.wxclawbackfront.ai.dao.repository.ReminderTaskRepository;
 import com.dust.wxclawbackfront.ai.tools.reminder.executor.TaskActionExecutor;
 import com.dust.wxclawbackfront.ai.tools.reminder.executor.TaskActionExecutorRegistry;
 import jakarta.annotation.PreDestroy;

@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.ai.tools.reminder;
 
+import com.dust.wxclawbackfront.ai.dao.entity.ReminderTask;
 import com.dust.wxclawbackfront.ai.tools.shared.AiToolInvocationStore;
 import com.dust.wxclawbackfront.ai.tools.shared.AiToolProvider;
 import com.dust.wxclawbackfront.ai.tools.shared.UserContextHolder;

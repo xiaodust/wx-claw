@@ -1,6 +1,6 @@
 package com.dust.wxclawbackfront.ai.tools.reminder.executor;
 
-import com.dust.wxclawbackfront.ai.tools.reminder.ReminderTask;
+import com.dust.wxclawbackfront.ai.dao.entity.ReminderTask;
 
 /**
  * 定时任务动作执行器接口

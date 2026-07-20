@@ -1,7 +1,7 @@
 package com.dust.wxclawbackfront.ai.tools.reminder.executor;
 
 import com.dust.wxclawbackfront.ai.tools.reminder.ReminderNotifier;
-import com.dust.wxclawbackfront.ai.tools.reminder.ReminderTask;
+import com.dust.wxclawbackfront.ai.dao.entity.ReminderTask;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

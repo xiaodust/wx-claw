@@ -1,23 +1,27 @@
 # WX-Claw AI 助手
 
-一个基于 Spring AI 的智能对话助手，支持微信 ILink 接入，提供多种 AI 工具能力。
+一个基于 Spring AI 的智能对话助手，支持微信 ILink 接入，通过 Agent 编排系统实现多工具协同调度。
 
 ## 版本信息
 
-当前版本：**v1.1**
+当前版本：**v2.0**
 
 ## 功能特性
 
 ### 核心功能
 
+- **Agent 编排系统** - LLM 驱动的高层任务规划，自动拆解复杂请求为多步骤执行
+- **Spring AI Function Calling** - chat 模型自主决定调用哪些工具，工具是"大模型的手"
 - **智能对话** - 基于大模型的自然语言对话
-- **工具调用** - AI 自动选择并调用合适的工具完成任务
 - **上下文记忆** - 支持多轮对话，记住上下文
 - **用户画像** - 记住用户偏好和习惯，提供个性化服务
 - **知识库管理** - 集成 RAGFlow 知识库，支持文档检索和问答
 - **智能文档发送** - 长文本自动转换为文件发送，优化阅读体验
+- **消息防抖** - 防止短时间内重复调用 AI
 
 ### 工具能力
+
+底层工具通过 Spring AI function calling 注册，由 chat 模型自主决定何时调用：
 
 | 功能          | 说明                           |
 | ----------- | ---------------------------- |
@@ -27,12 +31,19 @@
 | 提醒设置        | 一次性或周期性提醒（每天/每周/每月）          |
 | 对话总结        | 生成日报、周报、月报                   |
 | 邮件发送        | 发送邮件通知                       |
+| 知识库检索      | 从知识库中搜索相关文档片段                |
+| 知识库问答      | 向知识库提问并获取智能回答                |
+| 知识库上传      | 上传文件到知识库（PDF、DOCX、TXT等）      |
+| 知识库文档管理    | 列举、删除、更新知识库中的文档              |
+
+### 高层编排能力
+
+Agent 编排器只规划高层任务，底层工具调用由 chat 模型自行处理：
+
+| 功能          | 说明                           |
+| ----------- | ---------------------------- |
 | 图片生成        | 根据描述生成图片（SiliconFlow Kolors） |
-| 语音回复        | TTS 语音合成                     |
-| **知识库检索**   | 从知识库中搜索相关文档片段                |
-| **知识库问答**   | 向知识库提问并获取智能回答                |
-| **知识库上传**   | 上传文件到知识库（PDF、DOCX、TXT等）      |
-| **知识库文档管理** | 列举、删除、更新知识库中的文档              |
+| 语音回复        | TTS 语音合成，含文本口语化润色          |
 
 ### 快捷命令
 
@@ -103,19 +114,21 @@ AI：[生成 Markdown] → 自动转换为 .md 文件发送
 消息分发层
   └─ ILinkMessageDispatcher
        ├─ 消息解析（文本 / 图片 / 语音 / 文件）
-       ├─ 意图识别（图片生成 / 语音回复）
+       ├─ 消息防抖（3 秒内相同消息去重）
        └─ 文件处理（下载文件 → 上传知识库）
 
-处理器层
-  ├─ ChatHandler          AI 对话（工具调用、上下文记忆、用户画像）
-  ├─ ImageHandler          图片生成 / 图片理解
-  ├─ DocumentGenerator     长文本转文件发送
-  └─ VolcTtsHandler        语音合成
+Agent 编排层
+  └─ AgentOrchestrator
+       ├─ LLM 任务规划（高层任务拆解：chat / voice_synthesize / image_generate）
+       ├─ TaskExecutor（按步骤执行，处理步骤间依赖）
+       └─ ToolRegistry（自动发现 ToolHandler 实现）
 
-工具注册层
-  └─ LlmToolRegistry       责任链模式，自动发现并注册 AiToolProvider
+模型层
+  ├─ ChatHandler（Spring AI function calling，模型自主调用底层工具）
+  ├─ PlainTextLlmService（纯文本 LLM 调用，用于任务规划）
+  └─ LlmToolRegistry（@Tool 注解自动注册）
 
-工具层
+工具层（由 chat 模型通过 function calling 自主调用）
   ├─ TimeTools             时间查询
   ├─ WeatherTools          天气查询
   ├─ WebSearchTools        网络搜索
@@ -124,6 +137,11 @@ AI：[生成 Markdown] → 自动转换为 .md 文件发送
   ├─ MemoryTools           记忆功能
   ├─ MailTools             邮件发送
   └─ SummaryTools          对话总结
+
+高层工具（由 Agent 编排器直接调度）
+  ├─ ChatToolHandler       对话处理（模型内部自主调用底层工具）
+  ├─ VoiceSynthesizeToolHandler  语音合成（含文本口语化润色）
+  └─ ImageGenerateToolHandler    图片生成
 
 外部服务层
   ├─ 火山引擎 / OpenAI 兼容模型    AI 推理
@@ -136,6 +154,10 @@ AI：[生成 Markdown] → 自动转换为 .md 文件发送
 存储层
   └─ SQLite                会话、消息、提醒、记忆等本地持久化
 ```
+
+### 架构设计原则
+
+**工具是大模型的手**：底层工具（天气、搜索、邮件等）通过 Spring AI function calling 注册，由 chat 模型在对话过程中自主决定调用时机和顺序。Agent 编排层只负责高层任务拆解（如"对话 → 语音输出"），不干预底层工具调用。
 
 ## 快速开始
 
@@ -252,14 +274,15 @@ mvn spring-boot:run
 wxclaw:
   ai:
     chat:
-      max-rounds: 5        # 工具调用最大轮数
-      max-tokens: 512      # 最大输出 token
-      timeout: PT15S       # 超时时间
+      max-tokens: 768      # 最大输出 token
+      timeout: PT25S       # 超时时间
     context:
-      max-chars: 4000      # 上下文最大字符数
+      max-chars: 7000      # 上下文最大字符数
     document:
       enabled: true        # 启用文档发送功能
       threshold: 1000      # 触发文档发送的字符阈值
+    thinking:
+      type: disabled       # 模型思考模式
 ```
 
 ### 知识库配置
@@ -282,32 +305,41 @@ wx-claw/
 ├── wx-claw-backfront/
 │   └── src/main/java/com/dust/wxclawbackfront/
 │       ├── ai/
-│       │   ├── chat/              # 对话处理
+│       │   ├── agent/             # Agent 编排系统
+│       │   │   ├── model/         # 数据模型（AgentContext, AgentResult, TaskPlan, TaskStep, TaskResult）
+│       │   │   └── orchestrator/  # 编排器
+│       │   │       ├── executor/  # 任务执行器
+│       │   │       └── tool/      # 工具注册与处理器
+│       │   │           └── handler/  # 具体工具实现（Chat, Voice, Image）
+│       │   ├── chat/              # 对话处理（ChatHandler, LlmToolRegistry, PlainTextLlmService）
 │       │   ├── image/             # 图片生成
 │       │   ├── voice/             # 语音合成
 │       │   ├── ragflow/           # RAGFlow 知识库客户端
 │       │   ├── document/          # 文档生成
-│       │   ├── tools/             # AI 工具
-│       │   │   ├── time/          # 时间工具
-│       │   │   ├── weather/       # 天气工具
-│       │   │   ├── search/        # 搜索工具
-│       │   │   ├── reminder/      # 提醒工具
-│       │   │   ├── summary/       # 总结工具
-│       │   │   ├── memory/        # 记忆工具
-│       │   │   ├── mail/          # 邮件工具
-│       │   │   ├── ragflow/       # 知识库工具
-│       │   │   └── shared/        # 共享组件
-│       │   └── service/           # 业务服务
+│       │   ├── service/           # 业务服务
+│       │   ├── dao/               # 数据访问层（Entity, Repository）
+│       │   ├── api/               # REST API
+│       │   └── tools/             # AI 底层工具
+│       │       ├── time/          # 时间工具
+│       │       ├── weather/       # 天气工具
+│       │       ├── search/        # 搜索工具
+│       │       ├── reminder/      # 提醒工具
+│       │       ├── summary/       # 总结工具
+│       │       ├── memory/        # 记忆工具
+│       │       ├── mail/          # 邮件工具
+│       │       ├── ragflow/       # 知识库工具
+│       │       └── shared/        # 共享组件
 │       ├── ilnk/                  # ILink 接入
+│       ├── scheduler/             # 定时任务
 │       └── config/                # 配置类
 └── docs/                          # 文档
 ```
 
 ## 工具开发
 
-### 添加新工具
+### 添加新的底层工具
 
-1. 创建工具类并实现 `AiToolProvider` 接口：
+创建工具类并实现 `AiToolProvider` 接口，Spring AI 会自动通过 function calling 注册：
 
 ```java
 @Component
@@ -330,7 +362,28 @@ public class MyTools implements AiToolProvider {
 }
 ```
 
-1. 完成！无需修改其他文件，Spring 会自动发现并注册。
+完成后无需修改其他文件，chat 模型会自动发现并可通过 function calling 调用。
+
+### 添加新的高层编排工具
+
+实现 `ToolHandler` 接口，Agent 编排器会自动发现：
+
+```java
+@Component
+public class MyToolHandler implements ToolHandler {
+
+    @Override
+    public String getName() {
+        return "my_tool";
+    }
+
+    @Override
+    public TaskResult execute(TaskStep step, AgentContext context) {
+        // 实现逻辑
+        return TaskResult.success("结果", executionTimeMs);
+    }
+}
+```
 
 ### 工具执行顺序
 
@@ -391,14 +444,24 @@ wxclaw:
 修改日志级别：
 
 ```yaml
-wxclaw:
-  log:
-    level: debug
+logging:
+  level:
+    com.dust.wxclawbackfront: debug
 ```
 
 ## 更新日志
 
-### v1.1 (当前版本)
+### v2.0 (当前版本)
+
+- **Agent 编排系统** - 引入 LLM 驱动的任务编排，支持多步骤任务自动拆解和执行
+- **Spring AI Function Calling** - 底层工具由 chat 模型通过 function calling 自主调用，工具真正成为"大模型的手"
+- **架构重构** - 清晰的三层架构：编排层(Orchestrator) → 执行层(TaskExecutor) → 工具层(ToolHandler)
+- **代码精简** - 移除 trace 系统、正则意图检测器、冗余接口方法，日志替代 trace
+- **消息防抖** - 3 秒内相同消息去重，防止重复调用 AI
+- **用户记忆修复** - 修复 ThreadLocal 跨线程丢失 userId 导致记忆加载失败的问题
+- **语音合成优化** - 文本口语化润色从 ChatToolHandler 移入 VoiceSynthesizeToolHandler，职责清晰
+
+### v1.1
 
 - 新增 RAGFlow 知识库集成
   - 知识库检索和问答

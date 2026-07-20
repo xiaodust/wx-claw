@@ -2,7 +2,7 @@ package com.dust.wxclawbackfront.ai.tools.reminder.executor;
 
 import com.dust.wxclawbackfront.ai.tools.mail.MailHandler;
 import com.dust.wxclawbackfront.ai.tools.mail.MailSendResult;
-import com.dust.wxclawbackfront.ai.tools.reminder.ReminderTask;
+import com.dust.wxclawbackfront.ai.dao.entity.ReminderTask;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
