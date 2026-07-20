@@ -71,17 +71,21 @@ public final class ILinkUserInput {
         String persist;
         if (description != null && !description.isBlank()) {
             persist = "[IMAGE_DESC] " + truncate(description.trim(), 800);
+        } else if (url != null && !url.isBlank()) {
+            persist = "[IMAGE_URL] " + truncate(url.trim(), 500);
         } else {
             persist = "[IMAGE]";
         }
 
         String prompt;
         if (error != null && !error.isBlank()) {
-            prompt = "用户发送了一张图片，但图片理解失败，错误信息如下：\n" + error + "\n请给用户一个简短提示，并引导用户重新发送。";
-        } else if (description == null || description.isBlank()) {
-            prompt = "用户发送了一张图片，但未获得图片内容描述。请给用户一个简短提示，并引导用户重新发送。";
-        } else {
+            prompt = "用户发送了一张图片，但获取图片失败，错误信息如下：\n" + error + "\n请给用户一个简短提示，并引导用户重新发送。";
+        } else if (description != null && !description.isBlank()) {
             prompt = "用户发送了一张图片。图片内容描述如下：\n" + description + "\n请用中文基于上述描述回复用户。";
+        } else if (url != null && !url.isBlank()) {
+            prompt = "用户发送了一张图片（URL: " + url + "），等待用户说明意图后再处理。";
+        } else {
+            prompt = "用户发送了一张图片，但未获得图片内容描述。请给用户一个简短提示，并引导用户重新发送。";
         }
 
         return new ILinkUserInput("IMAGE", display, prompt, persist, url, model, description, imageLlmRequestJson, null, null, null, null, error);

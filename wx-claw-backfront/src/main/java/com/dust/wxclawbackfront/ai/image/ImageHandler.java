@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.MimeType;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -66,7 +67,17 @@ public class ImageHandler {
         if (imageUrl == null || imageUrl.isBlank()) {
             throw new IllegalArgumentException("imageUrl is blank");
         }
-        URI uri = URI.create(imageUrl.trim());
+        URI uri;
+        try {
+            uri = URI.create(imageUrl.trim());
+        } catch (IllegalArgumentException e) {
+            // data: URL 包含特殊字符，使用 3 参数构造器创建 opaque URI
+            try {
+                uri = new URI("data", imageUrl.trim().substring(5), null);
+            } catch (URISyntaxException ex) {
+                throw new IllegalArgumentException("无效的图片URL: " + ex.getMessage());
+            }
+        }
         String modelToUse = (imageModel == null || imageModel.isBlank()) ? defaultModel : imageModel;
         if (modelToUse == null || modelToUse.isBlank()) {
             throw new IllegalStateException("image model is blank");

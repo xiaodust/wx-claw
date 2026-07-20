@@ -86,6 +86,10 @@ public class ILinkMessageDispatcher {
     private final ConcurrentHashMap<String, Instant> recentMessageCache = new ConcurrentHashMap<>();
     private static final Duration DEBOUNCE_DURATION = Duration.ofSeconds(3);
 
+    // 待处理的图片上下文：用户发送图片后，等待用户说明意图
+    // key: userId, value: 图片描述
+    private final ConcurrentHashMap<String, String> pendingImageContexts = new ConcurrentHashMap<>();
+
     @Value("${wxclaw.ai.context.max-history-messages:12}")
     private int maxHistoryMessages;
 
@@ -229,18 +233,30 @@ public class ILinkMessageDispatcher {
                     && userInput.getError() == null
                     && userInput.getImageDescription() != null
                     && !userInput.getImageDescription().isBlank()) {
-                reply = userInput.getImageDescription().trim();
+                // 收到图片，图片已理解，存储描述，引导用户说明意图
+                pendingImageContexts.put(userId, userInput.getImageDescription().trim());
+                reply = "收到图片，请告诉我你想让我对这张图片做什么？\n例如：描述图片内容、提取文字、分析图片、根据图片回答问题等。";
             } else if ("IMAGE".equalsIgnoreCase(userInput.getMessageItemType())
                     && userInput.getError() != null
                     && !userInput.getError().isBlank()) {
-                reply = "收到图片，但图片理解失败。请尝试重新发送图片或换一张更清晰的图片。\n错误信息：" + userInput.getError().trim();
+                reply = "收到图片，但获取图片失败。请尝试重新发送。\n错误信息：" + userInput.getError().trim();
             } else if ("FILE".equalsIgnoreCase(userInput.getMessageItemType())) {
                 reply = handleFileUpload(userInput, userId);
                 if (reply == null || reply.isBlank()) {
                     reply = "收到文件，但上传到知识库失败。请稍后再试。";
                 }
             } else {
-                reply = processWithAgent(userInput, historyMessages, userId, sessionId);
+                // 检查是否有待处理的图片上下文
+                String pendingImageDesc = pendingImageContexts.remove(userId);
+                if (pendingImageDesc != null && !pendingImageDesc.isBlank()) {
+                    // 将图片描述和用户意图合并，交给 Agent 处理
+                    String combinedText = "用户发送了一张图片，图片内容描述如下：\n" + pendingImageDesc
+                            + "\n\n用户的要求：" + userInput.getDisplayText();
+                    ILinkUserInput combinedInput = ILinkUserInput.text(combinedText);
+                    reply = processWithAgent(combinedInput, Collections.emptyList(), userId, sessionId);
+                } else {
+                    reply = processWithAgent(userInput, historyMessages, userId, sessionId);
+                }
             }
 
             int responseTime = (int) Duration.between(start, Instant.now()).toMillis();
