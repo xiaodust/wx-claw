@@ -213,7 +213,7 @@ public class ReminderHandler {
         task.setTriggerTime(triggerTime);
         task.setTaskType("DAILY");
         task.setActionType("REMINDER");
-        task.setCronExpression(String.format("0 %d %d * * ?", minute, hour));
+        task.setCronExpression(String.format("0 %d %d * * *", minute, hour));
         task.setStatus("PENDING");
 
         ReminderTask saved = repository.save(task);
@@ -265,7 +265,7 @@ public class ReminderHandler {
         task.setTriggerTime(triggerTime);
         task.setTaskType("WEEKLY");
         task.setActionType("REMINDER");
-        task.setCronExpression(String.format("0 %d %d ? * %s", minute, hour, getDayOfWeekCron(dayOfWeek)));
+        task.setCronExpression(String.format("0 %d %d * * %s", minute, hour, getDayOfWeekCron(dayOfWeek)));
         task.setStatus("PENDING");
 
         ReminderTask saved = repository.save(task);
@@ -308,7 +308,7 @@ public class ReminderHandler {
         task.setTriggerTime(triggerTime);
         task.setTaskType("MONTHLY");
         task.setActionType("REMINDER");
-        task.setCronExpression(String.format("0 %d %d %d * ?", minute, hour, dayOfMonth));
+        task.setCronExpression(String.format("0 %d %d %d * *", minute, hour, dayOfMonth));
         task.setStatus("PENDING");
 
         ReminderTask saved = repository.save(task);
@@ -507,7 +507,7 @@ public class ReminderHandler {
             task.setTaskType("DAILY");
             task.setActionType("WEATHER_PUSH");
             task.setActionParams(actionParams);
-            task.setCronExpression(String.format("0 %d %d * * ?", minute, hour));
+            task.setCronExpression(String.format("0 %d %d * * *", minute, hour));
             task.setStatus("PENDING");
 
             ReminderTask saved = repository.save(task);
@@ -570,7 +570,7 @@ public class ReminderHandler {
             task.setTaskType("DAILY");
             task.setActionType("EMAIL");
             task.setActionParams(actionParams);
-            task.setCronExpression(String.format("0 %d %d * * ?", minute, hour));
+            task.setCronExpression(String.format("0 %d %d * * *", minute, hour));
             task.setStatus("PENDING");
 
             ReminderTask saved = repository.save(task);
@@ -626,7 +626,7 @@ public class ReminderHandler {
             task.setTaskType("DAILY");
             task.setActionType("WEB_SEARCH_PUSH");
             task.setActionParams(actionParams);
-            task.setCronExpression(String.format("0 %d %d * * ?", minute, hour));
+            task.setCronExpression(String.format("0 %d %d * * *", minute, hour));
             task.setStatus("PENDING");
 
             ReminderTask saved = repository.save(task);
@@ -680,7 +680,7 @@ public class ReminderHandler {
             task.setTaskType("DAILY");
             task.setActionType("AI_CHAT");
             task.setActionParams(actionParams);
-            task.setCronExpression(String.format("0 %d %d * * ?", minute, hour));
+            task.setCronExpression(String.format("0 %d %d * * *", minute, hour));
             task.setStatus("PENDING");
 
             ReminderTask saved = repository.save(task);
@@ -732,7 +732,7 @@ public class ReminderHandler {
             task.setTaskType("DAILY");
             task.setActionType("CONVERSATION_SUMMARY");
             task.setActionParams(actionParams);
-            task.setCronExpression(String.format("0 %d %d * * ?", minute, hour));
+            task.setCronExpression(String.format("0 %d %d * * *", minute, hour));
             task.setStatus("PENDING");
 
             ReminderTask saved = repository.save(task);
@@ -784,7 +784,7 @@ public class ReminderHandler {
             task.setTaskType("WEEKLY");
             task.setActionType("CONVERSATION_SUMMARY");
             task.setActionParams(actionParams);
-            task.setCronExpression(String.format("0 %d %d ? * %s", minute, hour, getDayOfWeekCron(dayOfWeek)));
+            task.setCronExpression(String.format("0 %d %d * * %s", minute, hour, getDayOfWeekCron(dayOfWeek)));
             task.setStatus("PENDING");
 
             ReminderTask saved = repository.save(task);
@@ -836,7 +836,7 @@ public class ReminderHandler {
             task.setTaskType("MONTHLY");
             task.setActionType("CONVERSATION_SUMMARY");
             task.setActionParams(actionParams);
-            task.setCronExpression(String.format("0 %d %d %d * ?", minute, hour, dayOfMonth));
+            task.setCronExpression(String.format("0 %d %d %d * *", minute, hour, dayOfMonth));
             task.setStatus("PENDING");
 
             ReminderTask saved = repository.save(task);

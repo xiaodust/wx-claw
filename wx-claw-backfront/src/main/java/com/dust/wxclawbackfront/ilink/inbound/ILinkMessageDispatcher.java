@@ -440,11 +440,18 @@ public class ILinkMessageDispatcher {
         }
     }
 
+    private static final String MEDIA_SENT_PLACEHOLDER = "[MEDIA_SENT]";
+
     private static List<AiMessage> normalizeHistory(List<AiMessage> historyMessages, int maxMessages) {
         if (historyMessages == null || historyMessages.isEmpty()) {
             return Collections.emptyList();
         }
-        List<AiMessage> list = new ArrayList<>(historyMessages);
+        List<AiMessage> list = new ArrayList<>();
+        for (AiMessage msg : historyMessages) {
+            if (msg != null && !MEDIA_SENT_PLACEHOLDER.equals(msg.getContent())) {
+                list.add(msg);
+            }
+        }
         list.sort(Comparator.comparing(AiMessage::getMessageSeq, Comparator.nullsLast(Integer::compareTo)));
         int limit = maxMessages <= 0 ? 20 : maxMessages;
         if (list.size() > limit) {

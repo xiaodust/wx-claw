@@ -5,6 +5,7 @@ import com.dust.wxclawbackfront.ai.tools.shared.AiToolInvocationStore;
 import com.dust.wxclawbackfront.ai.tools.time.TimeTools;
 import com.dust.wxclawbackfront.ai.tools.weather.WeatherTools;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.content.Media;
@@ -20,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @Service
 public class ImageHandler {
 
@@ -113,12 +115,15 @@ public class ImageHandler {
             if (timeout != null) {
                 optionsBuilder = optionsBuilder.timeout(timeout);
             }
+            long start = System.currentTimeMillis();
             String description = chatClient.prompt()
                     .tools(timeTools, weatherTools)
                     .options(optionsBuilder)
                     .messages(userMessage)
                     .call()
                     .content();
+            long elapsed = System.currentTimeMillis() - start;
+            log.info("图片理解完成, 耗时={}ms, model={}", elapsed, modelToUse);
             return new ImageUnderstandingResult(modelToUse, requestJson, description, null);
         } catch (Exception ex) {
             return new ImageUnderstandingResult(modelToUse, requestJson, null, ex.getMessage());

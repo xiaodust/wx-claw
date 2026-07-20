@@ -74,7 +74,7 @@ public class DynamicTaskSchedulerService {
      * 注册周期性任务（使用 cron 表达式）
      */
     public void scheduleCronTask(ReminderTask task) {
-        String cronExpression = task.getCronExpression();
+        String cronExpression = sanitizeCron(task.getCronExpression());
         if (cronExpression == null || cronExpression.isBlank()) {
             log.error("Cron表达式为空，无法注册周期任务: taskId={}", task.getId());
             return;
@@ -95,6 +95,14 @@ public class DynamicTaskSchedulerService {
             log.error("Cron表达式解析失败: taskId={}, cron={}, error={}", 
                     task.getId(), cronExpression, e.getMessage(), e);
         }
+    }
+
+    /**
+     * 清洗 Cron 表达式：将 Quartz 风格的 ? 替换为 *，兼容数据库中已有的旧数据
+     */
+    private String sanitizeCron(String cron) {
+        if (cron == null) return null;
+        return cron.replace('?', '*').trim();
     }
 
     /**

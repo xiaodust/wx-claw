@@ -2,6 +2,7 @@ package com.dust.wxclawbackfront.ai.voice;
 
 import com.dust.wxclawbackfront.ai.tools.shared.TextSanitizer;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -16,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
+@Slf4j
 @Service
 public class VolcTtsHandler {
 
@@ -89,6 +91,7 @@ public class VolcTtsHandler {
         Map<String, Object> payload = buildRequestPayload(actualModel, text.trim());
         String requestJson = toPrettyJsonOrNull(payload);
 
+        long start = System.currentTimeMillis();
         try {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(actualUrl))
@@ -100,6 +103,8 @@ public class VolcTtsHandler {
                     .build();
 
             HttpResponse<String> resp = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            long elapsed = System.currentTimeMillis() - start;
+            log.info("TTS语音合成完成, 耗时={}ms, model={}", elapsed, actualModel);
             String responseText = resp.body();
             String responseJson = TextSanitizer.sanitizeForPrompt(toPrettyJsonOrRaw(responseText));
 

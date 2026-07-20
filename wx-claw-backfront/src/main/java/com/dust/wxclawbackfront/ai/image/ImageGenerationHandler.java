@@ -2,6 +2,7 @@ package com.dust.wxclawbackfront.ai.image;
 
 import com.dust.wxclawbackfront.ai.tools.shared.TextSanitizer;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -14,6 +15,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+@Slf4j
 @Service
 public class ImageGenerationHandler {
 
@@ -88,6 +90,7 @@ public class ImageGenerationHandler {
 
         String requestJson = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(requestBody);
 
+        long start = System.currentTimeMillis();
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .timeout(timeout)
@@ -97,6 +100,8 @@ public class ImageGenerationHandler {
                 .build();
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        long elapsed = System.currentTimeMillis() - start;
+        log.info("图片生成请求完成, 耗时={}ms, model={}", elapsed, model);
         String responseText = response.body();
         String responseJson = TextSanitizer.sanitizeForPrompt(toPrettyJsonOrRaw(responseText));
 

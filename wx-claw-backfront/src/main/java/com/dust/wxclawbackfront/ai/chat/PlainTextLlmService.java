@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.ai.chat;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,6 +13,7 @@ import java.util.Map;
  * 纯文本 LLM 调用服务
  * 不挂载任何 tools，用于定时任务、摘要压缩等后台场景，避免引入工具链循环依赖。
  */
+@Slf4j
 @Service
 public class PlainTextLlmService {
 
@@ -50,10 +52,14 @@ public class PlainTextLlmService {
             optionsBuilder = optionsBuilder.timeout(timeout);
         }
 
-        return spec
+        long start = System.currentTimeMillis();
+        String content = spec
                 .options(optionsBuilder)
                 .user(prompt)
                 .call()
                 .content();
+        long elapsed = System.currentTimeMillis() - start;
+        log.info("LLM响应完成, 耗时={}ms, model={}", elapsed, model);
+        return content;
     }
 }

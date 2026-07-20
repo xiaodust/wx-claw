@@ -144,7 +144,11 @@ public class UniversalChatHandler implements ChatHandler {
             finalSpec = spec.user(requestText);
         }
 
-        return finalSpec.call().content();
+        long start = System.currentTimeMillis();
+        String content = finalSpec.call().content();
+        long elapsed = System.currentTimeMillis() - start;
+        log.info("LLM响应完成, 耗时={}ms, model={}", elapsed, model);
+        return content;
     }
 
     /**
