@@ -2,6 +2,8 @@ package com.dust.wxclawbackfront.ilink;
 
 import com.dust.wxclawbackfront.ai.image.ImageHandler;
 import com.dust.wxclawbackfront.ai.image.ImageUnderstandingResult;
+import com.dust.wxclawbackfront.ai.video.VideoHandler;
+import com.dust.wxclawbackfront.ai.video.VideoUnderstandingResult;
 import com.dust.wxclawbackfront.ilink.media.WechatCdnMediaService;
 import com.github.wechat.ilink.sdk.ILinkClient;
 import com.github.wechat.ilink.sdk.core.model.FileItem;
@@ -12,6 +14,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 @Slf4j
 @Component
 public class ILinkUserInputExtractor {
@@ -20,12 +23,19 @@ public class ILinkUserInputExtractor {
     private static final int MESSAGE_ITEM_TYPE_IMAGE = 2;
     private static final int MESSAGE_ITEM_TYPE_VOICE = 3;
     private static final int MESSAGE_ITEM_TYPE_FILE = 4;
+    private static final int MESSAGE_ITEM_TYPE_VIDEO = 5;
+
+    private static final Set<String> VIDEO_EXTENSIONS = Set.of(
+            ".mp4", ".mov", ".avi", ".mkv", ".flv", ".wmv", ".webm", ".m4v", ".3gp"
+    );
 
     private final ImageHandler imageHandler;
+    private final VideoHandler videoHandler;
     private final WechatCdnMediaService cdnMediaService;
 
-    public ILinkUserInputExtractor(ImageHandler imageHandler, WechatCdnMediaService cdnMediaService) {
+    public ILinkUserInputExtractor(ImageHandler imageHandler, VideoHandler videoHandler, WechatCdnMediaService cdnMediaService) {
         this.imageHandler = imageHandler;
+        this.videoHandler = videoHandler;
         this.cdnMediaService = cdnMediaService;
     }
 
@@ -61,6 +71,11 @@ public class ILinkUserInputExtractor {
                 }
                 return ILinkUserInput.image(url, model, description, requestJson, null);
             }
+            // 处理视频消息（类型5）
+            if (item.getType() == MESSAGE_ITEM_TYPE_VIDEO && item.getVideo_item() != null) {
+                log.info("收到视频消息: type=VIDEO, videoSize={}", item.getVideo_item().getVideo_size());
+                return handleVideoMessage(client, item);
+            }
         }
 
         // 处理文件消息
@@ -75,7 +90,12 @@ public class ILinkUserInputExtractor {
                 
                 log.info("收到文件消息: fileName={}, fileSize={}", fileName, fileSize);
                 
-                // 下载文件
+                // 判断是否为视频文件
+                if (isVideoFile(fileName)) {
+                    return handleVideoFile(client, item, fileName, fileSize);
+                }
+
+                // 普通文件处理
                 WechatCdnMediaService.ResolvedFile resolvedFile = cdnMediaService.resolveFile(client, item);
                 byte[] fileBytes = resolvedFile != null ? resolvedFile.fileBytes() : null;
                 
@@ -143,22 +163,7 @@ public class ILinkUserInputExtractor {
         return String.join("\n", parts);
     }
 
-    /**
-     * 提取引用消息的文本内容
-     */
     public String extractRefText(WeixinMessage msg) {
-        List<MessageItem> items = msg == null ? null : msg.getItem_list();
-        if (items == null || items.isEmpty()) {
-            return null;
-        }
-        for (MessageItem item : items) {
-            if (item == null) {
-                continue;
-            }
-            if (item.hasRefMessage()) {
-                return item.getRefMessageText();
-            }
-        }
         return null;
     }
 
@@ -168,8 +173,95 @@ public class ILinkUserInputExtractor {
             case MESSAGE_ITEM_TYPE_IMAGE -> "IMAGE";
             case MESSAGE_ITEM_TYPE_VOICE -> "VOICE";
             case MESSAGE_ITEM_TYPE_FILE -> "FILE";
+            case MESSAGE_ITEM_TYPE_VIDEO -> "VIDEO";
             default -> "TYPE_" + type;
         };
+    }
+
+    private static boolean isVideoFile(String fileName) {
+        if (fileName == null) return false;
+        String lower = fileName.toLowerCase();
+        for (String ext : VIDEO_EXTENSIONS) {
+            if (lower.endsWith(ext)) return true;
+        }
+        return false;
+    }
+
+    private ILinkUserInput handleVideoFile(ILinkClient client, MessageItem item, String fileName, String fileSize) {
+        log.info("检测到视频文件: fileName={}, 进行视频理解", fileName);
+
+        if (!videoHandler.isEnabled()) {
+            log.warn("视频理解未启用或未配置，跳过视频理解");
+            return ILinkUserInput.video(null, null, null, null, "视频理解功能未配置");
+        }
+
+        // 下载视频文件
+        WechatCdnMediaService.ResolvedFile resolvedFile = cdnMediaService.resolveFile(client, item);
+        byte[] videoBytes = resolvedFile != null ? resolvedFile.fileBytes() : null;
+
+        if (videoBytes == null || videoBytes.length == 0) {
+            log.warn("视频文件下载失败: fileName={}", fileName);
+            return ILinkUserInput.video(null, null, null, null, "视频文件下载失败");
+        }
+
+        log.info("视频文件下载成功: fileName={}, size={}", fileName, videoBytes.length);
+
+        // 使用 base64 进行视频理解
+        String base64 = java.util.Base64.getEncoder().encodeToString(videoBytes);
+        String mimeType = guessVideoMimeType(fileName);
+        VideoUnderstandingResult result = videoHandler.understandByBase64(base64, mimeType);
+
+        String description = result.getDescription();
+        String model = result.getModel();
+        String requestJson = result.getRequestJson();
+        String error = result.getErrorMsg();
+
+        if (error != null && !error.isBlank()) {
+            return ILinkUserInput.video(null, model, description, requestJson, "视频理解失败: " + error);
+        }
+        return ILinkUserInput.video(null, model, description, requestJson, null);
+    }
+
+    /**
+     * 处理视频消息（类型5，SDK原生支持）
+     */
+    private ILinkUserInput handleVideoMessage(ILinkClient client, MessageItem item) {
+        if (!videoHandler.isEnabled()) {
+            log.warn("视频理解未启用或未配置，跳过视频理解");
+            return ILinkUserInput.video(null, null, null, null, "视频理解功能未配置");
+        }
+
+        WechatCdnMediaService.ResolvedVideo resolved = cdnMediaService.resolveVideo(client, item);
+        if (resolved == null || resolved.videoBytes() == null || resolved.videoBytes().length == 0) {
+            log.warn("视频下载失败");
+            return ILinkUserInput.video(null, null, null, null, "视频下载失败");
+        }
+
+        log.info("视频下载成功, size={}", resolved.videoBytes().length);
+
+        String base64 = java.util.Base64.getEncoder().encodeToString(resolved.videoBytes());
+        VideoUnderstandingResult result = videoHandler.understandByBase64(base64, "video/mp4");
+
+        String description = result.getDescription();
+        String model = result.getModel();
+        String requestJson = result.getRequestJson();
+        String error = result.getErrorMsg();
+
+        if (error != null && !error.isBlank()) {
+            return ILinkUserInput.video(null, model, description, requestJson, "视频理解失败: " + error);
+        }
+        return ILinkUserInput.video(null, model, description, requestJson, null);
+    }
+
+    private static String guessVideoMimeType(String fileName) {
+        if (fileName == null) return "video/mp4";
+        String lower = fileName.toLowerCase();
+        if (lower.endsWith(".mov")) return "video/quicktime";
+        if (lower.endsWith(".avi")) return "video/x-msvideo";
+        if (lower.endsWith(".mkv")) return "video/x-matroska";
+        if (lower.endsWith(".webm")) return "video/webm";
+        if (lower.endsWith(".3gp")) return "video/3gpp";
+        return "video/mp4";
     }
 }
 

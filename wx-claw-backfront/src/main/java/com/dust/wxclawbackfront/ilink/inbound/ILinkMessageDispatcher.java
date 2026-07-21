@@ -89,6 +89,7 @@ public class ILinkMessageDispatcher {
     // 待处理的图片上下文：用户发送图片后，等待用户说明意图
     // key: userId, value: 图片描述
     private final ConcurrentHashMap<String, String> pendingImageContexts = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> pendingVideoContexts = new ConcurrentHashMap<>();
 
     @Value("${wxclaw.ai.context.max-history-messages:12}")
     private int maxHistoryMessages;
@@ -240,6 +241,17 @@ public class ILinkMessageDispatcher {
                     && userInput.getError() != null
                     && !userInput.getError().isBlank()) {
                 reply = "收到图片，但获取图片失败。请尝试重新发送。\n错误信息：" + userInput.getError().trim();
+            } else if ("VIDEO".equalsIgnoreCase(userInput.getMessageItemType())
+                    && userInput.getError() == null
+                    && userInput.getVideoDescription() != null
+                    && !userInput.getVideoDescription().isBlank()) {
+                // 收到视频，视频已理解，存储描述，引导用户说明意图
+                pendingVideoContexts.put(userId, userInput.getVideoDescription().trim());
+                reply = "收到视频，请告诉我你想让我对这个视频做什么？\n例如：描述视频内容、分析视频、根据视频回答问题等。";
+            } else if ("VIDEO".equalsIgnoreCase(userInput.getMessageItemType())
+                    && userInput.getError() != null
+                    && !userInput.getError().isBlank()) {
+                reply = "收到视频，但视频理解失败。请尝试重新发送。\n错误信息：" + userInput.getError().trim();
             } else if ("FILE".equalsIgnoreCase(userInput.getMessageItemType())) {
                 reply = handleFileUpload(userInput, userId);
                 if (reply == null || reply.isBlank()) {
@@ -255,7 +267,16 @@ public class ILinkMessageDispatcher {
                     ILinkUserInput combinedInput = ILinkUserInput.text(combinedText);
                     reply = processWithAgent(combinedInput, Collections.emptyList(), userId, sessionId);
                 } else {
-                    reply = processWithAgent(userInput, historyMessages, userId, sessionId);
+                    // 检查是否有待处理的视频上下文
+                    String pendingVideoDesc = pendingVideoContexts.remove(userId);
+                    if (pendingVideoDesc != null && !pendingVideoDesc.isBlank()) {
+                        String combinedText = "用户发送了一个视频，视频内容描述如下：\n" + pendingVideoDesc
+                                + "\n\n用户的要求：" + userInput.getDisplayText();
+                        ILinkUserInput combinedInput = ILinkUserInput.text(combinedText);
+                        reply = processWithAgent(combinedInput, Collections.emptyList(), userId, sessionId);
+                    } else {
+                        reply = processWithAgent(userInput, historyMessages, userId, sessionId);
+                    }
                 }
             }
 
@@ -340,6 +361,20 @@ public class ILinkMessageDispatcher {
                 } catch (Exception sendFileEx) {
                     log.warn("发送音频文件失败，降级为文本回复: {}", sendFileEx.getMessage());
                     return result.getReplyText();
+                }
+                return null;
+            } else if (mediaType != null && mediaType.startsWith("video/")) {
+                try {
+                    messageSender.sendVideo(userId, result.getMediaBytes(), result.getMediaFileName(), null, "已生成视频，请查收。");
+                    log.info("Agent 视频已发送: userId={}", userId);
+                } catch (Exception sendVideoEx) {
+                    log.warn("发送视频失败，降级为文件发送: {}", sendVideoEx.getMessage());
+                    try {
+                        messageSender.sendFile(userId, result.getMediaBytes(), result.getMediaFileName(), "已生成视频，请查收。");
+                    } catch (Exception sendFileEx) {
+                        log.warn("发送视频文件也失败，降级为文本回复: {}", sendFileEx.getMessage());
+                        return result.getReplyText();
+                    }
                 }
                 return null;
             }

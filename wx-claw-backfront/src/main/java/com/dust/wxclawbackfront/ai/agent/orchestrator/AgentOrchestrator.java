@@ -78,15 +78,19 @@ public class AgentOrchestrator {
         sb.append("  参数: text（可选，要朗读的文本；不传则自动生成）\n\n");
         sb.append("- image_generate: 生成图片。\n");
         sb.append("  参数: prompt（图片描述）\n\n");
+        sb.append("- video_generate: 生成视频。\n");
+        sb.append("  参数: prompt（视频描述）, ratio（可选，默认16:9）, duration（可选，秒数，默认5）\n\n");
         sb.append("## 规则\n\n");
         sb.append("1. 分析用户意图，规划最少步骤完成任务\n");
         sb.append("2. 普通对话、闲聊、问答、信息查询、图片相关问题 → 只需 1 步 chat，绝对不要多加步骤\n");
         sb.append("3. 只有用户明确要求\"语音回复\"\"用语音说\"\"读给我听\"等 → 1 步 chat + 1 步 voice_synthesize\n");
         sb.append("4. 用户要求生成图片 → 1 步 image_generate\n");
-        sb.append("5. 后续步骤可以使用前一步的结果（用 {step_N_result} 引用）\n");
-        sb.append("6. 不要规划底层工具调用（如 weather_now、web_search 等），chat 模型会自行处理\n");
-        sb.append("7. 【重要】chat 步骤最多出现 1 次，不要重复规划 chat 步骤\n");
-        sb.append("8. 【重要】用户发送图片问问题（如\"这是什么\"\"帮我看看\"）→ 只需 1 步 chat，不要加 voice_synthesize\n\n");
+        sb.append("5. 用户要求生成视频 → 1 步 video_generate\n");
+        sb.append("6. 后续步骤可以使用前一步的结果（用 {step_N_result} 引用）\n");
+        sb.append("7. 不要规划底层工具调用（如 weather_now、web_search 等），chat 模型会自行处理\n");
+        sb.append("8. 【重要】chat 步骤最多出现 1 次，不要重复规划 chat 步骤\n");
+        sb.append("9. 【重要】用户发送图片问问题（如\"这是什么\"\"帮我看看\"）→ 只需 1 步 chat，不要加 voice_synthesize\n");
+        sb.append("10. 【重要】用户发送视频问问题（如\"这个视频说了什么\"）→ 只需 1 步 chat，不要加 voice_synthesize\n\n");
         sb.append("## 用户消息\n\n");
         sb.append(userMessage).append("\n\n");
 

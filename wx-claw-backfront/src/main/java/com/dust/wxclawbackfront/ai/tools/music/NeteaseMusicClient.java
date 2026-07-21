@@ -42,6 +42,10 @@ public class NeteaseMusicClient {
     private final String appSecret;
     private final String privateKey;
     private final String deviceId;
+    private final String deviceType;
+    private final String deviceOs;
+    private final String deviceChannel;
+    private final String deviceBrand;
     private final Duration timeout;
     private final Path tokenStorePath;
 
@@ -59,6 +63,10 @@ public class NeteaseMusicClient {
                                @Value("${wxclaw.music.access-token:}") String accessToken,
                                @Value("${wxclaw.music.refresh-token:}") String refreshToken,
                                @Value("${wxclaw.music.device-id:openapi}") String deviceId,
+                               @Value("${wxclaw.music.device-type:openapi}") String deviceType,
+                               @Value("${wxclaw.music.device-os:openapi}") String deviceOs,
+                               @Value("${wxclaw.music.device-channel:openapi}") String deviceChannel,
+                               @Value("${wxclaw.music.device-brand:openapi}") String deviceBrand,
                                @Value("${wxclaw.music.timeout:PT10S}") Duration timeout) {
         this.objectMapper = objectMapper;
         this.httpClient = HttpClient.newBuilder()
@@ -71,6 +79,10 @@ public class NeteaseMusicClient {
         this.accessToken = accessToken;
         this.refreshToken = refreshToken;
         this.deviceId = deviceId;
+        this.deviceType = deviceType;
+        this.deviceOs = deviceOs;
+        this.deviceChannel = deviceChannel;
+        this.deviceBrand = deviceBrand;
         this.timeout = timeout == null ? Duration.ofSeconds(10) : timeout;
         this.tokenStorePath = Path.of("data", "netease-music-token.json");
 
@@ -421,7 +433,7 @@ public class NeteaseMusicClient {
     }
 
     /**
-     * 执行API请求（带自动token刷新）
+     * 执行API请求（POST 表单提交，对齐官方 demo）
      */
     private String doRequest(String path, String bizContent) {
         try {
@@ -429,29 +441,49 @@ public class NeteaseMusicClient {
             long timestamp = System.currentTimeMillis();
             String device = buildDeviceJson();
 
-            // 构建查询参数
+            // 构建签名参数（包含 appSecret 用于签名计算，使用原始值不编码）
             Map<String, String> params = new LinkedHashMap<>();
-            params.put("bizContent", bizContent);
             params.put("appId", appId);
-            params.put("signType", "RSA_SHA256");
-            params.put("accessToken", currentToken);
             params.put("appSecret", appSecret);
-            params.put("device", device);
+            params.put("signType", "RSA_SHA256");
             params.put("timestamp", String.valueOf(timestamp));
+            params.put("device", device);
+            params.put("bizContent", bizContent);
+            params.put("accessToken", currentToken != null ? currentToken : "");
 
-            // 拼接查询字符串
-            String queryString = params.entrySet().stream()
-                    .map(e -> urlEncode(e.getKey()) + "=" + urlEncode(e.getValue()))
-                    .collect(Collectors.joining("&"));
+            // 计算签名
+            String sign = signSha256(params);
+            if (sign.isEmpty()) {
+                log.error("API请求签名计算失败: path={}", path);
+                return null;
+            }
 
-            String url = baseUrl + path + "?" + queryString;
+            // appSecret 仅用于签名，不应出现在请求体中
+            params.remove("appSecret");
+            params.put("sign", sign);
 
+            // 对齐官方 demo：device、bizContent、sign 单独编码后替换原值
+            params.put("device", encodeURIComponent(device));
+            params.put("bizContent", encodeURIComponent(bizContent));
+            params.put("sign", encodeURIComponent(sign));
+
+            // 构建表单提交体
+            StringBuilder formBody = new StringBuilder();
+            boolean first = true;
+            for (Map.Entry<String, String> entry : params.entrySet()) {
+                if (!first) formBody.append("&");
+                formBody.append(entry.getKey()).append("=").append(entry.getValue());
+                first = false;
+            }
+
+            String url = baseUrl + path;
             log.debug("网易云音乐API请求: {}", path);
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .timeout(timeout)
-                    .GET()
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .POST(HttpRequest.BodyPublishers.ofString(formBody.toString()))
                     .build();
 
             HttpResponse<String> httpResp = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
@@ -473,7 +505,7 @@ public class NeteaseMusicClient {
     }
 
     /**
-     * 执行 Token 相关请求
+     * 执行 Token 相关请求（POST 表单提交，对齐官方 demo）
      * 注意：即使获取二维码也需要传 accessToken 参数（可传空或占位符）
      */
     private String doTokenRequest(String path, String bizContent) {
@@ -481,61 +513,60 @@ public class NeteaseMusicClient {
             long timestamp = System.currentTimeMillis();
             String device = buildDeviceJson();
 
-            // 构建签名参数（按照官方demo，包含appSecret）
-            Map<String, String> signParams = new LinkedHashMap<>();
-            signParams.put("appId", appId);
-            signParams.put("appSecret", appSecret);
-            signParams.put("signType", "RSA_SHA256");
-            signParams.put("timestamp", String.valueOf(timestamp));
-            signParams.put("accessToken", accessToken != null ? accessToken : "");
-            signParams.put("device", device);
-            signParams.put("bizContent", bizContent);
+            // 构建签名参数（包含 appSecret 用于签名计算，使用原始值不编码）
+            Map<String, String> params = new LinkedHashMap<>();
+            params.put("appId", appId);
+            params.put("appSecret", appSecret);
+            params.put("signType", "RSA_SHA256");
+            params.put("timestamp", String.valueOf(timestamp));
+            params.put("device", device);
+            params.put("bizContent", bizContent);
+            params.put("accessToken", accessToken != null ? accessToken : "");
 
-            // 计算签名
-            String sign = signSha256(signParams);
+            // 计算签名（signSha256 内部按 key 排序拼接，符合官方规范）
+            String sign = signSha256(params);
             if (sign.isEmpty()) {
                 log.error("签名计算失败，无法发送请求");
                 return null;
             }
 
-            log.info("签名参数: appId={}, timestamp={}, device={}", appId, timestamp, device);
             log.info("签名结果: {}", sign);
 
-            // 构建请求参数（按照官方demo，device、bizContent、sign需要单独编码）
-            String deviceEncoded = encodeURIComponent(device);
-            String bizContentEncoded = encodeURIComponent(bizContent);
-            String signEncoded = encodeURIComponent(sign);
+            // appSecret 仅用于签名，不应出现在请求体中
+            params.remove("appSecret");
+            params.put("sign", sign);
 
-            // 构建查询字符串
-            StringBuilder queryString = new StringBuilder();
-            queryString.append("appId=").append(urlEncode(appId));
-            queryString.append("&appSecret=").append(urlEncode(appSecret));
-            queryString.append("&signType=RSA_SHA256");
-            queryString.append("&timestamp=").append(timestamp);
-            if (accessToken != null && !accessToken.isEmpty()) {
-                queryString.append("&accessToken=").append(urlEncode(accessToken));
+            // 对齐官方 demo：device、bizContent、sign 单独编码后替换原值
+            params.put("device", encodeURIComponent(device));
+            params.put("bizContent", encodeURIComponent(bizContent));
+            params.put("sign", encodeURIComponent(sign));
+
+            // 构建表单提交体（对齐官方 demo 的 getSignCheckContent 格式）
+            StringBuilder formBody = new StringBuilder();
+            boolean first = true;
+            for (Map.Entry<String, String> entry : params.entrySet()) {
+                if (!first) formBody.append("&");
+                formBody.append(entry.getKey()).append("=").append(entry.getValue());
+                first = false;
             }
-            queryString.append("&device=").append(deviceEncoded);
-            queryString.append("&bizContent=").append(bizContentEncoded);
-            queryString.append("&sign=").append(signEncoded);
 
-            String url = baseUrl + path + "?" + queryString;
-
-            log.info("完整请求URL: {}", url);
+            String url = baseUrl + path;
+            log.info("请求URL: {}, 表单参数: {}", url, formBody);
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .timeout(timeout)
-                    .GET()
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .POST(HttpRequest.BodyPublishers.ofString(formBody.toString()))
                     .build();
 
             HttpResponse<String> httpResp = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             String body = httpResp.body();
 
-            log.debug("网易云音乐Token响应: HTTP {}", httpResp.statusCode());
+            log.info("网易云音乐Token响应: HTTP {}, body={}", httpResp.statusCode(), body);
 
             if (httpResp.statusCode() / 100 != 2) {
-                log.error("网易云音乐Token请求失败: HTTP {}", httpResp.statusCode());
+                log.error("网易云音乐Token请求失败: HTTP {}, body={}", httpResp.statusCode(), body);
                 return null;
             }
 
@@ -563,42 +594,42 @@ public class NeteaseMusicClient {
     }
 
     /**
-     * 计算 RSA SHA256 签名
-     * 规则：对所有参数按key排序，拼接为key=value格式，然后使用RSA私钥计算SHA256WithRSA签名
+     * 计算 RSA SHA256 签名（对齐官方 demo 的 getSignCheckContent + rsa256Sign）
+     * 规则：移除 sign 参数，按 key 字母排序，拼接 key=value，RSA SHA256 签名后 Base64
      */
     private String signSha256(Map<String, String> params) {
         try {
-            // 检查私钥是否配置
             if (privateKey == null || privateKey.isBlank()) {
                 log.error("RSA私钥未配置，请在配置文件中设置 wxclaw.music.private-key");
                 return "";
             }
-            
-            // 按key排序，拼接为key=value格式（排除sign参数）
-            List<String> keys = new ArrayList<>(params.keySet());
+
+            // 对齐官方 demo：先移除 sign，再排序拼接
+            Map<String, String> paramsWithoutSign = new LinkedHashMap<>(params);
+            paramsWithoutSign.remove("sign");
+
+            List<String> keys = new ArrayList<>(paramsWithoutSign.keySet());
             Collections.sort(keys);
-            
+
             StringBuilder content = new StringBuilder();
             for (int i = 0; i < keys.size(); i++) {
                 String key = keys.get(i);
-                if ("sign".equals(key)) continue;
-                String value = params.get(key);
-                content.append(i == 0 ? "" : "&").append(key).append("=").append(value);
+                String value = paramsWithoutSign.get(key);
+                if (i > 0) content.append("&");
+                content.append(key).append("=").append(value);
             }
-            
+
             String signString = content.toString();
             log.info("签名字符串: {}", signString);
-            
-            // 使用RSA私钥计算SHA256WithRSA签名
+
             PrivateKey priKey = getPrivateKeyFromPKCS8(privateKey);
             Signature signature = Signature.getInstance("SHA256WithRSA");
             signature.initSign(priKey);
             signature.update(signString.getBytes(StandardCharsets.UTF_8));
             byte[] signed = signature.sign();
-            
-            // Base64编码
+
             return Base64.getEncoder().encodeToString(signed);
-            
+
         } catch (Exception ex) {
             log.error("签名计算失败: {}", ex.getMessage(), ex);
             return "";
@@ -628,8 +659,9 @@ public class NeteaseMusicClient {
      */
     private String buildDeviceJson() {
         return String.format(
-                "{\"deviceType\":\"openapi\",\"os\":\"openapi\",\"appVer\":\"0.1\",\"channel\":\"iotapitest\",\"model\":\"one\",\"deviceId\":\"%s\",\"brand\":\"iotapitest\",\"osVer\":\"8.1.0\",\"clientIp\":\"192.168.0.1\"}",
-                deviceId);
+                "{\"deviceType\":\"%s\",\"os\":\"%s\",\"appVer\":\"1.0.0\",\"channel\":\"%s\",\"model\":\"%s\",\"deviceId\":\"%s\",\"brand\":\"%s\",\"osVer\":\"1.0.0\",\"clientIp\":\"192.168.0.1\"}",
+                escapeJson(deviceType), escapeJson(deviceOs), escapeJson(deviceChannel),
+                escapeJson(deviceType), escapeJson(deviceId), escapeJson(deviceBrand));
     }
 
     /**

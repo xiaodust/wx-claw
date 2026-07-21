@@ -52,6 +52,30 @@ public class WechatCdnMediaService {
     }
 
     /**
+     * 下载视频
+     */
+    public ResolvedVideo resolveVideo(ILinkClient client, MessageItem messageItem) {
+        if (messageItem == null || messageItem.getVideo_item() == null) {
+            return null;
+        }
+        if (client == null) {
+            return null;
+        }
+        try {
+            byte[] videoBytes = client.downloadVideoFromMessageItem(messageItem);
+            if (videoBytes == null || videoBytes.length == 0) {
+                log.warn("视频下载失败");
+                return null;
+            }
+            log.info("视频下载成功, size={}", videoBytes.length);
+            return new ResolvedVideo(videoBytes, messageItem.getVideo_item().getVideo_size());
+        } catch (Exception ex) {
+            log.error("下载视频异常: {}", ex.getMessage());
+            return null;
+        }
+    }
+
+    /**
      * 下载文件
      */
     public ResolvedFile resolveFile(ILinkClient client, MessageItem messageItem) {
@@ -123,5 +147,8 @@ public class WechatCdnMediaService {
     }
 
     public record ResolvedFile(String fileName, String fileSize, byte[] fileBytes) {
+    }
+
+    public record ResolvedVideo(byte[] videoBytes, Long videoSize) {
     }
 }

@@ -133,6 +133,10 @@ wxclaw:
     access-token: ${NETEASE_MUSIC_ACCESS_TOKEN:}
     refresh-token: ${NETEASE_MUSIC_REFRESH_TOKEN:}
     device-id: ${NETEASE_MUSIC_DEVICE_ID:openapi}
+    device-type: ${NETEASE_MUSIC_DEVICE_TYPE:pc}
+    device-os: ${NETEASE_MUSIC_DEVICE_OS:Windows}
+    device-channel: ${NETEASE_MUSIC_DEVICE_CHANNEL:netease}
+    device-brand: ${NETEASE_MUSIC_DEVICE_BRAND:netease}
     timeout: PT10S
 
   # 提醒功能配置
@@ -179,3 +183,7 @@ wxclaw:
 # NETEASE_MUSIC_ACCESS_TOKEN - 网易云开放平台 Access Token
 # NETEASE_MUSIC_REFRESH_TOKEN - 网易云开放平台 Refresh Token（用于自动刷新）
 # NETEASE_MUSIC_DEVICE_ID   - 设备 ID
+# NETEASE_MUSIC_DEVICE_TYPE - 设备类型（需与云音乐约定，如 pc/phone/car）
+# NETEASE_MUSIC_DEVICE_OS   - 操作系统（需与云音乐约定，如 Windows/Android/iOS）
+# NETEASE_MUSIC_DEVICE_CHANNEL - 渠道（需与云音乐约定）
+# NETEASE_MUSIC_DEVICE_BRAND - 品牌（需与云音乐约定）
