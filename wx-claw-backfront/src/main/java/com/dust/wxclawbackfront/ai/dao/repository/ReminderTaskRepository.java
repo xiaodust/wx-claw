@@ -32,4 +32,9 @@ public interface ReminderTaskRepository extends JpaRepository<ReminderTask, Long
      * 查询用户的所有任务（按创建时间倒序）
      */
     List<ReminderTask> findByUserIdOrderByCreatedAtDesc(String userId);
+
+    /**
+     * 删除指定状态且创建时间早于指定时间的任务
+     */
+    long deleteByStatusAndCreatedAtBefore(String status, LocalDateTime createdAt);
 }

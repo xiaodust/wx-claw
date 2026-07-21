@@ -74,19 +74,64 @@ public class MemoryTools implements AiToolProvider {
         }
     }
 
-    @Tool(name = "list_user_memory", description = "查看当前用户的记忆数据，包括用户画像和学习规则。用于调试或用户查询自己的记忆")
+    @Tool(name = "set_role_prompt",
+          description = "设置角色提示词，让AI在后续对话中扮演指定角色（如'你是一个诗人'、'你是一个温柔的老师'等）。当用户说'扮演xxx'、'假装你是xxx'、'你是一个xxx'时调用。如果description为空则删除当前角色设定。")
+    public UserRoleResult setRolePrompt(
+            @ToolParam(description = "角色描述，如'你是一个温柔的诗人，说话像李白一样豪放'") String description) {
+        invocationStore.add("set_role_prompt", "description=" + description, null);
+
+        String userId = UserContextHolder.getUserId();
+        if (userId == null) {
+            return new UserRoleResult(false, "无法获取用户ID");
+        }
+
+        try {
+            if (description == null || description.isBlank()) {
+                memoryService.removeRolePrompt(userId);
+                return new UserRoleResult(true, "已清除角色设定，我将恢复默认行为");
+            }
+            memoryService.saveRolePrompt(userId, description);
+            return new UserRoleResult(true, "好的，已记住你的角色设定，我会按照要求扮演：" + description);
+        } catch (Exception e) {
+            log.error("保存角色提示词失败", e);
+            return new UserRoleResult(false, "保存失败: " + e.getMessage());
+        }
+    }
+
+    @Tool(name = "remove_role_prompt",
+          description = "清除当前用户的角色提示词，恢复AI的默认行为。当用户说'恢复默认'、'取消角色设定'、'不用扮演了'时调用。")
+    public UserRoleResult removeRolePrompt() {
+        invocationStore.add("remove_role_prompt", null, null);
+
+        String userId = UserContextHolder.getUserId();
+        if (userId == null) {
+            return new UserRoleResult(false, "无法获取用户ID");
+        }
+
+        try {
+            memoryService.removeRolePrompt(userId);
+            return new UserRoleResult(true, "已清除角色设定，我将恢复默认行为");
+        } catch (Exception e) {
+            log.error("清除角色提示词失败", e);
+            return new UserRoleResult(false, "清除失败: " + e.getMessage());
+        }
+    }
+
+    @Tool(name = "list_user_memory", description = "查看当前用户的记忆数据，包括角色设定、用户画像和学习规则。用于调试或用户查询自己的记忆")
     public UserMemoryView listMemory() {
         invocationStore.add("list_user_memory", null, null);
 
         String userId = UserContextHolder.getUserId();
         if (userId == null) {
-            return new UserMemoryView(List.of(), List.of());
+            return new UserMemoryView(null, List.of(), List.of());
         }
 
+        String rolePrompt = memoryService.getRolePrompt(userId);
         List<com.dust.wxclawbackfront.ai.dao.entity.UserProfile> profiles = memoryService.getProfiles(userId);
         List<com.dust.wxclawbackfront.ai.dao.entity.UserLearning> learnings = memoryService.getActiveLearnings(userId);
 
         List<ProfileEntry> profileEntries = profiles.stream()
+                .filter(p -> !"role_prompt".equals(p.getCategory()))
                 .map(p -> new ProfileEntry(p.getCategory(), p.getKeyName(), p.getKeyValue()))
                 .toList();
 
@@ -94,12 +139,13 @@ public class MemoryTools implements AiToolProvider {
                 .map(l -> new LearningEntry(l.getId(), l.getTrigger(), l.getInstruction()))
                 .toList();
 
-        return new UserMemoryView(profileEntries, learningEntries);
+        return new UserMemoryView(rolePrompt, profileEntries, learningEntries);
     }
 
     public record UserProfileResult(boolean success, String message) {}
     public record UserLearningResult(boolean success, String message) {}
+    public record UserRoleResult(boolean success, String message) {}
     public record ProfileEntry(String category, String key, String value) {}
     public record LearningEntry(Long id, String trigger, String instruction) {}
-    public record UserMemoryView(List<ProfileEntry> profiles, List<LearningEntry> learnings) {}
+    public record UserMemoryView(String rolePrompt, List<ProfileEntry> profiles, List<LearningEntry> learnings) {}
 }

@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.TaskScheduler;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.scheduling.support.CronTrigger;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +39,15 @@ public class DynamicTaskSchedulerService {
 
     @Value("${wxclaw.ai.time.zone:Asia/Shanghai}")
     private String timeZone;
+
+    @Value("${wxclaw.reminder.cleanup.enabled:true}")
+    private boolean cleanupEnabled;
+
+    @Value("${wxclaw.reminder.cleanup.cron:0 0 2 * * ?}")
+    private String cleanupCron;
+
+    @Value("${wxclaw.reminder.cleanup.retention-days:7}")
+    private int cleanupRetentionDays;
 
     // 任务ID -> 调度句柄
     private final Map<Long, ScheduledFuture<?>> scheduledTasks = new ConcurrentHashMap<>();
@@ -221,6 +231,42 @@ public class DynamicTaskSchedulerService {
      */
     public int getScheduledTaskCount() {
         return scheduledTasks.size();
+    }
+
+    /**
+     * 定时清理已取消、已失败和已执行的任务
+     * 每天凌晨2点执行，清理7天前已取消、已失败和已执行的任务
+     */
+    @Scheduled(cron = "${wxclaw.reminder.cleanup.cron:0 0 2 * * ?}")
+    @Transactional
+    public void cleanupCancelledTasks() {
+        if (!cleanupEnabled) {
+            return;
+        }
+        
+        try {
+            LocalDateTime cutoffTime = LocalDateTime.now(ZoneId.of(timeZone)).minusDays(cleanupRetentionDays);
+            
+            // 清理已取消的任务
+            long cancelledCount = repository.deleteByStatusAndCreatedAtBefore("CANCELLED", cutoffTime);
+            if (cancelledCount > 0) {
+                log.info("已清理 {} 个已取消的任务（创建时间早于 {}）", cancelledCount, cutoffTime);
+            }
+            
+            // 清理已失败的任务
+            long failedCount = repository.deleteByStatusAndCreatedAtBefore("FAILED", cutoffTime);
+            if (failedCount > 0) {
+                log.info("已清理 {} 个已失败的任务（创建时间早于 {}）", failedCount, cutoffTime);
+            }
+            
+            // 清理已执行的任务
+            long executedCount = repository.deleteByStatusAndCreatedAtBefore("EXECUTED", cutoffTime);
+            if (executedCount > 0) {
+                log.info("已清理 {} 个已执行的任务（创建时间早于 {}）", executedCount, cutoffTime);
+            }
+        } catch (Exception e) {
+            log.error("清理已取消任务失败: {}", e.getMessage(), e);
+        }
     }
 
     /**

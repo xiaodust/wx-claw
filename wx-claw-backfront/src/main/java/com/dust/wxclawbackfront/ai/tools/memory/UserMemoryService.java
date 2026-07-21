@@ -96,6 +96,48 @@ public class UserMemoryService {
         return false;
     }
 
+    private static final String ROLE_PROMPT_CATEGORY = "role_prompt";
+    private static final String ROLE_PROMPT_KEY = "description";
+
+    // ========== 角色提示词 ==========
+
+    /**
+     * 保存用户角色提示词（让 AI 扮演指定角色）
+     */
+    @Transactional
+    public void saveRolePrompt(String userId, String roleDescription) {
+        if (userId == null || userId.isBlank()) return;
+        if (roleDescription == null || roleDescription.isBlank()) {
+            removeRolePrompt(userId);
+            return;
+        }
+        saveProfile(userId, ROLE_PROMPT_CATEGORY, ROLE_PROMPT_KEY, roleDescription.trim(), "user_told");
+        log.info("角色提示词已保存: userId={}, role={}", userId, roleDescription);
+    }
+
+    /**
+     * 获取用户角色提示词
+     */
+    public String getRolePrompt(String userId) {
+        if (userId == null || userId.isBlank()) return null;
+        return profileRepository.findByUserIdAndCategoryAndKeyName(userId, ROLE_PROMPT_CATEGORY, ROLE_PROMPT_KEY)
+                .map(UserProfile::getKeyValue)
+                .orElse(null);
+    }
+
+    /**
+     * 删除用户角色提示词
+     */
+    @Transactional
+    public void removeRolePrompt(String userId) {
+        if (userId == null || userId.isBlank()) return;
+        profileRepository.findByUserIdAndCategoryAndKeyName(userId, ROLE_PROMPT_CATEGORY, ROLE_PROMPT_KEY)
+                .ifPresent(profile -> {
+                    profileRepository.delete(profile);
+                    log.info("角色提示词已删除: userId={}", userId);
+                });
+    }
+
     // ========== System Prompt 构建 ==========
 
     /**
@@ -107,15 +149,29 @@ public class UserMemoryService {
             return "";
         }
 
-        List<UserProfile> profiles = getProfiles(userId);
+        String rolePrompt = getRolePrompt(userId);
+        List<UserProfile> allProfiles = getProfiles(userId);
         List<UserLearning> learnings = getActiveLearnings(userId);
 
-        log.info("buildMemoryPrompt: userId={}, profiles={}, learnings={}", userId, profiles.size(), learnings.size());
+        // 过滤掉角色提示词，避免在"用户画像"中重复
+        List<UserProfile> profiles = allProfiles.stream()
+                .filter(p -> !ROLE_PROMPT_CATEGORY.equals(p.getCategory()))
+                .toList();
 
-        if (profiles.isEmpty() && learnings.isEmpty()) return "";
+        log.info("buildMemoryPrompt: userId={}, profiles={}, learnings={}, hasRole={}",
+                userId, profiles.size(), learnings.size(), rolePrompt != null);
+
+        if (rolePrompt == null && profiles.isEmpty() && learnings.isEmpty()) return "";
 
         StringBuilder sb = new StringBuilder();
         sb.append("\n\n# 用户记忆\n\n");
+
+        // 角色提示词放在最前面
+        if (rolePrompt != null && !rolePrompt.isBlank()) {
+            sb.append("## 角色设定\n\n");
+            sb.append("用户为你设定了以下角色身份，请在对话中严格按此角色行为：\n\n");
+            sb.append(rolePrompt).append("\n\n");
+        }
 
         if (!profiles.isEmpty()) {
             sb.append("## 用户画像\n\n");
@@ -141,6 +197,12 @@ public class UserMemoryService {
 
         sb.append("## 记忆更新指引\n\n");
         sb.append("【重要】当用户透露个人信息或要求你记住某些事情时，你必须调用工具来保存，而不仅仅是口头回复。\n\n");
+        sb.append("### 何时调用 set_role_prompt 工具：\n");
+        sb.append("- 用户明确要求你扮演某个角色，如\"扮演一个诗人\"、\"假装你是xxx\"、\"你是一个xxx\"\n");
+        sb.append("- 用户要求你改变说话风格或身份，如\"用李白的风格说话\"、\"你是一个老师\"\n");
+        sb.append("- 角色设定会持续影响后续所有对话，直到用户要求清除\n\n");
+        sb.append("### 何时调用 remove_role_prompt 工具：\n");
+        sb.append("- 用户说\"恢复默认\"、\"不用扮演了\"、\"取消角色设定\"\n\n");
         sb.append("### 何时调用 update_user_profile 工具：\n");
         sb.append("- 用户透露个人信息：城市、职业、偏好、习惯、作息等\n");
         sb.append("- 用户说\"我住在北京\"、\"我是程序员\"、\"我喜欢xxx\"等\n");
