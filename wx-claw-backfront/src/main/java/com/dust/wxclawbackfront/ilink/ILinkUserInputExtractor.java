@@ -1,10 +1,10 @@
 package com.dust.wxclawbackfront.ilink;
 
-import com.dust.wxclawbackfront.ai.file.FileContentExtractor;
-import com.dust.wxclawbackfront.ai.image.ImageHandler;
-import com.dust.wxclawbackfront.ai.image.ImageUnderstandingResult;
-import com.dust.wxclawbackfront.ai.video.VideoHandler;
-import com.dust.wxclawbackfront.ai.video.VideoUnderstandingResult;
+import com.dust.wxclawbackfront.bot.agent.llm.chat.file.FileContentExtractor;
+import com.dust.wxclawbackfront.bot.agent.llm.image.ImageHandler;
+import com.dust.wxclawbackfront.bot.agent.llm.image.ImageUnderstandingResult;
+import com.dust.wxclawbackfront.bot.agent.llm.video.VideoHandler;
+import com.dust.wxclawbackfront.bot.agent.llm.video.VideoUnderstandingResult;
 import com.dust.wxclawbackfront.ilink.media.WechatCdnMediaService;
 import com.github.wechat.ilink.sdk.ILinkClient;
 import com.github.wechat.ilink.sdk.core.model.FileItem;
