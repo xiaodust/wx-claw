@@ -88,7 +88,19 @@
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
 
+        <!-- 文件内容解析：PDF -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.3</version>
+        </dependency>
 
+        <!-- 文件内容解析：Word/Excel -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.2.5</version>
+        </dependency>
 
     </dependencies>
 

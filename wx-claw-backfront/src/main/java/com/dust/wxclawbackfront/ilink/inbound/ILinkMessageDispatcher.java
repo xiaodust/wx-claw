@@ -90,6 +90,9 @@ public class ILinkMessageDispatcher {
     // key: userId, value: 图片描述
     private final ConcurrentHashMap<String, String> pendingImageContexts = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, String> pendingVideoContexts = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> pendingFileContexts = new ConcurrentHashMap<>();
+    // 待上传的文件：存储文件字节，用于用户确认后上传到知识库
+    private final ConcurrentHashMap<String, PendingFileUpload> pendingFileUploads = new ConcurrentHashMap<>();
 
     @Value("${wxclaw.ai.context.max-history-messages:12}")
     private int maxHistoryMessages;
@@ -253,10 +256,16 @@ public class ILinkMessageDispatcher {
                     && !userInput.getError().isBlank()) {
                 reply = "收到视频，但视频理解失败。请尝试重新发送。\n错误信息：" + userInput.getError().trim();
             } else if ("FILE".equalsIgnoreCase(userInput.getMessageItemType())) {
-                reply = handleFileUpload(userInput, userId);
-                if (reply == null || reply.isBlank()) {
-                    reply = "收到文件，但上传到知识库失败。请稍后再试。";
+                // 收到文件，存储文件信息，引导用户说明意图
+                String fileInfo = buildFileInfo(userInput);
+                pendingFileContexts.put(userId, fileInfo);
+                // 存储文件字节，用于后续上传到知识库
+                if (userInput.getFileBytes() != null && userInput.getFileBytes().length > 0) {
+                    pendingFileUploads.put(userId, new PendingFileUpload(
+                            userInput.getFileName(), userInput.getFileBytes()));
                 }
+                String fileName = userInput.getFileName() != null ? userInput.getFileName() : "未知文件";
+                reply = "收到文件：" + fileName + "，请告诉我你想让我做什么？\n例如：上传到知识库、分析文件内容、总结要点、优化内容、回答关于文件的问题等。";
             } else {
                 // 检查是否有待处理的图片上下文
                 String pendingImageDesc = pendingImageContexts.remove(userId);
@@ -275,7 +284,28 @@ public class ILinkMessageDispatcher {
                         ILinkUserInput combinedInput = ILinkUserInput.text(combinedText);
                         reply = processWithAgent(combinedInput, Collections.emptyList(), userId, sessionId);
                     } else {
-                        reply = processWithAgent(userInput, historyMessages, userId, sessionId);
+                        // 检查是否有待处理的文件上下文
+                        String pendingFileInfo = pendingFileContexts.remove(userId);
+                        if (pendingFileInfo != null && !pendingFileInfo.isBlank()) {
+                            String userIntent = userInput.getDisplayText();
+                            // 检查用户是否要求上传到知识库
+                            if (isKnowledgeBaseUploadIntent(userIntent)) {
+                                PendingFileUpload pendingFile = pendingFileUploads.remove(userId);
+                                if (pendingFile != null) {
+                                    reply = handleFileUploadDirect(pendingFile.fileName(), pendingFile.fileBytes(), userId);
+                                } else {
+                                    reply = "文件数据已过期，请重新发送文件。";
+                                }
+                            } else {
+                                // 其他意图：组合文件信息 + 用户需求，交给 Agent 处理
+                                String combinedText = pendingFileInfo + "\n\n用户的要求：" + userIntent;
+                                pendingFileUploads.remove(userId); // 清理
+                                ILinkUserInput combinedInput = ILinkUserInput.text(combinedText);
+                                reply = processWithAgent(combinedInput, Collections.emptyList(), userId, sessionId);
+                            }
+                        } else {
+                            reply = processWithAgent(userInput, historyMessages, userId, sessionId);
+                        }
                     }
                 }
             }
@@ -381,6 +411,74 @@ public class ILinkMessageDispatcher {
         }
 
         return result.getReplyText();
+    }
+
+    /**
+     * 判断用户意图是否为上传到知识库
+     */
+    private boolean isKnowledgeBaseUploadIntent(String text) {
+        if (text == null) return false;
+        String lower = text.trim().toLowerCase();
+        return lower.contains("上传") && lower.contains("知识库")
+                || lower.contains("导入") && lower.contains("知识库")
+                || lower.contains("加入") && lower.contains("知识库")
+                || lower.contains("存入") && lower.contains("知识库")
+                || lower.equals("上传到知识库")
+                || lower.equals("上传知识库")
+                || lower.equals("入库");
+    }
+
+    /**
+     * 直接上传文件到知识库（文件字节已在内存中）
+     */
+    private String handleFileUploadDirect(String fileName, byte[] fileBytes, String userId) {
+        try {
+            RagFlowClient ragFlowClient = ragFlowClientProvider.getIfAvailable();
+            if (ragFlowClient == null) {
+                log.warn("RagFlowClient 不可用，无法上传文件到知识库");
+                return "知识库服务暂不可用，请稍后再试。";
+            }
+            if (fileName == null || fileName.isBlank()) {
+                fileName = "unknown_file";
+            }
+            if (fileBytes == null || fileBytes.length == 0) {
+                return "文件内容为空，请重新发送。";
+            }
+            log.info("上传文件到知识库: fileName={}, size={}, userId={}", fileName, fileBytes.length, userId);
+            RagFlowClient.UploadResult result = ragFlowClient.uploadDocument(fileBytes, fileName);
+            if (result.success()) {
+                log.info("文件上传成功: fileName={}, documentId={}, userId={}", fileName, result.documentId(), userId);
+                return "文件「" + fileName + "」已成功上传到知识库。";
+            } else {
+                log.error("文件上传失败: fileName={}, error={}, userId={}", fileName, result.message(), userId);
+                return "上传到知识库失败：" + result.message();
+            }
+        } catch (Exception ex) {
+            log.error("上传文件到知识库失败: userId={}, error={}", userId, ex.getMessage(), ex);
+            return "上传失败：" + ex.getMessage();
+        }
+    }
+
+    /**
+     * 待上传文件记录
+     */
+    private record PendingFileUpload(String fileName, byte[] fileBytes) {}
+
+    /**
+     * 构建文件信息文本，用于存储到 pending 上下文
+     */
+    private String buildFileInfo(ILinkUserInput userInput) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("用户发送了一个文件：").append(userInput.getFileName() != null ? userInput.getFileName() : "未知文件");
+        if (userInput.getFileSize() != null) {
+            sb.append("（大小：").append(userInput.getFileSize()).append("字节）");
+        }
+        if (userInput.getFileContent() != null && !userInput.getFileContent().isBlank()) {
+            sb.append("。文件内容如下：\n").append(userInput.getFileContent());
+        } else {
+            sb.append("。未能解析文件内容。");
+        }
+        return sb.toString();
     }
 
     /**

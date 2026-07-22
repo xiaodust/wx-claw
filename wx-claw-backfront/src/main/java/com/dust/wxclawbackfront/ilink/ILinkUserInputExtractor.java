@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.ilink;
 
+import com.dust.wxclawbackfront.ai.file.FileContentExtractor;
 import com.dust.wxclawbackfront.ai.image.ImageHandler;
 import com.dust.wxclawbackfront.ai.image.ImageUnderstandingResult;
 import com.dust.wxclawbackfront.ai.video.VideoHandler;
@@ -32,11 +33,15 @@ public class ILinkUserInputExtractor {
     private final ImageHandler imageHandler;
     private final VideoHandler videoHandler;
     private final WechatCdnMediaService cdnMediaService;
+    private final FileContentExtractor fileContentExtractor;
 
-    public ILinkUserInputExtractor(ImageHandler imageHandler, VideoHandler videoHandler, WechatCdnMediaService cdnMediaService) {
+    public ILinkUserInputExtractor(ImageHandler imageHandler, VideoHandler videoHandler,
+                                     WechatCdnMediaService cdnMediaService,
+                                     FileContentExtractor fileContentExtractor) {
         this.imageHandler = imageHandler;
         this.videoHandler = videoHandler;
         this.cdnMediaService = cdnMediaService;
+        this.fileContentExtractor = fileContentExtractor;
     }
 
     public ILinkUserInput extract(ILinkClient client, WeixinMessage msg) {
@@ -95,17 +100,28 @@ public class ILinkUserInputExtractor {
                     return handleVideoFile(client, item, fileName, fileSize);
                 }
 
-                // 普通文件处理
+                // 普通文件处理：下载并提取内容
                 WechatCdnMediaService.ResolvedFile resolvedFile = cdnMediaService.resolveFile(client, item);
                 byte[] fileBytes = resolvedFile != null ? resolvedFile.fileBytes() : null;
                 
                 if (fileBytes == null || fileBytes.length == 0) {
                     log.warn("文件下载失败: fileName={}", fileName);
-                    return ILinkUserInput.file(null, fileName, fileSize, null);
+                    return ILinkUserInput.file(null, fileName, fileSize, null, null);
                 }
                 
                 log.info("文件下载成功: fileName={}, actualSize={}", fileName, fileBytes.length);
-                return ILinkUserInput.file(null, fileName, fileSize, fileBytes);
+
+                // 提取文件内容
+                String fileContent = null;
+                FileContentExtractor.FileExtractResult extractResult = fileContentExtractor.extract(fileBytes, fileName);
+                if (extractResult.isSuccess()) {
+                    fileContent = extractResult.content();
+                    log.info("文件内容提取成功: fileName={}, contentLength={}", fileName, fileContent.length());
+                } else {
+                    log.warn("文件内容提取失败: fileName={}, error={}", fileName, extractResult.error());
+                }
+
+                return ILinkUserInput.file(null, fileName, fileSize, fileBytes, fileContent);
             }
         }
 

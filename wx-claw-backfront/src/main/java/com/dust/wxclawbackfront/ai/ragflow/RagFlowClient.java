@@ -304,9 +304,20 @@ public class RagFlowClient {
                 }
             }
 
-            // 提取文档信息
-            Map<String, Object> data = (Map<String, Object>) responseMap.get("data");
-            if (data != null) {
+            // 提取文档信息（data 可能是数组或对象）
+            Object dataObj = responseMap.get("data");
+            if (dataObj instanceof List) {
+                // data 是数组，取第一个元素
+                List<?> dataList = (List<?>) dataObj;
+                if (!dataList.isEmpty() && dataList.get(0) instanceof Map) {
+                    Map<String, Object> doc = (Map<String, Object>) dataList.get(0);
+                    String documentId = (String) doc.get("id");
+                    String documentName = (String) doc.get("name");
+                    return new UploadResult(true, documentId, "文件上传成功: " + documentName);
+                }
+            } else if (dataObj instanceof Map) {
+                // data 是对象
+                Map<String, Object> data = (Map<String, Object>) dataObj;
                 String documentId = (String) data.get("id");
                 String documentName = (String) data.get("name");
                 return new UploadResult(true, documentId, "文件上传成功: " + documentName);

@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.regex.Pattern;
 
 /**
  * 文档生成器
@@ -16,6 +17,22 @@ import java.time.format.DateTimeFormatter;
 public class DocumentGenerator {
 
     private static final int TEXT_THRESHOLD = 500; // 超过500字生成文档
+
+    // Markdown 语法清理正则
+    private static final Pattern MD_HEADER = Pattern.compile("^(#{1,6})\\s+", Pattern.MULTILINE);
+    private static final Pattern MD_BOLD = Pattern.compile("\\*\\*(.+?)\\*\\*");
+    private static final Pattern MD_ITALIC = Pattern.compile("(?<!\\*)\\*(?!\\*)(.+?)(?<!\\*)\\*(?!\\*)");
+    private static final Pattern MD_INLINE_CODE = Pattern.compile("`([^`]+)`");
+    private static final Pattern MD_LINK = Pattern.compile("\\[([^]]+)]\\(([^)]+)\\)");
+    private static final Pattern MD_IMAGE = Pattern.compile("!\\[([^]]*)]\\(([^)]+)\\)");
+    private static final Pattern MD_STRIKETHROUGH = Pattern.compile("~~(.+?)~~");
+    private static final Pattern MD_HRULE = Pattern.compile("^\\s*([-*_])(\\s*\\1){2,}\\s*$", Pattern.MULTILINE);
+    private static final Pattern MD_TABLE_SEP = Pattern.compile("^\\|[-\\s|:]+\\|\\s*$", Pattern.MULTILINE);
+    private static final Pattern MD_BLOCKQUOTE = Pattern.compile("^>\\s?", Pattern.MULTILINE);
+    private static final Pattern MD_CODE_BLOCK = Pattern.compile("```[\\w]*\\n?([\\s\\S]*?)```");
+    private static final Pattern MD_LIST_BULLET = Pattern.compile("^(\\s*)[-*+]\\s+", Pattern.MULTILINE);
+    private static final Pattern MD_LIST_NUM = Pattern.compile("^(\\s*)\\d+\\.\\s+", Pattern.MULTILINE);
+    private static final Pattern MD_HTML_TAG = Pattern.compile("<[^>]+>");
 
     /**
      * 检查是否需要生成文档
@@ -37,7 +54,7 @@ public class DocumentGenerator {
 
         boolean isMarkdown = "markdown".equalsIgnoreCase(format) || "md".equalsIgnoreCase(format);
         String fileExtension = isMarkdown ? "md" : "txt";
-        String formattedContent = isMarkdown ? formatAsMarkdown(content) : content;
+        String formattedContent = isMarkdown ? formatAsMarkdown(content) : formatAsPlainText(content);
         String fileName = generateFileName(formattedContent, fileExtension);
 
         byte[] bytes = formattedContent.getBytes(StandardCharsets.UTF_8);
@@ -49,10 +66,67 @@ public class DocumentGenerator {
     }
 
     /**
+     * 格式化为纯文本 - 剥离所有 Markdown 语法
+     */
+    private String formatAsPlainText(String content) {
+        String text = cleanCodeBlockMarkers(content);
+
+        // 先处理代码块（保留内容，去除围栏）
+        text = MD_CODE_BLOCK.matcher(text).replaceAll("$1");
+
+        // 剥离 markdown 语法
+        text = MD_IMAGE.matcher(text).replaceAll("$1");           // ![alt](url) → alt
+        text = MD_LINK.matcher(text).replaceAll("$1 ($2)");       // [text](url) → text (url)
+        text = MD_HEADER.matcher(text).replaceAll("");             // ### → 移除
+        text = MD_BOLD.matcher(text).replaceAll("$1");             // **bold** → bold
+        text = MD_ITALIC.matcher(text).replaceAll("$1");           // *italic* → italic
+        text = MD_STRIKETHROUGH.matcher(text).replaceAll("$1");    // ~~del~~ → del
+        text = MD_INLINE_CODE.matcher(text).replaceAll("$1");      // `code` → code
+        text = MD_BLOCKQUOTE.matcher(text).replaceAll("");         // > 引用 → 引用
+        text = MD_HRULE.matcher(text).replaceAll("");              // --- → 移除
+        text = MD_TABLE_SEP.matcher(text).replaceAll("");          // |---|---| → 移除
+        // 列表项：保留内容，用缩进标识
+        text = MD_LIST_BULLET.matcher(text).replaceAll("$1- ");
+        text = MD_LIST_NUM.matcher(text).replaceAll("$1");         // 1. → 移除编号
+        text = MD_HTML_TAG.matcher(text).replaceAll("");           // HTML 标签 → 移除
+
+        // 表格行：将 | 分隔转为空格分隔
+        text = cleanTableRows(text);
+
+        // 清理多余空行（超过2个连续空行压缩为2个）
+        text = text.replaceAll("\\n{3,}", "\n\n");
+
+        return text.trim() + "\n";
+    }
+
+    /**
+     * 清理表格行：| col1 | col2 | → col1  col2
+     */
+    private String cleanTableRows(String text) {
+        StringBuilder sb = new StringBuilder();
+        for (String line : text.split("\n")) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
+                // 去掉首尾 |，用多个空格分隔列
+                String inner = trimmed.substring(1, trimmed.length() - 1);
+                String[] cols = inner.split("\\|");
+                StringBuilder row = new StringBuilder();
+                for (int i = 0; i < cols.length; i++) {
+                    if (i > 0) row.append("    ");
+                    row.append(cols[i].trim());
+                }
+                sb.append(row).append("\n");
+            } else {
+                sb.append(line).append("\n");
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
      * 格式化为 Markdown
      */
     private String formatAsMarkdown(String content) {
-        // 清理 AI 回复中的代码块标记
         String cleanedContent = cleanCodeBlockMarkers(content);
 
         StringBuilder sb = new StringBuilder();
@@ -63,28 +137,40 @@ public class DocumentGenerator {
 
         // 处理内容，保留原有的换行和格式
         String[] lines = cleanedContent.split("\n");
+        boolean inCodeBlock = false;
+
         for (String line : lines) {
             String trimmed = line.trim();
 
-            // 如果已经是 markdown 标题格式，保持原样
-            if (trimmed.startsWith("#")) {
+            // 代码块围栏：原样保留，切换状态
+            if (trimmed.startsWith("```")) {
                 sb.append(line).append("\n");
+                inCodeBlock = !inCodeBlock;
+                continue;
             }
-            // 如果是列表项，保持原样
-            else if (trimmed.startsWith("- ") || trimmed.startsWith("* ") || trimmed.startsWith("• ")) {
+
+            // 代码块内部：原样保留，不做任何处理
+            if (inCodeBlock) {
                 sb.append(line).append("\n");
+                continue;
             }
-            // 如果是数字列表，保持原样
-            else if (trimmed.matches("^\\d+[.、].*")) {
-                sb.append(line).append("\n");
-            }
-            // 空行保持
-            else if (trimmed.isEmpty()) {
+
+            // 空行
+            if (trimmed.isEmpty()) {
                 sb.append("\n");
             }
-            // 普通文本，添加段落格式
+            // 标题、列表、引用、表格、分隔线等 markdown 元素：原样保留
+            else if (trimmed.startsWith("#")
+                    || trimmed.startsWith("- ") || trimmed.startsWith("* ") || trimmed.startsWith("• ")
+                    || trimmed.startsWith("> ")
+                    || trimmed.startsWith("|")
+                    || trimmed.matches("^\\d+[.、].*")
+                    || trimmed.matches("^[-*_]{3,}$")) {
+                sb.append(line).append("\n");
+            }
+            // 普通文本：保持原样换行
             else {
-                sb.append(line).append("\n\n");
+                sb.append(line).append("\n");
             }
         }
 

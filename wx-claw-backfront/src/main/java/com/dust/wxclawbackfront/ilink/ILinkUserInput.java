@@ -17,6 +17,7 @@ public final class ILinkUserInput {
     private final String fileName;
     private final String fileSize;
     private final byte[] fileBytes;
+    private final String fileContent;
     private final String videoUrl;
     private final String videoModel;
     private final String videoDescription;
@@ -35,6 +36,7 @@ public final class ILinkUserInput {
                            String fileName,
                            String fileSize,
                            byte[] fileBytes,
+                           String fileContent,
                            String videoUrl,
                            String videoModel,
                            String videoDescription,
@@ -52,6 +54,7 @@ public final class ILinkUserInput {
         this.fileName = fileName;
         this.fileSize = fileSize;
         this.fileBytes = fileBytes;
+        this.fileContent = fileContent;
         this.videoUrl = videoUrl;
         this.videoModel = videoModel;
         this.videoDescription = videoDescription;
@@ -61,7 +64,7 @@ public final class ILinkUserInput {
 
     public static ILinkUserInput text(String text) {
         return new ILinkUserInput("TEXT", text, text, text,
-                null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null,
                 null, null, null, null, null);
     }
 
@@ -75,7 +78,7 @@ public final class ILinkUserInput {
             prompt = text;
         }
         return new ILinkUserInput("TEXT", display, prompt, persist,
-                null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null,
                 null, null, null, null, null);
     }
 
@@ -103,7 +106,7 @@ public final class ILinkUserInput {
 
         return new ILinkUserInput("IMAGE", display, prompt, persist,
                 url, model, description, imageLlmRequestJson,
-                null, null, null, null,
+                null, null, null, null, null,
                 null, null, null, null, error);
     }
 
@@ -131,18 +134,25 @@ public final class ILinkUserInput {
 
         return new ILinkUserInput("VIDEO", display, prompt, persist,
                 null, null, null, null,
-                null, null, null, null,
+                null, null, null, null, null,
                 url, model, description, videoLlmRequestJson, error);
     }
 
-    public static ILinkUserInput file(String url, String fileName, String fileSize, byte[] fileBytes) {
+    public static ILinkUserInput file(String url, String fileName, String fileSize, byte[] fileBytes, String fileContent) {
         String display = "[FILE:" + (fileName != null ? fileName : "unknown") + "]";
         String persist = "[FILE] " + fileName + (fileSize != null ? " (" + fileSize + " bytes)" : "");
-        String prompt = "用户发送了一个文件：" + fileName + (fileSize != null ? "，大小：" + fileSize + "字节" : "")
-                + "。请用中文告知用户文件已收到。";
+        String prompt;
+        if (fileContent != null && !fileContent.isBlank()) {
+            prompt = "用户发送了一个文件：" + fileName
+                    + "。文件内容如下：\n" + truncate(fileContent, 2000)
+                    + "\n\n请等待用户说明意图后再处理。";
+        } else {
+            prompt = "用户发送了一个文件：" + fileName
+                    + "，未能解析文件内容。请等待用户说明意图后再处理。";
+        }
         return new ILinkUserInput("FILE", display, prompt, persist,
                 null, null, null, null,
-                url, fileName, fileSize, fileBytes,
+                url, fileName, fileSize, fileBytes, fileContent,
                 null, null, null, null, null);
     }
 
@@ -150,7 +160,7 @@ public final class ILinkUserInput {
         String display = "[UNSUPPORTED:" + type + "]";
         String prompt = "用户发送了非文本消息类型：" + type + "。请用中文礼貌回复：目前仅支持文字、图片、视频和文件，其他类型暂不支持。";
         return new ILinkUserInput(type, display, prompt, display,
-                null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null,
                 null, null, null, null, null);
     }
 

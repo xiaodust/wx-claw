@@ -97,6 +97,8 @@ public class UniversalChatHandler implements ChatHandler {
 
         // 4. 构建 system prompt
         StringBuilder systemPromptBuilder = new StringBuilder();
+        // 微信聊天场景：要求纯文本回复
+        systemPromptBuilder.append("【回复格式要求】你是在微信聊天中回复用户，请使用纯文本格式，不要使用任何 Markdown 语法（不要用 # 标题、** 粗体、* 列表、` 代码标记、> 引用、--- 分隔线、表格等）。直接用自然语言回复，需要分点说明时用数字编号（1. 2. 3.），需要强调时用【】标注。\n\n");
         if (skillPrompt != null && !skillPrompt.isBlank()) {
             systemPromptBuilder.append(skillPrompt);
         }
