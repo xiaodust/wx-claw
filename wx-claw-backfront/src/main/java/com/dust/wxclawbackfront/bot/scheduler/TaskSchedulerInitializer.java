@@ -1,7 +1,7 @@
-package com.dust.wxclawbackfront.scheduler;
+package com.dust.wxclawbackfront.bot.scheduler;
 
-import com.dust.wxclawbackfront.ai.dao.entity.ReminderTask;
-import com.dust.wxclawbackfront.ai.dao.repository.ReminderTaskRepository;
+import com.dust.wxclawbackfront.bot.dao.entity.ReminderTask;
+import com.dust.wxclawbackfront.bot.dao.repository.ReminderTaskRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;

@@ -42,29 +42,27 @@ public class ReminderHandler {
      */
     @Transactional
     public ReminderCreateResult createDelayReminder(String userId, String reminderText, int delayMinutes) {
-        if (userId == null || userId.isBlank()) {
-            return new ReminderCreateResult(false, null, "用户ID为空");
+        String error;
+        if ((error = ReminderValidator.validateUserId(userId)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (reminderText == null || reminderText.isBlank()) {
-            return new ReminderCreateResult(false, null, "提醒内容为空");
+        if ((error = ReminderValidator.validateReminderText(reminderText)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (delayMinutes <= 0) {
-            return new ReminderCreateResult(false, null, "延迟时间必须大于0分钟");
-        }
-        if (delayMinutes > maxDelayDays * 24 * 60) {
-            return new ReminderCreateResult(false, null, "延迟时间不能超过" + maxDelayDays + "天");
+        if ((error = ReminderValidator.validateDelayMinutes(delayMinutes, maxDelayDays)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
 
         LocalDateTime now = LocalDateTime.now(ZoneId.of(timeZone));
         LocalDateTime triggerTime = now.plusMinutes(delayMinutes);
 
-        ReminderTask task = new ReminderTask();
-        task.setUserId(userId);
-        task.setReminderText(reminderText);
-        task.setTriggerTime(triggerTime);
-        task.setTaskType("ONE_TIME");
-        task.setActionType("REMINDER");
-        task.setStatus("PENDING");
+        ReminderTask task = ReminderTaskBuilder.builder()
+                .userId(userId)
+                .reminderText(reminderText)
+                .triggerTime(triggerTime)
+                .taskType("ONE_TIME")
+                .actionType("REMINDER")
+                .build();
 
         ReminderTask saved = repository.save(task);
         log.info("创建延迟提醒成功: userId={}, reminderId={}, triggerTime={}, text={}", 
@@ -83,38 +81,29 @@ public class ReminderHandler {
      */
     @Transactional
     public ReminderCreateResult createDelayWebSearch(String userId, String query, String freshness, int count, int delayMinutes) {
-        if (userId == null || userId.isBlank()) {
-            return new ReminderCreateResult(false, null, "用户ID为空");
+        String error;
+        if ((error = ReminderValidator.validateUserId(userId)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (query == null || query.isBlank()) {
-            return new ReminderCreateResult(false, null, "搜索关键词为空");
+        if ((error = ReminderValidator.validateQuery(query)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (delayMinutes <= 0) {
-            return new ReminderCreateResult(false, null, "延迟时间必须大于0分钟");
-        }
-        if (delayMinutes > maxDelayDays * 24 * 60) {
-            return new ReminderCreateResult(false, null, "延迟时间不能超过" + maxDelayDays + "天");
+        if ((error = ReminderValidator.validateDelayMinutes(delayMinutes, maxDelayDays)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
 
         try {
             LocalDateTime now = LocalDateTime.now(ZoneId.of(timeZone));
             LocalDateTime triggerTime = now.plusMinutes(delayMinutes);
 
-            // 构建参数
-            Map<String, Object> params = new HashMap<>();
-            params.put("query", query);
-            params.put("freshness", freshness == null || freshness.isBlank() ? "noLimit" : freshness);
-            params.put("count", count);
-            String actionParams = objectMapper.writeValueAsString(params);
-
-            ReminderTask task = new ReminderTask();
-            task.setUserId(userId);
-            task.setReminderText("搜索：" + query);
-            task.setTriggerTime(triggerTime);
-            task.setTaskType("ONE_TIME");
-            task.setActionType("WEB_SEARCH_PUSH");
-            task.setActionParams(actionParams);
-            task.setStatus("PENDING");
+            ReminderTask task = ReminderTaskBuilder.builder()
+                    .userId(userId)
+                    .reminderText("搜索：" + query)
+                    .triggerTime(triggerTime)
+                    .taskType("ONE_TIME")
+                    .actionType("WEB_SEARCH_PUSH")
+                    .actionParams(ReminderTaskBuilder.createParams("query", query, "freshness", freshness == null || freshness.isBlank() ? "noLimit" : freshness, "count", count))
+                    .build();
 
             ReminderTask saved = repository.save(task);
             log.info("创建延迟搜索任务成功: userId={}, taskId={}, query={}, triggerTime={}", 
@@ -137,36 +126,29 @@ public class ReminderHandler {
      */
     @Transactional
     public ReminderCreateResult createDelayAiChat(String userId, String prompt, int delayMinutes) {
-        if (userId == null || userId.isBlank()) {
-            return new ReminderCreateResult(false, null, "用户ID为空");
+        String error;
+        if ((error = ReminderValidator.validateUserId(userId)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (prompt == null || prompt.isBlank()) {
-            return new ReminderCreateResult(false, null, "AI提示词为空");
+        if ((error = ReminderValidator.validatePrompt(prompt)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (delayMinutes <= 0) {
-            return new ReminderCreateResult(false, null, "延迟时间必须大于0分钟");
-        }
-        if (delayMinutes > maxDelayDays * 24 * 60) {
-            return new ReminderCreateResult(false, null, "延迟时间不能超过" + maxDelayDays + "天");
+        if ((error = ReminderValidator.validateDelayMinutes(delayMinutes, maxDelayDays)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
 
         try {
             LocalDateTime now = LocalDateTime.now(ZoneId.of(timeZone));
             LocalDateTime triggerTime = now.plusMinutes(delayMinutes);
 
-            // 构建参数
-            Map<String, Object> params = new HashMap<>();
-            params.put("prompt", prompt);
-            String actionParams = objectMapper.writeValueAsString(params);
-
-            ReminderTask task = new ReminderTask();
-            task.setUserId(userId);
-            task.setReminderText("AI：" + (prompt.length() > 20 ? prompt.substring(0, 20) + "..." : prompt));
-            task.setTriggerTime(triggerTime);
-            task.setTaskType("ONE_TIME");
-            task.setActionType("AI_CHAT");
-            task.setActionParams(actionParams);
-            task.setStatus("PENDING");
+            ReminderTask task = ReminderTaskBuilder.builder()
+                    .userId(userId)
+                    .reminderText("AI：" + (prompt.length() > 20 ? prompt.substring(0, 20) + "..." : prompt))
+                    .triggerTime(triggerTime)
+                    .taskType("ONE_TIME")
+                    .actionType("AI_CHAT")
+                    .actionParams(ReminderTaskBuilder.createParams("prompt", prompt))
+                    .build();
 
             ReminderTask saved = repository.save(task);
             log.info("创建延迟AI任务成功: userId={}, taskId={}, prompt={}, triggerTime={}", 
@@ -189,14 +171,15 @@ public class ReminderHandler {
      */
     @Transactional
     public ReminderCreateResult createDailyReminder(String userId, String reminderText, int hour, int minute) {
-        if (userId == null || userId.isBlank()) {
-            return new ReminderCreateResult(false, null, "用户ID为空");
+        String error;
+        if ((error = ReminderValidator.validateUserId(userId)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (reminderText == null || reminderText.isBlank()) {
-            return new ReminderCreateResult(false, null, "提醒内容为空");
+        if ((error = ReminderValidator.validateReminderText(reminderText)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-            return new ReminderCreateResult(false, null, "时间格式错误（小时0-23，分钟0-59）");
+        if ((error = ReminderValidator.validateHourAndMinute(hour, minute)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
 
         LocalDateTime now = LocalDateTime.now(ZoneId.of(timeZone));
@@ -207,14 +190,14 @@ public class ReminderHandler {
             triggerTime = triggerTime.plusDays(1);
         }
 
-        ReminderTask task = new ReminderTask();
-        task.setUserId(userId);
-        task.setReminderText(reminderText);
-        task.setTriggerTime(triggerTime);
-        task.setTaskType("DAILY");
-        task.setActionType("REMINDER");
-        task.setCronExpression(String.format("0 %d %d * * *", minute, hour));
-        task.setStatus("PENDING");
+        ReminderTask task = ReminderTaskBuilder.builder()
+                .userId(userId)
+                .reminderText(reminderText)
+                .triggerTime(triggerTime)
+                .taskType("DAILY")
+                .actionType("REMINDER")
+                .cronExpression(String.format("0 %d %d * * *", minute, hour))
+                .build();
 
         ReminderTask saved = repository.save(task);
         log.info("创建每日提醒成功: userId={}, reminderId={}, cron={}, text={}", 
@@ -233,17 +216,18 @@ public class ReminderHandler {
      */
     @Transactional
     public ReminderCreateResult createWeeklyReminder(String userId, String reminderText, int dayOfWeek, int hour, int minute) {
-        if (userId == null || userId.isBlank()) {
-            return new ReminderCreateResult(false, null, "用户ID为空");
+        String error;
+        if ((error = ReminderValidator.validateUserId(userId)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (reminderText == null || reminderText.isBlank()) {
-            return new ReminderCreateResult(false, null, "提醒内容为空");
+        if ((error = ReminderValidator.validateReminderText(reminderText)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (dayOfWeek < 1 || dayOfWeek > 7) {
-            return new ReminderCreateResult(false, null, "星期数错误（1-7，1=周一，7=周日）");
+        if ((error = ReminderValidator.validateDayOfWeek(dayOfWeek)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-            return new ReminderCreateResult(false, null, "时间格式错误（小时0-23，分钟0-59）");
+        if ((error = ReminderValidator.validateHourAndMinute(hour, minute)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
 
         LocalDateTime now = LocalDateTime.now(ZoneId.of(timeZone));
@@ -259,14 +243,14 @@ public class ReminderHandler {
             triggerTime = triggerTime.plusWeeks(1);
         }
 
-        ReminderTask task = new ReminderTask();
-        task.setUserId(userId);
-        task.setReminderText(reminderText);
-        task.setTriggerTime(triggerTime);
-        task.setTaskType("WEEKLY");
-        task.setActionType("REMINDER");
-        task.setCronExpression(String.format("0 %d %d * * %s", minute, hour, getDayOfWeekCron(dayOfWeek)));
-        task.setStatus("PENDING");
+        ReminderTask task = ReminderTaskBuilder.builder()
+                .userId(userId)
+                .reminderText(reminderText)
+                .triggerTime(triggerTime)
+                .taskType("WEEKLY")
+                .actionType("REMINDER")
+                .cronExpression(String.format("0 %d %d * * %s", minute, hour, getDayOfWeekCron(dayOfWeek)))
+                .build();
 
         ReminderTask saved = repository.save(task);
         log.info("创建每周提醒成功: userId={}, reminderId={}, cron={}, text={}", 
@@ -286,30 +270,31 @@ public class ReminderHandler {
      */
     @Transactional
     public ReminderCreateResult createMonthlyReminder(String userId, String reminderText, int dayOfMonth, int hour, int minute) {
-        if (userId == null || userId.isBlank()) {
-            return new ReminderCreateResult(false, null, "用户ID为空");
+        String error;
+        if ((error = ReminderValidator.validateUserId(userId)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (reminderText == null || reminderText.isBlank()) {
-            return new ReminderCreateResult(false, null, "提醒内容为空");
+        if ((error = ReminderValidator.validateReminderText(reminderText)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (dayOfMonth < 1 || dayOfMonth > 31) {
-            return new ReminderCreateResult(false, null, "日期错误（1-31）");
+        if ((error = ReminderValidator.validateDayOfMonth(dayOfMonth)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-            return new ReminderCreateResult(false, null, "时间格式错误（小时0-23，分钟0-59）");
+        if ((error = ReminderValidator.validateHourAndMinute(hour, minute)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
 
         LocalDateTime now = LocalDateTime.now(ZoneId.of(timeZone));
         LocalDateTime triggerTime = calculateNextMonthlyTrigger(now, dayOfMonth, hour, minute);
 
-        ReminderTask task = new ReminderTask();
-        task.setUserId(userId);
-        task.setReminderText(reminderText);
-        task.setTriggerTime(triggerTime);
-        task.setTaskType("MONTHLY");
-        task.setActionType("REMINDER");
-        task.setCronExpression(String.format("0 %d %d %d * *", minute, hour, dayOfMonth));
-        task.setStatus("PENDING");
+        ReminderTask task = ReminderTaskBuilder.builder()
+                .userId(userId)
+                .reminderText(reminderText)
+                .triggerTime(triggerTime)
+                .taskType("MONTHLY")
+                .actionType("REMINDER")
+                .cronExpression(String.format("0 %d %d %d * *", minute, hour, dayOfMonth))
+                .build();
 
         ReminderTask saved = repository.save(task);
         log.info("创建每月提醒成功: userId={}, reminderId={}, cron={}, text={}", 
@@ -476,14 +461,15 @@ public class ReminderHandler {
      */
     @Transactional
     public ReminderCreateResult createDailyWeatherPush(String userId, String location, int hour, int minute, boolean includeForecast) {
-        if (userId == null || userId.isBlank()) {
-            return new ReminderCreateResult(false, null, "用户ID为空");
+        String error;
+        if ((error = ReminderValidator.validateUserId(userId)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (location == null || location.isBlank()) {
-            return new ReminderCreateResult(false, null, "地点为空");
+        if ((error = ReminderValidator.validateLocation(location)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-            return new ReminderCreateResult(false, null, "时间格式错误（小时0-23，分钟0-59）");
+        if ((error = ReminderValidator.validateHourAndMinute(hour, minute)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
 
         try {
@@ -494,21 +480,15 @@ public class ReminderHandler {
                 triggerTime = triggerTime.plusDays(1);
             }
 
-            // 构建参数
-            Map<String, Object> params = new HashMap<>();
-            params.put("location", location);
-            params.put("includeForecast", includeForecast);
-            String actionParams = objectMapper.writeValueAsString(params);
-
-            ReminderTask task = new ReminderTask();
-            task.setUserId(userId);
-            task.setReminderText("每日天气推送：" + location);
-            task.setTriggerTime(triggerTime);
-            task.setTaskType("DAILY");
-            task.setActionType("WEATHER_PUSH");
-            task.setActionParams(actionParams);
-            task.setCronExpression(String.format("0 %d %d * * *", minute, hour));
-            task.setStatus("PENDING");
+            ReminderTask task = ReminderTaskBuilder.builder()
+                    .userId(userId)
+                    .reminderText("每日天气推送：" + location)
+                    .triggerTime(triggerTime)
+                    .taskType("DAILY")
+                    .actionType("WEATHER_PUSH")
+                    .actionParams(ReminderTaskBuilder.createParams("location", location, "includeForecast", includeForecast))
+                    .cronExpression(String.format("0 %d %d * * *", minute, hour))
+                    .build();
 
             ReminderTask saved = repository.save(task);
             log.info("创建每日天气推送成功: userId={}, taskId={}, location={}, cron={}", 
@@ -531,20 +511,21 @@ public class ReminderHandler {
      */
     @Transactional
     public ReminderCreateResult createDailyEmail(String userId, String to, String subject, String content, int hour, int minute, boolean isHtml) {
-        if (userId == null || userId.isBlank()) {
-            return new ReminderCreateResult(false, null, "用户ID为空");
+        String error;
+        if ((error = ReminderValidator.validateUserId(userId)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (to == null || to.isBlank()) {
-            return new ReminderCreateResult(false, null, "收件人邮箱为空");
+        if ((error = ReminderValidator.validateEmailTo(to)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (subject == null || subject.isBlank()) {
-            return new ReminderCreateResult(false, null, "邮件主题为空");
+        if ((error = ReminderValidator.validateEmailSubject(subject)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (content == null || content.isBlank()) {
-            return new ReminderCreateResult(false, null, "邮件内容为空");
+        if ((error = ReminderValidator.validateEmailContent(content)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-            return new ReminderCreateResult(false, null, "时间格式错误（小时0-23，分钟0-59）");
+        if ((error = ReminderValidator.validateHourAndMinute(hour, minute)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
 
         try {
@@ -555,23 +536,15 @@ public class ReminderHandler {
                 triggerTime = triggerTime.plusDays(1);
             }
 
-            // 构建参数
-            Map<String, Object> params = new HashMap<>();
-            params.put("to", to);
-            params.put("subject", subject);
-            params.put("content", content);
-            params.put("isHtml", isHtml);
-            String actionParams = objectMapper.writeValueAsString(params);
-
-            ReminderTask task = new ReminderTask();
-            task.setUserId(userId);
-            task.setReminderText("每日邮件：" + subject);
-            task.setTriggerTime(triggerTime);
-            task.setTaskType("DAILY");
-            task.setActionType("EMAIL");
-            task.setActionParams(actionParams);
-            task.setCronExpression(String.format("0 %d %d * * *", minute, hour));
-            task.setStatus("PENDING");
+            ReminderTask task = ReminderTaskBuilder.builder()
+                    .userId(userId)
+                    .reminderText("每日邮件：" + subject)
+                    .triggerTime(triggerTime)
+                    .taskType("DAILY")
+                    .actionType("EMAIL")
+                    .actionParams(ReminderTaskBuilder.createParams("to", to, "subject", subject, "content", content))
+                    .cronExpression(String.format("0 %d %d * * *", minute, hour))
+                    .build();
 
             ReminderTask saved = repository.save(task);
             log.info("创建每日邮件任务成功: userId={}, taskId={}, to={}, subject={}, cron={}", 
@@ -594,14 +567,15 @@ public class ReminderHandler {
      */
     @Transactional
     public ReminderCreateResult createDailyWebSearch(String userId, String query, String freshness, int count, int hour, int minute) {
-        if (userId == null || userId.isBlank()) {
-            return new ReminderCreateResult(false, null, "用户ID为空");
+        String error;
+        if ((error = ReminderValidator.validateUserId(userId)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (query == null || query.isBlank()) {
-            return new ReminderCreateResult(false, null, "搜索关键词为空");
+        if ((error = ReminderValidator.validateQuery(query)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-            return new ReminderCreateResult(false, null, "时间格式错误（小时0-23，分钟0-59）");
+        if ((error = ReminderValidator.validateHourAndMinute(hour, minute)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
 
         try {
@@ -612,22 +586,15 @@ public class ReminderHandler {
                 triggerTime = triggerTime.plusDays(1);
             }
 
-            // 构建参数
-            Map<String, Object> params = new HashMap<>();
-            params.put("query", query);
-            params.put("freshness", freshness == null || freshness.isBlank() ? "noLimit" : freshness);
-            params.put("count", count);
-            String actionParams = objectMapper.writeValueAsString(params);
-
-            ReminderTask task = new ReminderTask();
-            task.setUserId(userId);
-            task.setReminderText("每日搜索：" + query);
-            task.setTriggerTime(triggerTime);
-            task.setTaskType("DAILY");
-            task.setActionType("WEB_SEARCH_PUSH");
-            task.setActionParams(actionParams);
-            task.setCronExpression(String.format("0 %d %d * * *", minute, hour));
-            task.setStatus("PENDING");
+            ReminderTask task = ReminderTaskBuilder.builder()
+                    .userId(userId)
+                    .reminderText("每日搜索：" + query)
+                    .triggerTime(triggerTime)
+                    .taskType("DAILY")
+                    .actionType("WEB_SEARCH_PUSH")
+                    .actionParams(ReminderTaskBuilder.createParams("query", query, "freshness", freshness == null || freshness.isBlank() ? "noLimit" : freshness, "count", count))
+                    .cronExpression(String.format("0 %d %d * * *", minute, hour))
+                    .build();
 
             ReminderTask saved = repository.save(task);
             log.info("创建每日搜索任务成功: userId={}, taskId={}, query={}, cron={}", 
@@ -650,14 +617,15 @@ public class ReminderHandler {
      */
     @Transactional
     public ReminderCreateResult createDailyAiChat(String userId, String prompt, int hour, int minute) {
-        if (userId == null || userId.isBlank()) {
-            return new ReminderCreateResult(false, null, "用户ID为空");
+        String error;
+        if ((error = ReminderValidator.validateUserId(userId)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (prompt == null || prompt.isBlank()) {
-            return new ReminderCreateResult(false, null, "AI提示词为空");
+        if ((error = ReminderValidator.validatePrompt(prompt)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-            return new ReminderCreateResult(false, null, "时间格式错误（小时0-23，分钟0-59）");
+        if ((error = ReminderValidator.validateHourAndMinute(hour, minute)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
 
         try {
@@ -668,20 +636,15 @@ public class ReminderHandler {
                 triggerTime = triggerTime.plusDays(1);
             }
 
-            // 构建参数
-            Map<String, Object> params = new HashMap<>();
-            params.put("prompt", prompt);
-            String actionParams = objectMapper.writeValueAsString(params);
-
-            ReminderTask task = new ReminderTask();
-            task.setUserId(userId);
-            task.setReminderText("每日AI：" + (prompt.length() > 20 ? prompt.substring(0, 20) + "..." : prompt));
-            task.setTriggerTime(triggerTime);
-            task.setTaskType("DAILY");
-            task.setActionType("AI_CHAT");
-            task.setActionParams(actionParams);
-            task.setCronExpression(String.format("0 %d %d * * *", minute, hour));
-            task.setStatus("PENDING");
+            ReminderTask task = ReminderTaskBuilder.builder()
+                    .userId(userId)
+                    .reminderText("每日AI：" + (prompt.length() > 20 ? prompt.substring(0, 20) + "..." : prompt))
+                    .triggerTime(triggerTime)
+                    .taskType("DAILY")
+                    .actionType("AI_CHAT")
+                    .actionParams(ReminderTaskBuilder.createParams("prompt", prompt))
+                    .cronExpression(String.format("0 %d %d * * *", minute, hour))
+                    .build();
 
             ReminderTask saved = repository.save(task);
             log.info("创建每日AI任务成功: userId={}, taskId={}, prompt={}, cron={}", 
@@ -704,11 +667,12 @@ public class ReminderHandler {
      */
     @Transactional
     public ReminderCreateResult createDailySummary(String userId, int hour, int minute) {
-        if (userId == null || userId.isBlank()) {
-            return new ReminderCreateResult(false, null, "用户ID为空");
+        String error;
+        if ((error = ReminderValidator.validateUserId(userId)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-            return new ReminderCreateResult(false, null, "时间格式错误（小时0-23，分钟0-59）");
+        if ((error = ReminderValidator.validateHourAndMinute(hour, minute)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
 
         try {
@@ -719,21 +683,15 @@ public class ReminderHandler {
                 triggerTime = triggerTime.plusDays(1);
             }
 
-            Map<String, Object> params = new HashMap<>();
-            params.put("summaryType", "DAILY");
-            params.put("startTime", 0L);
-            params.put("endTime", 0L);
-            String actionParams = objectMapper.writeValueAsString(params);
-
-            ReminderTask task = new ReminderTask();
-            task.setUserId(userId);
-            task.setReminderText("每日对话总结（日报）");
-            task.setTriggerTime(triggerTime);
-            task.setTaskType("DAILY");
-            task.setActionType("CONVERSATION_SUMMARY");
-            task.setActionParams(actionParams);
-            task.setCronExpression(String.format("0 %d %d * * *", minute, hour));
-            task.setStatus("PENDING");
+            ReminderTask task = ReminderTaskBuilder.builder()
+                    .userId(userId)
+                    .reminderText("每日对话总结（日报）")
+                    .triggerTime(triggerTime)
+                    .taskType("DAILY")
+                    .actionType("CONVERSATION_SUMMARY")
+                    .actionParams(ReminderTaskBuilder.createParams("summaryType", "DAILY", "startTime", 0L, "endTime", 0L))
+                    .cronExpression(String.format("0 %d %d * * *", minute, hour))
+                    .build();
 
             ReminderTask saved = repository.save(task);
             schedulerService.scheduleCronTask(saved);
@@ -752,14 +710,15 @@ public class ReminderHandler {
      */
     @Transactional
     public ReminderCreateResult createWeeklySummary(String userId, int dayOfWeek, int hour, int minute) {
-        if (userId == null || userId.isBlank()) {
-            return new ReminderCreateResult(false, null, "用户ID为空");
+        String error;
+        if ((error = ReminderValidator.validateUserId(userId)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (dayOfWeek < 1 || dayOfWeek > 7) {
-            return new ReminderCreateResult(false, null, "星期几必须在1-7之间（1=周一，7=周日）");
+        if ((error = ReminderValidator.validateDayOfWeek(dayOfWeek)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-            return new ReminderCreateResult(false, null, "时间格式错误（小时0-23，分钟0-59）");
+        if ((error = ReminderValidator.validateHourAndMinute(hour, minute)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
 
         try {
@@ -771,21 +730,15 @@ public class ReminderHandler {
                 triggerTime = triggerTime.plusWeeks(1);
             }
 
-            Map<String, Object> params = new HashMap<>();
-            params.put("summaryType", "WEEKLY");
-            params.put("startTime", 0L);
-            params.put("endTime", 0L);
-            String actionParams = objectMapper.writeValueAsString(params);
-
-            ReminderTask task = new ReminderTask();
-            task.setUserId(userId);
-            task.setReminderText("每周对话总结（周报）");
-            task.setTriggerTime(triggerTime);
-            task.setTaskType("WEEKLY");
-            task.setActionType("CONVERSATION_SUMMARY");
-            task.setActionParams(actionParams);
-            task.setCronExpression(String.format("0 %d %d * * %s", minute, hour, getDayOfWeekCron(dayOfWeek)));
-            task.setStatus("PENDING");
+            ReminderTask task = ReminderTaskBuilder.builder()
+                    .userId(userId)
+                    .reminderText("每周对话总结（周报）")
+                    .triggerTime(triggerTime)
+                    .taskType("WEEKLY")
+                    .actionType("CONVERSATION_SUMMARY")
+                    .actionParams(ReminderTaskBuilder.createParams("summaryType", "WEEKLY", "startTime", 0L, "endTime", 0L))
+                    .cronExpression(String.format("0 %d %d * * %s", minute, hour, getDayOfWeekCron(dayOfWeek)))
+                    .build();
 
             ReminderTask saved = repository.save(task);
             schedulerService.scheduleCronTask(saved);
@@ -805,14 +758,15 @@ public class ReminderHandler {
      */
     @Transactional
     public ReminderCreateResult createMonthlySummary(String userId, int dayOfMonth, int hour, int minute) {
-        if (userId == null || userId.isBlank()) {
-            return new ReminderCreateResult(false, null, "用户ID为空");
+        String error;
+        if ((error = ReminderValidator.validateUserId(userId)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (dayOfMonth < 1 || dayOfMonth > 28) {
-            return new ReminderCreateResult(false, null, "每月日期必须在1-28之间（避免月份差异）");
+        if ((error = ReminderValidator.validateDayOfMonthForSummary(dayOfMonth)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
-        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-            return new ReminderCreateResult(false, null, "时间格式错误（小时0-23，分钟0-59）");
+        if ((error = ReminderValidator.validateHourAndMinute(hour, minute)) != null) {
+            return ReminderValidator.createErrorResult(error);
         }
 
         try {
@@ -823,21 +777,15 @@ public class ReminderHandler {
                 triggerTime = triggerTime.plusMonths(1);
             }
 
-            Map<String, Object> params = new HashMap<>();
-            params.put("summaryType", "MONTHLY");
-            params.put("startTime", 0L);
-            params.put("endTime", 0L);
-            String actionParams = objectMapper.writeValueAsString(params);
-
-            ReminderTask task = new ReminderTask();
-            task.setUserId(userId);
-            task.setReminderText("每月对话总结（月报）");
-            task.setTriggerTime(triggerTime);
-            task.setTaskType("MONTHLY");
-            task.setActionType("CONVERSATION_SUMMARY");
-            task.setActionParams(actionParams);
-            task.setCronExpression(String.format("0 %d %d %d * *", minute, hour, dayOfMonth));
-            task.setStatus("PENDING");
+            ReminderTask task = ReminderTaskBuilder.builder()
+                    .userId(userId)
+                    .reminderText("每月对话总结（月报）")
+                    .triggerTime(triggerTime)
+                    .taskType("MONTHLY")
+                    .actionType("CONVERSATION_SUMMARY")
+                    .actionParams(ReminderTaskBuilder.createParams("summaryType", "MONTHLY", "startTime", 0L, "endTime", 0L))
+                    .cronExpression(String.format("0 %d %d %d * *", minute, hour, dayOfMonth))
+                    .build();
 
             ReminderTask saved = repository.save(task);
             schedulerService.scheduleCronTask(saved);

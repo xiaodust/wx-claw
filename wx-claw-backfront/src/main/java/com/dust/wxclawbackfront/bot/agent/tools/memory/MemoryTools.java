@@ -2,6 +2,7 @@ package com.dust.wxclawbackfront.bot.agent.tools.memory;
 
 import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolInvocationStore;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolProvider;
+import com.dust.wxclawbackfront.bot.agent.tools.shared.ToolInvocationLog;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.UserContextHolder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,12 +35,11 @@ public class MemoryTools implements AiToolProvider {
     private final AiToolInvocationStore invocationStore;
 
     @Tool(name = "update_user_profile", description = "记录或更新用户的个人信息（如城市、职业、偏好、习惯、作息等）。当用户在对话中自然透露个人信息时调用。category可选: basic_info(基本信息)/preference(偏好)/habit(习惯)/decision(决策)")
+    @ToolInvocationLog("update_user_profile")
     public UserProfileResult updateProfile(
             @ToolParam(description = "分类: basic_info / preference / habit / decision") String category,
             @ToolParam(description = "信息键名，如 city / job / reply_style / sleep_time") String key,
             @ToolParam(description = "信息值") String value) {
-        invocationStore.add("update_user_profile", "category=" + category + ", key=" + key + ", value=" + value, null);
-
         String userId = UserContextHolder.getUserId();
         if (userId == null) {
             return new UserProfileResult(false, "无法获取用户ID");
@@ -55,11 +55,10 @@ public class MemoryTools implements AiToolProvider {
     }
 
     @Tool(name = "add_user_learning", description = "记录用户的学习指令。当用户说\"以后xxx的时候要xxx\"、\"下次总结时xxx\"、\"记住xxx\"等指示性语言时调用。trigger为触发场景(如summary/daily_report/reply/general)，instruction为用户的具体要求")
+    @ToolInvocationLog("add_user_learning")
     public UserLearningResult addLearning(
             @ToolParam(description = "触发场景，如 summary / daily_report / reply / general") String trigger,
             @ToolParam(description = "用户的具体要求或指令") String instruction) {
-        invocationStore.add("add_user_learning", "trigger=" + trigger + ", instruction=" + instruction, null);
-
         String userId = UserContextHolder.getUserId();
         if (userId == null) {
             return new UserLearningResult(false, "无法获取用户ID");
@@ -76,10 +75,9 @@ public class MemoryTools implements AiToolProvider {
 
     @Tool(name = "set_role_prompt",
           description = "设置角色提示词，让AI在后续对话中扮演指定角色（如'你是一个诗人'、'你是一个温柔的老师'等）。当用户说'扮演xxx'、'假装你是xxx'、'你是一个xxx'时调用。如果description为空则删除当前角色设定。")
+    @ToolInvocationLog("set_role_prompt")
     public UserRoleResult setRolePrompt(
             @ToolParam(description = "角色描述，如'你是一个温柔的诗人，说话像李白一样豪放'") String description) {
-        invocationStore.add("set_role_prompt", "description=" + description, null);
-
         String userId = UserContextHolder.getUserId();
         if (userId == null) {
             return new UserRoleResult(false, "无法获取用户ID");
@@ -100,9 +98,8 @@ public class MemoryTools implements AiToolProvider {
 
     @Tool(name = "remove_role_prompt",
           description = "清除当前用户的角色提示词，恢复AI的默认行为。当用户说'恢复默认'、'取消角色设定'、'不用扮演了'时调用。")
+    @ToolInvocationLog("remove_role_prompt")
     public UserRoleResult removeRolePrompt() {
-        invocationStore.add("remove_role_prompt", null, null);
-
         String userId = UserContextHolder.getUserId();
         if (userId == null) {
             return new UserRoleResult(false, "无法获取用户ID");
@@ -118,9 +115,8 @@ public class MemoryTools implements AiToolProvider {
     }
 
     @Tool(name = "list_user_memory", description = "查看当前用户的记忆数据，包括角色设定、用户画像和学习规则。用于调试或用户查询自己的记忆")
+    @ToolInvocationLog("list_user_memory")
     public UserMemoryView listMemory() {
-        invocationStore.add("list_user_memory", null, null);
-
         String userId = UserContextHolder.getUserId();
         if (userId == null) {
             return new UserMemoryView(null, List.of(), List.of());

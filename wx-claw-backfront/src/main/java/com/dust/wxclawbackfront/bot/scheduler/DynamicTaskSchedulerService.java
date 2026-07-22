@@ -1,9 +1,9 @@
-package com.dust.wxclawbackfront.scheduler;
+package com.dust.wxclawbackfront.bot.scheduler;
 
-import com.dust.wxclawbackfront.ai.dao.entity.ReminderTask;
-import com.dust.wxclawbackfront.ai.dao.repository.ReminderTaskRepository;
-import com.dust.wxclawbackfront.ai.tools.reminder.executor.TaskActionExecutor;
-import com.dust.wxclawbackfront.ai.tools.reminder.executor.TaskActionExecutorRegistry;
+import com.dust.wxclawbackfront.bot.dao.entity.ReminderTask;
+import com.dust.wxclawbackfront.bot.dao.repository.ReminderTaskRepository;
+import com.dust.wxclawbackfront.bot.agent.tools.reminder.executor.TaskActionExecutor;
+import com.dust.wxclawbackfront.bot.agent.tools.reminder.executor.TaskActionExecutorRegistry;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

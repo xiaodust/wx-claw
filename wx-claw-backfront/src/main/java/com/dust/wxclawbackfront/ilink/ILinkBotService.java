@@ -2,7 +2,7 @@ package com.dust.wxclawbackfront.ilink;
 
 import com.dust.wxclawbackfront.ilink.inbound.ILinkMessageDispatcher;
 import com.dust.wxclawbackfront.ilink.runtime.ILinkRuntimeManager;
-import com.dust.wxclawbackfront.scheduler.DynamicTaskSchedulerService;
+import com.dust.wxclawbackfront.bot.scheduler.DynamicTaskSchedulerService;
 import com.github.wechat.ilink.sdk.ILinkClient;
 import com.github.wechat.ilink.sdk.core.exception.SessionExpiredException;
 import com.github.wechat.ilink.sdk.core.model.WeixinMessage;

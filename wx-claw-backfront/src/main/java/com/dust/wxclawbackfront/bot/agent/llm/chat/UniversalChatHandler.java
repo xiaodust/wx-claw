@@ -8,13 +8,11 @@ import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolInvocationStore;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.UserContextHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -123,20 +121,13 @@ public class UniversalChatHandler implements ChatHandler {
      */
     private String callWithTools(String requestText, String systemPrompt) {
         ChatClient.ChatClientRequestSpec spec = chatClient.prompt();
-        OpenAiChatOptions.Builder optionsBuilder = OpenAiChatOptions.builder();
 
-        if (model != null && !model.isBlank()) {
-            optionsBuilder = optionsBuilder.model(model);
-        }
-        if (thinkingType != null && !thinkingType.isBlank()) {
-            optionsBuilder = optionsBuilder.extraBody(Map.of("thinking", Map.of("type", thinkingType.trim())));
-        }
-        if (maxTokens > 0) {
-            optionsBuilder = optionsBuilder.maxTokens(maxTokens);
-        }
-        if (timeout != null) {
-            optionsBuilder = optionsBuilder.timeout(timeout);
-        }
+        var optionsBuilder = LlmOptionsBuilder.builder()
+                .model(model)
+                .thinkingType(thinkingType)
+                .maxTokens(maxTokens)
+                .timeout(timeout)
+                .buildBuilder();
 
         spec = spec.options(optionsBuilder);
         spec = spec.tools(toolRegistry.getAllTools());

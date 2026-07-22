@@ -2,6 +2,7 @@ package com.dust.wxclawbackfront.bot.agent.tools.mail;
 
 import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolInvocationStore;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolProvider;
+import com.dust.wxclawbackfront.bot.agent.tools.shared.ToolInvocationLog;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
@@ -33,13 +34,11 @@ public class MailTools implements AiToolProvider {
 
     @Tool(name = "send_email", 
           description = "发送邮件给指定收件人。可用于发送通知、告警、报告等。支持纯文本和 HTML 格式。")
+    @ToolInvocationLog("send_email")
     public MailToolResult send(String to, String subject, String content, String contentType) {
         boolean isHtml = "html".equalsIgnoreCase(contentType);
         
         MailSendResult result = mailHandler.send(to, subject, content, isHtml);
-        
-        String args = String.format("to=%s, subject=%s, contentType=%s", to, subject, contentType);
-        invocationStore.add("send_email", args, result.getReplyText());
         
         if (result.isSuccess()) {
             return new MailToolResult(true, to, subject, result.getSentAt(), null);

@@ -4,6 +4,7 @@ import com.dust.wxclawbackfront.bot.dao.entity.AiConversation;
 import com.dust.wxclawbackfront.bot.dao.entity.AiMessage;
 import com.dust.wxclawbackfront.bot.dao.repository.AiConversationRepository;
 import com.dust.wxclawbackfront.bot.dao.repository.AiMessageRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -101,32 +102,44 @@ public class AiConversationCrudService {
                                    String errorMsg) {
         AiConversation conversation = createOrGetConversation(sessionId, null);
 
-        int nextSeq = messageRepository.findTopBySessionIdOrderByMessageSeqDesc(sessionId)
-                .map(AiMessage::getMessageSeq)
-                .filter(Objects::nonNull)
-                .map(seq -> seq + 1)
-                .orElse(1);
+        int maxRetries = 3;
+        for (int attempt = 0; attempt < maxRetries; attempt++) {
+            try {
+                int nextSeq = messageRepository.findTopBySessionIdOrderByMessageSeqDesc(sessionId)
+                        .map(AiMessage::getMessageSeq)
+                        .filter(Objects::nonNull)
+                        .map(seq -> seq + 1)
+                        .orElse(1);
 
-        AiMessage message = new AiMessage();
-        message.setSessionId(sessionId);
-        message.setMessageType(messageType == null ? 0 : messageType);
-        message.setContent(content);
-        message.setReasoningContent(reasoningContent);
-        message.setMessageSeq(nextSeq);
-        message.setResponseTime(responseTime);
-        message.setErrorMsg(errorMsg);
+                AiMessage message = new AiMessage();
+                message.setSessionId(sessionId);
+                message.setMessageType(messageType == null ? 0 : messageType);
+                message.setContent(content);
+                message.setReasoningContent(reasoningContent);
+                message.setMessageSeq(nextSeq);
+                message.setResponseTime(responseTime);
+                message.setErrorMsg(errorMsg);
 
-        AiMessage saved = messageRepository.save(message);
+                AiMessage saved = messageRepository.save(message);
 
-        Integer messageCount = conversation.getMessageCount();
-        conversation.setMessageCount((messageCount == null ? 0 : messageCount) + 1);
-        conversation.setLastMessageTime(new Date());
-        if (!Boolean.TRUE.equals(conversation.getActive())) {
-            conversation.setActive(Boolean.TRUE);
+                Integer messageCount = conversation.getMessageCount();
+                conversation.setMessageCount((messageCount == null ? 0 : messageCount) + 1);
+                conversation.setLastMessageTime(new Date());
+                if (!Boolean.TRUE.equals(conversation.getActive())) {
+                    conversation.setActive(Boolean.TRUE);
+                }
+                conversationRepository.save(conversation);
+
+                return saved;
+            } catch (DataIntegrityViolationException e) {
+                if (attempt == maxRetries - 1) {
+                    throw e;
+                }
+                // 唯一约束冲突，重试
+            }
         }
-        conversationRepository.save(conversation);
 
-        return saved;
+        throw new IllegalStateException("Failed to append message after " + maxRetries + " attempts");
     }
 
     @Transactional(readOnly = true)

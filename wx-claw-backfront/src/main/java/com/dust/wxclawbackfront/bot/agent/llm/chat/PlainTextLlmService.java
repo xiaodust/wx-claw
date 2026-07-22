@@ -2,12 +2,10 @@ package com.dust.wxclawbackfront.bot.agent.llm.chat;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
-import java.util.Map;
 
 /**
  * 纯文本 LLM 调用服务
@@ -36,24 +34,15 @@ public class PlainTextLlmService {
     }
 
     public String chat(String prompt) {
-        ChatClient.ChatClientRequestSpec spec = chatClient.prompt();
-        OpenAiChatOptions.Builder optionsBuilder = OpenAiChatOptions.builder();
-
-        if (model != null && !model.isBlank()) {
-            optionsBuilder = optionsBuilder.model(model);
-        }
-        if (thinkingType != null && !thinkingType.isBlank()) {
-            optionsBuilder = optionsBuilder.extraBody(Map.of("thinking", Map.of("type", thinkingType.trim())));
-        }
-        if (maxTokens > 0) {
-            optionsBuilder = optionsBuilder.maxTokens(maxTokens);
-        }
-        if (timeout != null) {
-            optionsBuilder = optionsBuilder.timeout(timeout);
-        }
+        var optionsBuilder = LlmOptionsBuilder.builder()
+                .model(model)
+                .thinkingType(thinkingType)
+                .maxTokens(maxTokens)
+                .timeout(timeout)
+                .buildBuilder();
 
         long start = System.currentTimeMillis();
-        String content = spec
+        String content = chatClient.prompt()
                 .options(optionsBuilder)
                 .user(prompt)
                 .call()

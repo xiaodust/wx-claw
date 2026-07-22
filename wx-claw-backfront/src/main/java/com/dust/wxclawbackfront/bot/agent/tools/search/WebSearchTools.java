@@ -2,6 +2,7 @@ package com.dust.wxclawbackfront.bot.agent.tools.search;
 
 import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolInvocationStore;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolProvider;
+import com.dust.wxclawbackfront.bot.agent.tools.shared.ToolInvocationLog;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Component;
 
@@ -29,10 +30,9 @@ public class WebSearchTools implements AiToolProvider {
     }
 
     @Tool(name = "web_search", description = "联网搜索全网网页信息。适合查询新闻、时效性信息、百科、公开网页资料。参数 query 为搜索词；freshness 可选 noLimit、oneDay、oneWeek、oneMonth、oneYear；count 建议 1 到 10。")
+    @ToolInvocationLog("web_search")
     public WebSearchToolResult search(String query, String freshness, Integer count) {
         BochaWebSearchResult result = searchHandler.search(query, freshness, count);
-        String response = searchHandler.formatReply(result);
-        invocationStore.add("web_search", "query=" + query + ",freshness=" + freshness + ",count=" + count, response);
         if (result == null) {
             return new WebSearchToolResult(query, freshness, count, null, "联网搜索失败");
         }

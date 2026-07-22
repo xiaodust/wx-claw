@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.Data;
 
 import org.hibernate.annotations.CreationTimestamp;
@@ -20,7 +21,11 @@ import java.util.Date;
         indexes = {
                 @Index(name = "idx_ai_message_session_id", columnList = "session_id"),
                 @Index(name = "idx_ai_message_session_seq", columnList = "session_id,message_seq")
-        }
+        },
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_session_message_seq",
+                columnNames = {"session_id", "message_seq"}
+        )
 )
 public class AiMessage {
     @Id

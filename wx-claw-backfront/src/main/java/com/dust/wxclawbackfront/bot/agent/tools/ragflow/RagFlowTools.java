@@ -3,6 +3,7 @@ package com.dust.wxclawbackfront.bot.agent.tools.ragflow;
 import com.dust.wxclawbackfront.bot.ragflow.RagFlowClient;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolInvocationStore;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolProvider;
+import com.dust.wxclawbackfront.bot.agent.tools.shared.ToolInvocationLog;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
@@ -40,9 +41,8 @@ public class RagFlowTools implements AiToolProvider {
      */
     @Tool(name = "knowledge_search",
           description = "【仅检索】从知识库中搜索相关文档片段。仅当需要查看知识库原始内容时使用，返回的是未处理的文档片段。注意：回答用户问题请使用 knowledge_ask，不要使用此工具。")
+    @ToolInvocationLog("knowledge_search")
     public KnowledgeSearchResult searchKnowledge(String query, int topK) {
-        log.info("AI调用 knowledge_search: query={}, topK={}", query, topK);
-
         if (query == null || query.isBlank()) {
             return new KnowledgeSearchResult(false, List.of(), "搜索关键词不能为空");
         }
@@ -59,8 +59,6 @@ public class RagFlowTools implements AiToolProvider {
 
         String message = items.isEmpty() ? "未找到相关知识库内容" : "找到 " + items.size() + " 条相关内容";
 
-        invocationStore.add("knowledge_search", "query=" + query, message);
-
         return new KnowledgeSearchResult(true, items, message);
     }
 
@@ -69,9 +67,8 @@ public class RagFlowTools implements AiToolProvider {
      */
     @Tool(name = "knowledge_ask",
           description = "向知识库提问并获取智能回答。仅当用户明确表示要查询知识库、或问题明显涉及知识库中可能存储的特定信息（如产品说明、文档内容、FAQ等）时调用。普通闲聊、通用问题不要调用。参数question直接传入用户的问题原文。")
+    @ToolInvocationLog("knowledge_ask")
     public KnowledgeAskResult askKnowledge(String question) {
-        log.info("AI调用 knowledge_ask: question={}", question);
-
         if (question == null || question.isBlank()) {
             return new KnowledgeAskResult(false, null, "问题不能为空");
         }
@@ -79,8 +76,6 @@ public class RagFlowTools implements AiToolProvider {
         RagFlowClient.RagFlowResult result = ragFlowClient.ask(question);
 
         String message = result.isSuccess() ? "已从知识库获取回答" : result.error();
-
-        invocationStore.add("knowledge_ask", "question=" + question, message);
 
         return new KnowledgeAskResult(result.isSuccess(), result.content(), message);
     }
@@ -90,9 +85,8 @@ public class RagFlowTools implements AiToolProvider {
      */
     @Tool(name = "knowledge_upload",
           description = "上传文件到知识库。当用户要求上传文件到知识库时使用。参数fileUrl为文件的URL地址，fileName为文件名。支持的文件类型包括：PDF、DOCX、TXT、MD、CSV、XLSX等。")
+    @ToolInvocationLog("knowledge_upload")
     public KnowledgeUploadResult uploadToKnowledge(String fileUrl, String fileName) {
-        log.info("AI调用 knowledge_upload: fileUrl={}, fileName={}", fileUrl, fileName);
-
         if (fileUrl == null || fileUrl.isBlank()) {
             return new KnowledgeUploadResult(false, null, "文件URL不能为空");
         }
@@ -114,14 +108,11 @@ public class RagFlowTools implements AiToolProvider {
 
             String message = result.success() ? result.message() : "上传失败: " + result.message();
 
-            invocationStore.add("knowledge_upload", "file=" + fileName, message);
-
             return new KnowledgeUploadResult(result.success(), result.documentId(), message);
 
         } catch (Exception ex) {
             log.error("上传文件到知识库失败: {}", ex.getMessage(), ex);
             String errorMessage = "上传失败: " + ex.getMessage();
-            invocationStore.add("knowledge_upload", "file=" + fileName, errorMessage);
             return new KnowledgeUploadResult(false, null, errorMessage);
         }
     }
@@ -175,9 +166,8 @@ public class RagFlowTools implements AiToolProvider {
      */
     @Tool(name = "knowledge_list_documents",
           description = "列举知识库中的所有文档。当用户要求查看知识库中有哪些文档时使用。返回文档列表，包含文档ID、名称、状态等信息。")
+    @ToolInvocationLog("knowledge_list_documents")
     public KnowledgeDocumentListResult listKnowledgeDocuments() {
-        log.info("AI调用 knowledge_list_documents");
-
         List<RagFlowClient.DocumentInfo> documents = ragFlowClient.listDocuments();
 
         List<DocumentInfoItem> items = documents.stream()
@@ -185,8 +175,6 @@ public class RagFlowTools implements AiToolProvider {
                 .collect(Collectors.toList());
 
         String message = items.isEmpty() ? "知识库中没有文档" : "知识库中共有 " + items.size() + " 个文档";
-
-        invocationStore.add("knowledge_list_documents", "", message);
 
         return new KnowledgeDocumentListResult(true, items, message);
     }
@@ -196,9 +184,8 @@ public class RagFlowTools implements AiToolProvider {
      */
     @Tool(name = "knowledge_delete_document",
           description = "删除知识库中的文档。当用户要求删除知识库中的某个文档时使用。参数documentId为要删除的文档ID，可通过knowledge_list_documents获取。")
+    @ToolInvocationLog("knowledge_delete_document")
     public KnowledgeDeleteResult deleteKnowledgeDocument(String documentId) {
-        log.info("AI调用 knowledge_delete_document: documentId={}", documentId);
-
         if (documentId == null || documentId.isBlank()) {
             return new KnowledgeDeleteResult(false, "文档ID不能为空");
         }
@@ -206,8 +193,6 @@ public class RagFlowTools implements AiToolProvider {
         RagFlowClient.DeleteResult result = ragFlowClient.deleteDocuments(List.of(documentId));
 
         String message = result.success() ? result.message() : "删除失败: " + result.message();
-
-        invocationStore.add("knowledge_delete_document", "documentId=" + documentId, message);
 
         return new KnowledgeDeleteResult(result.success(), message);
     }
@@ -217,9 +202,8 @@ public class RagFlowTools implements AiToolProvider {
      */
     @Tool(name = "knowledge_update_document",
           description = "更新知识库中的文档信息。当用户要求修改知识库中文档的名称时使用。参数documentId为文档ID，newName为新的文档名称。")
+    @ToolInvocationLog("knowledge_update_document")
     public KnowledgeUpdateResult updateKnowledgeDocument(String documentId, String newName) {
-        log.info("AI调用 knowledge_update_document: documentId={}, newName={}", documentId, newName);
-
         if (documentId == null || documentId.isBlank()) {
             return new KnowledgeUpdateResult(false, "文档ID不能为空");
         }
@@ -231,8 +215,6 @@ public class RagFlowTools implements AiToolProvider {
         RagFlowClient.UpdateResult result = ragFlowClient.updateDocument(documentId, newName);
 
         String message = result.success() ? result.message() : "更新失败: " + result.message();
-
-        invocationStore.add("knowledge_update_document", "documentId=" + documentId + ", newName=" + newName, message);
 
         return new KnowledgeUpdateResult(result.success(), message);
     }

@@ -2,6 +2,7 @@ package com.dust.wxclawbackfront.bot.agent.tools.summary;
 
 import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolInvocationStore;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolProvider;
+import com.dust.wxclawbackfront.bot.agent.tools.shared.ToolInvocationLog;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.UserContextHolder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,20 +36,15 @@ public class SummaryTools implements AiToolProvider {
      */
     @Tool(name = "generate_daily_summary_now",
           description = "生成昨日对话日报。仅当用户明确要求'总结昨天'、'生成日报'、'总结今天的对话'时调用。此工具会从数据库查询历史记录进行完整总结。注意：普通聊天问候不要调用此工具。")
+    @ToolInvocationLog("generate_daily_summary_now")
     public SummaryToolResult generateDailySummaryNow() {
         String userId = UserContextHolder.getUserId();
-        
-        log.info("AI调用 generate_daily_summary_now: userId={}", userId);
 
         if (userId == null || userId.isBlank()) {
-            String errorMsg = "无法获取用户ID";
-            invocationStore.add("generate_daily_summary_now", "无参数", errorMsg);
-            return new SummaryToolResult(false, null, errorMsg);
+            return new SummaryToolResult(false, null, "无法获取用户ID");
         }
 
         SummaryHandler.SummaryResult result = summaryHandler.generateDailySummaryNow(userId);
-        
-        invocationStore.add("generate_daily_summary_now", "无参数", result.message());
 
         return new SummaryToolResult(result.success(), result.success() ? "DAILY" : null, result.message());
     }
@@ -58,20 +54,15 @@ public class SummaryTools implements AiToolProvider {
      */
     @Tool(name = "generate_weekly_summary_now",
           description = "生成上周对话周报。仅当用户明确要求'总结上周'、'生成周报'时调用。此工具会从数据库查询历史记录进行完整总结。注意：普通聊天问候不要调用此工具。")
+    @ToolInvocationLog("generate_weekly_summary_now")
     public SummaryToolResult generateWeeklySummaryNow() {
         String userId = UserContextHolder.getUserId();
-        
-        log.info("AI调用 generate_weekly_summary_now: userId={}", userId);
 
         if (userId == null || userId.isBlank()) {
-            String errorMsg = "无法获取用户ID";
-            invocationStore.add("generate_weekly_summary_now", "无参数", errorMsg);
-            return new SummaryToolResult(false, null, errorMsg);
+            return new SummaryToolResult(false, null, "无法获取用户ID");
         }
 
         SummaryHandler.SummaryResult result = summaryHandler.generateWeeklySummaryNow(userId);
-        
-        invocationStore.add("generate_weekly_summary_now", "无参数", result.message());
 
         return new SummaryToolResult(result.success(), result.success() ? "WEEKLY" : null, result.message());
     }
@@ -81,20 +72,15 @@ public class SummaryTools implements AiToolProvider {
      */
     @Tool(name = "generate_monthly_summary_now",
           description = "生成上月对话月报。仅当用户明确要求'总结上个月'、'生成月报'时调用。此工具会从数据库查询历史记录进行完整总结。注意：普通聊天问候不要调用此工具。")
+    @ToolInvocationLog("generate_monthly_summary_now")
     public SummaryToolResult generateMonthlySummaryNow() {
         String userId = UserContextHolder.getUserId();
-        
-        log.info("AI调用 generate_monthly_summary_now: userId={}", userId);
 
         if (userId == null || userId.isBlank()) {
-            String errorMsg = "无法获取用户ID";
-            invocationStore.add("generate_monthly_summary_now", "无参数", errorMsg);
-            return new SummaryToolResult(false, null, errorMsg);
+            return new SummaryToolResult(false, null, "无法获取用户ID");
         }
 
         SummaryHandler.SummaryResult result = summaryHandler.generateMonthlySummaryNow(userId);
-        
-        invocationStore.add("generate_monthly_summary_now", "无参数", result.message());
 
         return new SummaryToolResult(result.success(), result.success() ? "MONTHLY" : null, result.message());
     }
@@ -104,20 +90,15 @@ public class SummaryTools implements AiToolProvider {
      */
     @Tool(name = "generate_custom_summary_now",
           description = "生成指定时间范围内的对话总结。仅当用户明确要求'总结过去X小时'、'最近X小时聊了什么'时调用。参数hours是要总结的小时数（1-720）。注意：普通聊天问候不要调用此工具。")
+    @ToolInvocationLog("generate_custom_summary_now")
     public SummaryToolResult generateCustomSummaryNow(int hours) {
         String userId = UserContextHolder.getUserId();
-        
-        log.info("AI调用 generate_custom_summary_now: userId={}, hours={}", userId, hours);
 
         if (userId == null || userId.isBlank()) {
-            String errorMsg = "无法获取用户ID";
-            invocationStore.add("generate_custom_summary_now", "hours=" + hours, errorMsg);
-            return new SummaryToolResult(false, null, errorMsg);
+            return new SummaryToolResult(false, null, "无法获取用户ID");
         }
 
         SummaryHandler.SummaryResult result = summaryHandler.generateCustomSummaryNow(userId, hours);
-        
-        invocationStore.add("generate_custom_summary_now", "hours=" + hours, result.message());
 
         return new SummaryToolResult(result.success(), result.success() ? "CUSTOM" : null, result.message());
     }
@@ -127,23 +108,15 @@ public class SummaryTools implements AiToolProvider {
      */
     @Tool(name = "schedule_daily_summary",
           description = "创建每日定时对话总结任务（日报）。AI会在每天指定时间自动总结前一天的对话内容并推送。当用户说'每天X点给我发日报'、'设置每日总结'等时调用。参数：hour(小时0-23)、minute(分钟0-59)。")
+    @ToolInvocationLog("schedule_daily_summary")
     public SummaryScheduleToolResult scheduleDailySummary(int hour, int minute) {
         String userId = UserContextHolder.getUserId();
-        
-        log.info("AI调用 schedule_daily_summary: userId={}, hour={}, minute={}", userId, hour, minute);
 
         if (userId == null || userId.isBlank()) {
-            String errorMsg = "无法获取用户ID";
-            invocationStore.add("schedule_daily_summary", 
-                    String.format("hour=%d, minute=%d", hour, minute), errorMsg);
-            return new SummaryScheduleToolResult(false, null, errorMsg);
+            return new SummaryScheduleToolResult(false, null, "无法获取用户ID");
         }
 
         SummaryHandler.ReminderCreateResult result = summaryHandler.createDailySummarySchedule(userId, hour, minute);
-        
-        invocationStore.add("schedule_daily_summary",
-                String.format("hour=%d, minute=%d", hour, minute),
-                result.message());
 
         return new SummaryScheduleToolResult(result.success(), result.reminderId(), result.message());
     }
@@ -153,24 +126,15 @@ public class SummaryTools implements AiToolProvider {
      */
     @Tool(name = "schedule_weekly_summary",
           description = "创建每周定时对话总结任务（周报）。AI会在每周指定时间自动总结上周的对话内容并推送。当用户说'每周X给我发周报'、'设置每周总结'等时调用。参数：dayOfWeek(1-7，1=周一，7=周日)、hour(小时0-23)、minute(分钟0-59)。")
+    @ToolInvocationLog("schedule_weekly_summary")
     public SummaryScheduleToolResult scheduleWeeklySummary(int dayOfWeek, int hour, int minute) {
         String userId = UserContextHolder.getUserId();
-        
-        log.info("AI调用 schedule_weekly_summary: userId={}, dayOfWeek={}, hour={}, minute={}", 
-                userId, dayOfWeek, hour, minute);
 
         if (userId == null || userId.isBlank()) {
-            String errorMsg = "无法获取用户ID";
-            invocationStore.add("schedule_weekly_summary", 
-                    String.format("dayOfWeek=%d, hour=%d, minute=%d", dayOfWeek, hour, minute), errorMsg);
-            return new SummaryScheduleToolResult(false, null, errorMsg);
+            return new SummaryScheduleToolResult(false, null, "无法获取用户ID");
         }
 
         SummaryHandler.ReminderCreateResult result = summaryHandler.createWeeklySummarySchedule(userId, dayOfWeek, hour, minute);
-        
-        invocationStore.add("schedule_weekly_summary",
-                String.format("dayOfWeek=%d, hour=%d, minute=%d", dayOfWeek, hour, minute),
-                result.message());
 
         return new SummaryScheduleToolResult(result.success(), result.reminderId(), result.message());
     }
@@ -180,24 +144,15 @@ public class SummaryTools implements AiToolProvider {
      */
     @Tool(name = "schedule_monthly_summary",
           description = "创建每月定时对话总结任务（月报）。AI会在每月指定日期自动总结上月的对话内容并推送。当用户说'每月X号给我发月报'、'设置每月总结'等时调用。参数：dayOfMonth(每月的第几天，1-28)、hour(小时0-23)、minute(分钟0-59)。")
+    @ToolInvocationLog("schedule_monthly_summary")
     public SummaryScheduleToolResult scheduleMonthlySummary(int dayOfMonth, int hour, int minute) {
         String userId = UserContextHolder.getUserId();
-        
-        log.info("AI调用 schedule_monthly_summary: userId={}, dayOfMonth={}, hour={}, minute={}", 
-                userId, dayOfMonth, hour, minute);
 
         if (userId == null || userId.isBlank()) {
-            String errorMsg = "无法获取用户ID";
-            invocationStore.add("schedule_monthly_summary", 
-                    String.format("dayOfMonth=%d, hour=%d, minute=%d", dayOfMonth, hour, minute), errorMsg);
-            return new SummaryScheduleToolResult(false, null, errorMsg);
+            return new SummaryScheduleToolResult(false, null, "无法获取用户ID");
         }
 
         SummaryHandler.ReminderCreateResult result = summaryHandler.createMonthlySummarySchedule(userId, dayOfMonth, hour, minute);
-        
-        invocationStore.add("schedule_monthly_summary",
-                String.format("dayOfMonth=%d, hour=%d, minute=%d", dayOfMonth, hour, minute),
-                result.message());
 
         return new SummaryScheduleToolResult(result.success(), result.reminderId(), result.message());
     }
