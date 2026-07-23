@@ -25,6 +25,9 @@ public class RagFlowTools implements AiToolProvider {
 
     private final RagFlowClient ragFlowClient;
     private final AiToolInvocationStore invocationStore;
+    private final java.net.http.HttpClient httpClient = java.net.http.HttpClient.newBuilder()
+            .connectTimeout(java.time.Duration.ofSeconds(30))
+            .build();
 
     @Override
     public Object getTool() {
@@ -141,9 +144,6 @@ public class RagFlowTools implements AiToolProvider {
      */
     private byte[] downloadFile(String fileUrl) throws Exception {
         java.net.URI uri = java.net.URI.create(fileUrl);
-        java.net.http.HttpClient httpClient = java.net.http.HttpClient.newBuilder()
-                .connectTimeout(java.time.Duration.ofSeconds(30))
-                .build();
 
         java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
                 .uri(uri)

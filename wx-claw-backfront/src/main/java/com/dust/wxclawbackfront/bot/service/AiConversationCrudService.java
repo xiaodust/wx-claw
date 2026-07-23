@@ -5,11 +5,13 @@ import com.dust.wxclawbackfront.bot.dao.entity.AiMessage;
 import com.dust.wxclawbackfront.bot.dao.repository.AiConversationRepository;
 import com.dust.wxclawbackfront.bot.dao.repository.AiMessageRepository;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Date;
+import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -124,7 +126,7 @@ public class AiConversationCrudService {
 
                 Integer messageCount = conversation.getMessageCount();
                 conversation.setMessageCount((messageCount == null ? 0 : messageCount) + 1);
-                conversation.setLastMessageTime(new Date());
+                conversation.setLastMessageTime(LocalDateTime.now());
                 if (!Boolean.TRUE.equals(conversation.getActive())) {
                     conversation.setActive(Boolean.TRUE);
                 }
@@ -136,6 +138,17 @@ public class AiConversationCrudService {
                     throw e;
                 }
                 // 唯一约束冲突，重试
+            } catch (Exception e) {
+                if (attempt == maxRetries - 1 || !isDatabaseLockError(e)) {
+                    throw e;
+                }
+                // SQLITE_BUSY: 数据库锁定，指数退避后重试
+                try {
+                    Thread.sleep(50L * (1L << attempt)); // 50ms, 100ms, 200ms
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
             }
         }
 
@@ -161,6 +174,21 @@ public class AiConversationCrudService {
         return messageRepository.findAllBySessionIdOrderByMessageSeqAsc(sessionId);
     }
 
+    /**
+     * 查询最近的N条消息（分页，避免内存溢出）
+     */
+    @Transactional(readOnly = true)
+    public List<AiMessage> listRecentMessages(String sessionId, int limit) {
+        if (sessionId == null || sessionId.isBlank() || limit <= 0) {
+            return Collections.emptyList();
+        }
+        List<AiMessage> messages = messageRepository.findRecentBySessionId(
+                sessionId, PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "messageSeq")));
+        // 反转为正序
+        Collections.reverse(messages);
+        return messages;
+    }
+
     @Transactional
     public void deleteConversationBySessionId(String sessionId) {
         messageRepository.deleteBySessionId(sessionId);
@@ -170,5 +198,17 @@ public class AiConversationCrudService {
     private String buildSessionId(String username) {
         String prefix = (username == null || username.isBlank()) ? "anonymous" : username.trim();
         return prefix + "::" + UUID.randomUUID();
+    }
+
+    private boolean isDatabaseLockError(Exception e) {
+        Throwable cause = e;
+        while (cause != null) {
+            if (cause.getClass().getSimpleName().contains("SQLiteException")
+                    || (cause.getMessage() != null && cause.getMessage().contains("database is locked"))) {
+                return true;
+            }
+            cause = cause.getCause();
+        }
+        return false;
     }
 }

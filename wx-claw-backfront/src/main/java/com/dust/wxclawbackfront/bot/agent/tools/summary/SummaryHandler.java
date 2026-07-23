@@ -10,9 +10,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.text.SimpleDateFormat;
-import java.util.Calendar;
-import java.util.Date;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 
 /**
@@ -62,10 +64,8 @@ public class SummaryHandler {
         }
 
         try {
-            Calendar cal = Calendar.getInstance();
-            Date endTime = cal.getTime();
-            cal.add(Calendar.HOUR_OF_DAY, -hours);
-            Date startTime = cal.getTime();
+            LocalDateTime endTime = LocalDateTime.now();
+            LocalDateTime startTime = endTime.minusHours(hours);
 
             return executeSummary(userId, "CUSTOM", startTime, endTime, "过去" + hours + "小时");
         } catch (Exception e) {
@@ -83,9 +83,9 @@ public class SummaryHandler {
         }
 
         try {
-            Date[] timeRange = calculateTimeRange(summaryType);
-            Date startTime = timeRange[0];
-            Date endTime = timeRange[1];
+            LocalDateTime[] timeRange = calculateTimeRange(summaryType);
+            LocalDateTime startTime = timeRange[0];
+            LocalDateTime endTime = timeRange[1];
 
             String periodDesc = getPeriodDesc(summaryType);
             return executeSummary(userId, summaryType, startTime, endTime, periodDesc);
@@ -98,9 +98,9 @@ public class SummaryHandler {
     /**
      * 执行总结的核心方法
      */
-    private SummaryResult executeSummary(String userId, String summaryType, Date startTime, Date endTime, String periodDesc) {
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-        String timeRange = String.format("%s 至 %s", sdf.format(startTime), sdf.format(endTime));
+    private SummaryResult executeSummary(String userId, String summaryType, LocalDateTime startTime, LocalDateTime endTime, String periodDesc) {
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        String timeRange = String.format("%s 至 %s", startTime.format(dtf), endTime.format(dtf));
 
         log.info("执行即时对话总结: userId={}, type={}, range=[{}, {}]",
                 userId, summaryType, startTime, endTime);
@@ -157,55 +157,39 @@ public class SummaryHandler {
         return new ReminderCreateResult(result.success(), result.reminderId(), result.message());
     }
 
-    private Date[] calculateTimeRange(String summaryType) {
-        Calendar cal = Calendar.getInstance();
-        Date endTime = cal.getTime();
+    private LocalDateTime[] calculateTimeRange(String summaryType) {
+        LocalDate today = LocalDate.now();
 
         switch (summaryType) {
             case "DAILY":
                 // 昨天 00:00:00 到今天 00:00:00
-                cal.set(Calendar.HOUR_OF_DAY, 0);
-                cal.set(Calendar.MINUTE, 0);
-                cal.set(Calendar.SECOND, 0);
-                cal.set(Calendar.MILLISECOND, 0);
-                endTime = cal.getTime();
-                cal.add(Calendar.DAY_OF_MONTH, -1);
-                break;
+                LocalDateTime dailyEnd = today.atStartOfDay();
+                LocalDateTime dailyStart = dailyEnd.minusDays(1);
+                return new LocalDateTime[]{dailyStart, dailyEnd};
 
             case "WEEKLY":
                 // 上周一 00:00:00 到本周一 00:00:00
-                cal.set(Calendar.HOUR_OF_DAY, 0);
-                cal.set(Calendar.MINUTE, 0);
-                cal.set(Calendar.SECOND, 0);
-                cal.set(Calendar.MILLISECOND, 0);
-                cal.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY);
-                endTime = cal.getTime();
-                cal.add(Calendar.WEEK_OF_YEAR, -1);
-                break;
+                LocalDate thisMonday = today.with(java.time.DayOfWeek.MONDAY);
+                LocalDateTime weeklyEnd = thisMonday.atStartOfDay();
+                LocalDateTime weeklyStart = weeklyEnd.minusWeeks(1);
+                return new LocalDateTime[]{weeklyStart, weeklyEnd};
 
             case "MONTHLY":
                 // 上月1号 00:00:00 到本月1号 00:00:00
-                cal.set(Calendar.HOUR_OF_DAY, 0);
-                cal.set(Calendar.MINUTE, 0);
-                cal.set(Calendar.SECOND, 0);
-                cal.set(Calendar.MILLISECOND, 0);
-                cal.set(Calendar.DAY_OF_MONTH, 1);
-                endTime = cal.getTime();
-                cal.add(Calendar.MONTH, -1);
-                break;
+                LocalDate firstOfThisMonth = today.withDayOfMonth(1);
+                LocalDateTime monthlyEnd = firstOfThisMonth.atStartOfDay();
+                LocalDateTime monthlyStart = monthlyEnd.minusMonths(1);
+                return new LocalDateTime[]{monthlyStart, monthlyEnd};
 
             default:
                 throw new IllegalArgumentException("Unknown summary type: " + summaryType);
         }
-
-        Date startTime = cal.getTime();
-        return new Date[]{startTime, endTime};
     }
 
-    private String buildSummaryPrompt(String summaryType, Date startTime, Date endTime, String history) {
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+    private String buildSummaryPrompt(String summaryType, LocalDateTime startTime, LocalDateTime endTime, String history) {
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd");
         String periodDesc = getPeriodDesc(summaryType);
-        String timeRange = String.format("%s 至 %s", sdf.format(startTime), sdf.format(endTime));
+        String timeRange = String.format("%s 至 %s", startTime.format(dtf), endTime.format(dtf));
 
         return String.format(
                 "你是一个专业的对话总结助手。请基于以下用户与AI的对话记录，生成一份简洁的%s总结报告。\n\n" +

@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class CommandHandler {
 
-    private static final String CURRENT_VERSION = "v1";
+    private static final String CURRENT_VERSION = "v2.0";
 
     /**
      * 检查是否是命令

@@ -2,7 +2,7 @@ package com.dust.wxclawbackfront.bot.api.io;
 
 import lombok.Data;
 
-import java.util.Date;
+import java.time.LocalDateTime;
 
 @Data
 public class AiMessageDTO {
@@ -14,6 +14,6 @@ public class AiMessageDTO {
     private Integer messageSeq;
     private Integer responseTime;
     private String errorMsg;
-    private Date createTime;
-    private Date updateTime;
+    private LocalDateTime createTime;
+    private LocalDateTime updateTime;
 }

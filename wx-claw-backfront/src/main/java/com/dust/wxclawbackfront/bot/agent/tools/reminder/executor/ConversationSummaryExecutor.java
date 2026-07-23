@@ -12,8 +12,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -45,9 +46,9 @@ public class ConversationSummaryExecutor implements TaskActionExecutor {
             String summaryType = params.get("summaryType").asText(); // DAILY, WEEKLY, MONTHLY
 
             // 动态计算时间范围
-            Date[] timeRange = calculateTimeRange(summaryType);
-            Date startTime = timeRange[0];
-            Date endTime = timeRange[1];
+            LocalDateTime[] timeRange = calculateTimeRange(summaryType);
+            LocalDateTime startTime = timeRange[0];
+            LocalDateTime endTime = timeRange[1];
 
             log.info("执行对话总结任务: taskId={}, userId={}, type={}, range=[{}, {}]",
                     task.getId(), task.getUserId(), summaryType, startTime, endTime);
@@ -93,49 +94,33 @@ public class ConversationSummaryExecutor implements TaskActionExecutor {
         }
     }
 
-    private Date[] calculateTimeRange(String summaryType) {
-        java.util.Calendar cal = java.util.Calendar.getInstance();
-        Date endTime = cal.getTime();
+    private LocalDateTime[] calculateTimeRange(String summaryType) {
+        LocalDate today = LocalDate.now();
 
         switch (summaryType) {
             case "DAILY":
                 // 昨天 00:00:00 到今天 00:00:00
-                cal.set(java.util.Calendar.HOUR_OF_DAY, 0);
-                cal.set(java.util.Calendar.MINUTE, 0);
-                cal.set(java.util.Calendar.SECOND, 0);
-                cal.set(java.util.Calendar.MILLISECOND, 0);
-                endTime = cal.getTime();
-                cal.add(java.util.Calendar.DAY_OF_MONTH, -1);
-                break;
+                LocalDateTime dailyEnd = today.atStartOfDay();
+                LocalDateTime dailyStart = dailyEnd.minusDays(1);
+                return new LocalDateTime[]{dailyStart, dailyEnd};
 
             case "WEEKLY":
                 // 上周一 00:00:00 到本周一 00:00:00
-                cal.set(java.util.Calendar.HOUR_OF_DAY, 0);
-                cal.set(java.util.Calendar.MINUTE, 0);
-                cal.set(java.util.Calendar.SECOND, 0);
-                cal.set(java.util.Calendar.MILLISECOND, 0);
-                cal.set(java.util.Calendar.DAY_OF_WEEK, java.util.Calendar.MONDAY);
-                endTime = cal.getTime();
-                cal.add(java.util.Calendar.WEEK_OF_YEAR, -1);
-                break;
+                LocalDate thisMonday = today.with(java.time.DayOfWeek.MONDAY);
+                LocalDateTime weeklyEnd = thisMonday.atStartOfDay();
+                LocalDateTime weeklyStart = weeklyEnd.minusWeeks(1);
+                return new LocalDateTime[]{weeklyStart, weeklyEnd};
 
             case "MONTHLY":
                 // 上月1号 00:00:00 到本月1号 00:00:00
-                cal.set(java.util.Calendar.HOUR_OF_DAY, 0);
-                cal.set(java.util.Calendar.MINUTE, 0);
-                cal.set(java.util.Calendar.SECOND, 0);
-                cal.set(java.util.Calendar.MILLISECOND, 0);
-                cal.set(java.util.Calendar.DAY_OF_MONTH, 1);
-                endTime = cal.getTime();
-                cal.add(java.util.Calendar.MONTH, -1);
-                break;
+                LocalDate firstOfThisMonth = today.withDayOfMonth(1);
+                LocalDateTime monthlyEnd = firstOfThisMonth.atStartOfDay();
+                LocalDateTime monthlyStart = monthlyEnd.minusMonths(1);
+                return new LocalDateTime[]{monthlyStart, monthlyEnd};
 
             default:
                 throw new IllegalArgumentException("Unknown summary type: " + summaryType);
         }
-
-        Date startTime = cal.getTime();
-        return new Date[]{startTime, endTime};
     }
 
     @Override
@@ -143,10 +128,10 @@ public class ConversationSummaryExecutor implements TaskActionExecutor {
         return "CONVERSATION_SUMMARY";
     }
 
-    private String buildSummaryPrompt(String summaryType, Date startTime, Date endTime, String history) {
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+    private String buildSummaryPrompt(String summaryType, LocalDateTime startTime, LocalDateTime endTime, String history) {
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd");
         String periodDesc = getPeriodDesc(summaryType);
-        String timeRange = String.format("%s 至 %s", sdf.format(startTime), sdf.format(endTime));
+        String timeRange = String.format("%s 至 %s", startTime.format(dtf), endTime.format(dtf));
 
         return String.format(
                 "你是一个专业的对话总结助手。请基于以下用户与AI的对话记录，生成一份简洁的%s总结报告。\n\n" +
@@ -166,19 +151,19 @@ public class ConversationSummaryExecutor implements TaskActionExecutor {
         );
     }
 
-    private String buildEmptyReply(String summaryType, Date startTime, Date endTime) {
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+    private String buildEmptyReply(String summaryType, LocalDateTime startTime, LocalDateTime endTime) {
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd");
         String periodDesc = getPeriodDesc(summaryType);
-        String timeRange = String.format("%s 至 %s", sdf.format(startTime), sdf.format(endTime));
+        String timeRange = String.format("%s 至 %s", startTime.format(dtf), endTime.format(dtf));
 
         return String.format("【%s总结】\n\n时间范围：%s\n\n在此期间暂无对话记录。",
                 periodDesc, timeRange);
     }
 
-    private String buildFinalReply(String summaryType, Date startTime, Date endTime, String summary) {
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+    private String buildFinalReply(String summaryType, LocalDateTime startTime, LocalDateTime endTime, String summary) {
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd");
         String periodDesc = getPeriodDesc(summaryType);
-        String timeRange = String.format("%s 至 %s", sdf.format(startTime), sdf.format(endTime));
+        String timeRange = String.format("%s 至 %s", startTime.format(dtf), endTime.format(dtf));
 
         return String.format("【%s总结】\n\n时间范围：%s\n\n%s",
                 periodDesc, timeRange, summary);

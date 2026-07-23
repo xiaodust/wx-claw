@@ -4,15 +4,15 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.Data;
 
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.annotations.UuidGenerator;
 
-import java.util.Date;
+import java.time.LocalDateTime;
 
 @Data
 @Entity
@@ -51,15 +51,29 @@ public class AiMessage {
     @Column(name = "response_time")
     private Integer responseTime;
 
-    @Column(name = "error_msg")
+    @Column(name = "error_msg", length = 1024)
     private String errorMsg;
 
-    @CreationTimestamp
     @Column(name = "create_time", updatable = false)
-    private Date createTime;
+    private LocalDateTime createTime;
 
-    @UpdateTimestamp
     @Column(name = "update_time")
-    private Date updateTime;
+    private LocalDateTime updateTime;
+
+    @PrePersist
+    protected void onCreate() {
+        LocalDateTime now = LocalDateTime.now();
+        if (createTime == null) {
+            createTime = now;
+        }
+        if (updateTime == null) {
+            updateTime = now;
+        }
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updateTime = LocalDateTime.now();
+    }
 
 }

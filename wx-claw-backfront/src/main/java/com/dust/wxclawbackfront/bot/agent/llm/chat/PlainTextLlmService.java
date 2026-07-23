@@ -1,7 +1,9 @@
 package com.dust.wxclawbackfront.bot.agent.llm.chat;
 
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -16,6 +18,7 @@ import java.time.Duration;
 public class PlainTextLlmService {
 
     private final ChatClient chatClient;
+    private OpenAiChatOptions.Builder cachedOptionsBuilder;
 
     @Value("${spring.ai.openai.chat.model:}")
     private String model;
@@ -33,17 +36,20 @@ public class PlainTextLlmService {
         this.chatClient = chatClientBuilder.build();
     }
 
-    public String chat(String prompt) {
-        var optionsBuilder = LlmOptionsBuilder.builder()
+    @PostConstruct
+    public void init() {
+        this.cachedOptionsBuilder = LlmOptionsBuilder.builder()
                 .model(model)
                 .thinkingType(thinkingType)
                 .maxTokens(maxTokens)
                 .timeout(timeout)
                 .buildBuilder();
+    }
 
+    public String chat(String prompt) {
         long start = System.currentTimeMillis();
         String content = chatClient.prompt()
-                .options(optionsBuilder)
+                .options(cachedOptionsBuilder)
                 .user(prompt)
                 .call()
                 .content();

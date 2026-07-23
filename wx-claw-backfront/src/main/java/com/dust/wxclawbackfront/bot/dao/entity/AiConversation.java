@@ -4,14 +4,14 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import lombok.Data;
 
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.annotations.UuidGenerator;
 
-import java.util.Date;
+import java.time.LocalDateTime;
 
 @Data
 @Entity
@@ -42,14 +42,31 @@ public class AiConversation {
     private Integer messageCount;
 
     @Column(name = "last_message_time")
-    private Date lastMessageTime;
+    private LocalDateTime lastMessageTime;
 
-    @CreationTimestamp
     @Column(name = "created_time", updatable = false)
-    private Date createdTime;
+    private LocalDateTime createdTime;
 
-    @UpdateTimestamp
     @Column(name = "updated_time")
-    private Date updatedTime;
+    private LocalDateTime updatedTime;
+
+    @PrePersist
+    protected void onCreate() {
+        LocalDateTime now = LocalDateTime.now();
+        if (createdTime == null) {
+            createdTime = now;
+        }
+        if (updatedTime == null) {
+            updatedTime = now;
+        }
+        if (messageCount == null) {
+            messageCount = 0;
+        }
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedTime = LocalDateTime.now();
+    }
 
 }
