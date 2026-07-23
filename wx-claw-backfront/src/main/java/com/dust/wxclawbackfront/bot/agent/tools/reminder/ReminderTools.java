@@ -1,7 +1,6 @@
 package com.dust.wxclawbackfront.bot.agent.tools.reminder;
 
 import com.dust.wxclawbackfront.bot.dao.entity.ReminderTask;
-import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolInvocationStore;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolProvider;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.ToolInvocationLog;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.UserContextHolder;
@@ -32,7 +31,6 @@ public class ReminderTools implements AiToolProvider {
     }
 
     private final ReminderHandler reminderHandler;
-    private final AiToolInvocationStore invocationStore;
 
     /**
      * 创建一次性延迟提醒

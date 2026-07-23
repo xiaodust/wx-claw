@@ -1,6 +1,5 @@
 package com.dust.wxclawbackfront.bot.agent.tools.memory;
 
-import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolInvocationStore;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolProvider;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.ToolInvocationLog;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.UserContextHolder;
@@ -32,7 +31,6 @@ public class MemoryTools implements AiToolProvider {
     }
 
     private final UserMemoryService memoryService;
-    private final AiToolInvocationStore invocationStore;
 
     @Tool(name = "update_user_profile", description = "记录或更新用户的个人信息（如城市、职业、偏好、习惯、作息等）。当用户在对话中自然透露个人信息时调用。category可选: basic_info(基本信息)/preference(偏好)/habit(习惯)/decision(决策)")
     @ToolInvocationLog("update_user_profile")

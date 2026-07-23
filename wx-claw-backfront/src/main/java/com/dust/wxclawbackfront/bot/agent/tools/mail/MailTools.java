@@ -1,8 +1,8 @@
 package com.dust.wxclawbackfront.bot.agent.tools.mail;
 
-import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolInvocationStore;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolProvider;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.ToolInvocationLog;
+import lombok.RequiredArgsConstructor;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ConditionalOnBean(MailHandler.class)
+@RequiredArgsConstructor
 public class MailTools implements AiToolProvider {
 
     @Override
@@ -25,12 +26,6 @@ public class MailTools implements AiToolProvider {
     }
 
     private final MailHandler mailHandler;
-    private final AiToolInvocationStore invocationStore;
-
-    public MailTools(MailHandler mailHandler, AiToolInvocationStore invocationStore) {
-        this.mailHandler = mailHandler;
-        this.invocationStore = invocationStore;
-    }
 
     @Tool(name = "send_email", 
           description = "发送邮件给指定收件人。可用于发送通知、告警、报告等。支持纯文本和 HTML 格式。")

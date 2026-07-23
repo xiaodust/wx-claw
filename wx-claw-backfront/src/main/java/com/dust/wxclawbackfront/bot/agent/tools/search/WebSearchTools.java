@@ -1,14 +1,15 @@
 package com.dust.wxclawbackfront.bot.agent.tools.search;
 
-import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolInvocationStore;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolProvider;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.ToolInvocationLog;
+import lombok.RequiredArgsConstructor;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 
 @Component
+@RequiredArgsConstructor
 public class WebSearchTools implements AiToolProvider {
 
     @Override
@@ -22,12 +23,6 @@ public class WebSearchTools implements AiToolProvider {
     }
 
     private final BochaWebSearchHandler searchHandler;
-    private final AiToolInvocationStore invocationStore;
-
-    public WebSearchTools(BochaWebSearchHandler searchHandler, AiToolInvocationStore invocationStore) {
-        this.searchHandler = searchHandler;
-        this.invocationStore = invocationStore;
-    }
 
     @Tool(name = "web_search", description = "联网搜索全网网页信息。适合查询新闻、时效性信息、百科、公开网页资料。参数 query 为搜索词；freshness 可选 noLimit、oneDay、oneWeek、oneMonth、oneYear；count 建议 1 到 10。")
     @ToolInvocationLog("web_search")

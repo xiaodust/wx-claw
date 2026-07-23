@@ -8,10 +8,12 @@ import com.github.wechat.ilink.sdk.core.exception.SessionExpiredException;
 import com.github.wechat.ilink.sdk.core.model.WeixinMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -26,55 +28,84 @@ public class ILinkBotService {
     private final ILinkRuntimeManager runtimeManager;
     private final ILinkMessageDispatcher messageDispatcher;
     private final DynamicTaskSchedulerService taskSchedulerService;
+    @Qualifier("messageProcessingExecutor")
+    private final ExecutorService messageProcessingExecutor;
 
     @Value("${wxclaw.ilink.poll-idle-ms:200}")
     private long pollIdleMs;
+
+    @Value("${wxclaw.ilink.reconnect.max-attempts:5}")
+    private int maxReconnectAttempts;
+
+    @Value("${wxclaw.ilink.reconnect.delay-seconds:30}")
+    private int reconnectDelaySeconds;
 
     /**
      * 运行 ILink 监听服务
      */
     public void runILinkMonitor() {
         AtomicBoolean stopFlag = new AtomicBoolean(false);
-        ILinkClient client = null;
+        int reconnectAttempts = 0;
 
-        try {
-            client = runtimeManager.createAndLogin();
-            runtimeManager.registerShutdownHook(client, stopFlag);
-
-            // 连接就绪后，补偿执行登录前已到期但因未连接而未发送的一次性任务
+        while (reconnectAttempts < maxReconnectAttempts && !stopFlag.get()) {
+            ILinkClient client = null;
             try {
-                taskSchedulerService.runOverdueOnceTasks();
-            } catch (Exception ex) {
-                log.error("补偿执行过期任务失败: {}", ex.getMessage(), ex);
-            }
+                client = runtimeManager.createAndLogin();
+                reconnectAttempts = 0;  // 登录成功重置计数
 
-            log.info("开始监听消息...");
+                runtimeManager.registerShutdownHook(client, stopFlag);
 
-            while (!stopFlag.get()) {
+                // 连接就绪后，补偿执行登录前已到期但因未连接而未发送的一次性任务
                 try {
-                    List<WeixinMessage> messages = client.getUpdates();
-                    if (messages != null) {
-                        for (WeixinMessage msg : messages) {
-                            messageDispatcher.dispatch(msg);
-                        }
-                    }
-                } catch (SessionExpiredException ex) {
-                    log.error("登录会话已过期，需要重新扫码登录: {}", ex.getMessage());
-                    // 删除旧的恢复上下文文件，避免下次启动时继续尝试用过期凭证恢复
-                    runtimeManager.deleteResumeContext();
-                    // 跳出循环，触发外层重新登录（如果有重启机制的话）
-                    break;
+                    taskSchedulerService.runOverdueOnceTasks();
                 } catch (Exception ex) {
-                    log.warn("监听错误: {}", ex.getMessage());
-                    sleepQuietly(1000L);
+                    log.error("补偿执行过期任务失败: {}", ex.getMessage(), ex);
                 }
-                sleepQuietly(pollIdleMs);
-            }
 
-        } catch (Exception ex) {
-            log.error("iLink 启动失败: {}", ex.getMessage(), ex);
-        } finally {
-            runtimeManager.closeClient(client);
+                log.info("开始监听消息...");
+
+                while (!stopFlag.get()) {
+                    try {
+                        List<WeixinMessage> messages = client.getUpdates();
+                        if (messages != null) {
+                            for (WeixinMessage msg : messages) {
+                                // 异步处理消息，避免阻塞消息拉取
+                                messageProcessingExecutor.submit(() -> {
+                                    try {
+                                        messageDispatcher.dispatch(msg);
+                                    } catch (Exception e) {
+                                        log.error("消息处理异常: {}", e.getMessage(), e);
+                                    }
+                                });
+                            }
+                        }
+                    } catch (SessionExpiredException ex) {
+                        log.warn("登录会话已过期，尝试重连 {}/{}: {}",
+                                reconnectAttempts + 1, maxReconnectAttempts, ex.getMessage());
+                        runtimeManager.deleteResumeContext();
+                        reconnectAttempts++;
+                        break;
+                    } catch (Exception ex) {
+                        log.warn("监听错误: {}", ex.getMessage());
+                        sleepQuietly(1000L);
+                    }
+                    sleepQuietly(pollIdleMs);
+                }
+
+            } catch (Exception ex) {
+                log.error("iLink 启动失败: {}", ex.getMessage(), ex);
+                reconnectAttempts++;
+                if (reconnectAttempts < maxReconnectAttempts) {
+                    log.info("等待 {} 秒后重试...", reconnectDelaySeconds);
+                    sleepQuietly(reconnectDelaySeconds * 1000L);
+                }
+            } finally {
+                runtimeManager.closeClient(client);
+            }
+        }
+
+        if (reconnectAttempts >= maxReconnectAttempts) {
+            log.error("重连次数耗尽（{}次），服务停止", maxReconnectAttempts);
         }
     }
 

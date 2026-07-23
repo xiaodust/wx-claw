@@ -3,10 +3,12 @@ package com.dust.wxclawbackfront.bot.agent.orchestrator;
 import com.dust.wxclawbackfront.bot.agent.model.*;
 import com.dust.wxclawbackfront.bot.agent.orchestrator.executor.TaskExecutor;
 import com.dust.wxclawbackfront.bot.agent.llm.chat.PlainTextLlmService;
+import com.dust.wxclawbackfront.exception.AgentPlanningException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -27,6 +29,10 @@ public class AgentOrchestrator {
     private final PlainTextLlmService plainTextLlmService;
     private final TaskExecutor taskExecutor;
     private final ObjectMapper objectMapper;
+    private final PlanValidator planValidator;
+
+    @Value("${wxclaw.agent.plan.max-retries:3}")
+    private int maxRetries;
 
     /**
      * Agent 执行入口
@@ -49,6 +55,9 @@ public class AgentOrchestrator {
             log.info("Agent 处理完成: success={}", agentResult.isSuccess());
             return agentResult;
 
+        } catch (AgentPlanningException e) {
+            log.error("Agent 规划异常（类型：{}）: {}", e.getCode(), e.getMessage(), e);
+            return AgentResult.failure("任务规划失败: " + e.getMessage());
         } catch (Exception e) {
             log.error("Agent 处理异常: {}", e.getMessage(), e);
             return AgentResult.failure("处理失败: " + e.getMessage());
@@ -60,8 +69,37 @@ public class AgentOrchestrator {
      */
     private TaskPlan planWithLlm(String userMessage, AgentContext context) {
         String prompt = buildPlanningPrompt(userMessage, context);
-        String response = plainTextLlmService.chat(prompt);
-        return parsePlanResponse(response);
+
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                String response = plainTextLlmService.chat(prompt);
+                String json = extractJson(response);
+
+                PlanValidator.ValidationResult validation = planValidator.validate(json);
+                if (validation.isValid()) {
+                    return parsePlanResponse(json);
+                }
+
+                log.warn("规划验证失败，重试 {}/{}: {}", attempt, maxRetries, validation.getError());
+
+                if (attempt == maxRetries) {
+                    log.warn("规划重试耗尽，降级为 chat 模式");
+                    return TaskPlan.chat();
+                }
+            } catch (AgentPlanningException e) {
+                log.error("规划异常（类型：{}），重试 {}/{}: {}", e.getCode(), attempt, maxRetries, e.getMessage());
+                if (attempt == maxRetries) {
+                    return TaskPlan.chat();
+                }
+            } catch (Exception e) {
+                log.warn("规划异常，重试 {}/{}: {}", attempt, maxRetries, e.getMessage());
+                if (attempt == maxRetries) {
+                    return TaskPlan.chat();
+                }
+            }
+        }
+
+        return TaskPlan.chat();
     }
 
     /**
@@ -147,6 +185,9 @@ public class AgentOrchestrator {
             return TaskPlan.builder()
                     .steps(steps)
                     .build();
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            log.warn("JSON 解析失败，降级为对话: {}", e.getMessage());
+            throw new AgentPlanningException("JSON 解析失败: " + e.getMessage(), e);
         } catch (Exception e) {
             log.warn("解析任务计划失败，降级为对话: {}", e.getMessage());
             return TaskPlan.chat();

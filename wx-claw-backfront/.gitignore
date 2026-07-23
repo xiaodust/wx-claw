@@ -10,6 +10,9 @@ target/
 ### Runtime Data ###
 .ilink-resume-context.json
 wx-claw-backfront.db
+*.db-wal
+*.db-shm
+*.db-journal
 
 ### STS ###
 .apt_generated

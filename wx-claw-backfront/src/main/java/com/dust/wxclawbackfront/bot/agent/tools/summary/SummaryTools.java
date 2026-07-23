@@ -1,6 +1,5 @@
 package com.dust.wxclawbackfront.bot.agent.tools.summary;
 
-import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolInvocationStore;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolProvider;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.ToolInvocationLog;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.UserContextHolder;
@@ -29,7 +28,6 @@ public class SummaryTools implements AiToolProvider {
     }
 
     private final SummaryHandler summaryHandler;
-    private final AiToolInvocationStore invocationStore;
 
     /**
      * 即时生成日报

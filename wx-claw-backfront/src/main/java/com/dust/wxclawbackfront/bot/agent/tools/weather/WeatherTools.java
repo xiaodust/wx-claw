@@ -1,12 +1,13 @@
 package com.dust.wxclawbackfront.bot.agent.tools.weather;
 
-import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolInvocationStore;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolProvider;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.ToolInvocationLog;
+import lombok.RequiredArgsConstructor;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Component;
 
 @Component
+@RequiredArgsConstructor
 public class WeatherTools implements AiToolProvider {
 
     @Override
@@ -20,12 +21,6 @@ public class WeatherTools implements AiToolProvider {
     }
 
     private final SeniverseWeatherHandler weatherHandler;
-    private final AiToolInvocationStore invocationStore;
-
-    public WeatherTools(SeniverseWeatherHandler weatherHandler, AiToolInvocationStore invocationStore) {
-        this.weatherHandler = weatherHandler;
-        this.invocationStore = invocationStore;
-    }
 
     @Tool(name = "weather_now", description = "获取指定城市的实时天气。适合查询当前、现在、此刻天气。参数 location 支持 beijing/shanghai/hangzhou 或中文城市名。")
     @ToolInvocationLog("weather_now")

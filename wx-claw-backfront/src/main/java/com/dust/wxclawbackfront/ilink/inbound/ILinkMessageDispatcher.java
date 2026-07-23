@@ -3,10 +3,11 @@ package com.dust.wxclawbackfront.ilink.inbound;
 import com.dust.wxclawbackfront.bot.dao.entity.AiConversation;
 import com.dust.wxclawbackfront.bot.dao.entity.AiMessage;
 import com.dust.wxclawbackfront.bot.agent.llm.CommandHandler;
-import com.dust.wxclawbackfront.bot.agent.llm.chat.document.DocumentGenerator;
 import com.dust.wxclawbackfront.bot.ragflow.RagFlowClient;
 import com.dust.wxclawbackfront.bot.service.AiConversationCrudService;
+import com.dust.wxclawbackfront.bot.agent.tools.shared.FileUploadValidator;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.UserContextHolder;
+import com.dust.wxclawbackfront.exception.WxClawException;
 import com.dust.wxclawbackfront.ilink.ILinkUserInput;
 import com.dust.wxclawbackfront.ilink.ILinkUserInputExtractor;
 import com.dust.wxclawbackfront.ilink.outbound.ILinkMessageSender;
@@ -20,9 +21,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -68,6 +67,7 @@ public class ILinkMessageDispatcher {
     private final DocumentReplyHandler documentReplyHandler;
     private final WaitNoticeService waitNoticeService;
     private final ErrorHandler errorHandler;
+    private final FileUploadValidator fileUploadValidator;
 
     @Value("${wxclaw.ai.context.max-history-messages:12}")
     private int maxHistoryMessages;
@@ -228,7 +228,10 @@ public class ILinkMessageDispatcher {
 
     private String handleImageMessage(ILinkUserInput userInput, String userId, String sessionId) {
         if (userInput.getError() != null && !userInput.getError().isBlank()) {
-            return "收到图片，但获取图片失败。请尝试重新发送。\n错误信息：" + userInput.getError().trim();
+            log.warn("图片理解失败，提供降级处理: userId={}, error={}", userId, userInput.getError());
+            // 降级：存储图片上下文，让用户手动描述
+            mediaContextManager.storeImageContext(userId, "[图片理解失败，请描述图片内容]");
+            return "收到图片，但自动理解失败。请简单描述图片内容或告诉我你想让我做什么。";
         }
 
         if (userInput.getImageDescription() != null && !userInput.getImageDescription().isBlank()) {
@@ -306,6 +309,13 @@ public class ILinkMessageDispatcher {
      */
     private String handleFileUploadDirect(String fileName, byte[] fileBytes, String userId) {
         try {
+            // 文件验证
+            FileUploadValidator.ValidationResult validation = fileUploadValidator.validate(fileName, fileBytes);
+            if (!validation.isValid()) {
+                log.warn("文件验证失败: fileName={}, userId={}, error={}", fileName, userId, validation.getError());
+                return validation.getError();
+            }
+
             RagFlowClient ragFlowClient = ragFlowClientProvider.getIfAvailable();
             if (ragFlowClient == null) {
                 log.warn("RagFlowClient 不可用，无法上传文件到知识库");
@@ -313,9 +323,6 @@ public class ILinkMessageDispatcher {
             }
             if (fileName == null || fileName.isBlank()) {
                 fileName = "unknown_file";
-            }
-            if (fileBytes == null || fileBytes.length == 0) {
-                return "文件内容为空，请重新发送。";
             }
 
             log.info("上传文件到知识库: fileName={}, size={}, userId={}", fileName, fileBytes.length, userId);
@@ -348,23 +355,5 @@ public class ILinkMessageDispatcher {
                 log.warn("异步保存消息失败: {}", e.getMessage());
             }
         }, ASYNC_SAVE_EXECUTOR);
-    }
-
-    private static List<AiMessage> normalizeHistory(List<AiMessage> historyMessages, int maxMessages) {
-        if (historyMessages == null || historyMessages.isEmpty()) {
-            return Collections.emptyList();
-        }
-        List<AiMessage> list = new ArrayList<>();
-        for (AiMessage msg : historyMessages) {
-            if (msg != null && !MEDIA_SENT_PLACEHOLDER.equals(msg.getContent())) {
-                list.add(msg);
-            }
-        }
-        list.sort(Comparator.comparing(AiMessage::getMessageSeq, Comparator.nullsLast(Integer::compareTo)));
-        int limit = maxMessages <= 0 ? 20 : maxMessages;
-        if (list.size() > limit) {
-            return list.subList(list.size() - limit, list.size());
-        }
-        return list;
     }
 }

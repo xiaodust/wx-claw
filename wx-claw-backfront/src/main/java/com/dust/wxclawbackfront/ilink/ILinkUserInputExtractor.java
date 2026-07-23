@@ -179,7 +179,25 @@ public class ILinkUserInputExtractor {
         return String.join("\n", parts);
     }
 
+    /**
+     * 提取引用消息文本
+     */
     public String extractRefText(WeixinMessage msg) {
+        List<MessageItem> items = msg == null ? null : msg.getItem_list();
+        if (items == null || items.isEmpty()) {
+            return null;
+        }
+        
+        // 遍历消息项，查找包含引用消息的项
+        for (MessageItem item : items) {
+            if (item != null && item.hasRefMessage()) {
+                String refText = item.getRefMessageText();
+                if (refText != null && !refText.isBlank()) {
+                    return refText.trim();
+                }
+            }
+        }
+        
         return null;
     }
 

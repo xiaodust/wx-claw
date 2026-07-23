@@ -3,6 +3,9 @@ package com.dust.wxclawbackfront.ilink.inbound;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.math.BigInteger;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,7 +31,9 @@ public class MessageDebouncer {
             return true;
         }
 
-        String messageKey = userId + "::" + userText.trim().hashCode();
+        // 使用SHA-256哈希而不是简单的hashCode，避免哈希冲突
+        String textHash = sha256Hash(userText.trim());
+        String messageKey = userId + "::" + textHash;
         Instant now = Instant.now();
         Instant lastProcessed = recentMessageCache.get(messageKey);
 
@@ -41,6 +46,29 @@ public class MessageDebouncer {
         recentMessageCache.put(messageKey, now);
         cleanExpiredCache(now);
         return true;
+    }
+
+    /**
+     * 使用SHA-256计算文本哈希值
+     */
+    private String sha256Hash(String input) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hashBytes = digest.digest(input.getBytes());
+            BigInteger number = new BigInteger(1, hashBytes);
+            StringBuilder hexString = new StringBuilder(number.toString(16));
+            
+            // 确保哈希值是64位十六进制字符串（补零）
+            while (hexString.length() < 64) {
+                hexString.insert(0, '0');
+            }
+            
+            return hexString.toString();
+        } catch (NoSuchAlgorithmException e) {
+            // 如果SHA-256不可用，回退到hashCode，但这种情况几乎不会发生
+            log.warn("SHA-256不可用，使用hashCode作为备选方案", e);
+            return String.valueOf(input.hashCode());
+        }
     }
 
     /**

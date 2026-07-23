@@ -1,7 +1,6 @@
 package com.dust.wxclawbackfront.bot.agent.tools.ragflow;
 
 import com.dust.wxclawbackfront.bot.ragflow.RagFlowClient;
-import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolInvocationStore;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolProvider;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.ToolInvocationLog;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +23,6 @@ import java.util.stream.Collectors;
 public class RagFlowTools implements AiToolProvider {
 
     private final RagFlowClient ragFlowClient;
-    private final AiToolInvocationStore invocationStore;
     private final java.net.http.HttpClient httpClient = java.net.http.HttpClient.newBuilder()
             .connectTimeout(java.time.Duration.ofSeconds(30))
             .build();
