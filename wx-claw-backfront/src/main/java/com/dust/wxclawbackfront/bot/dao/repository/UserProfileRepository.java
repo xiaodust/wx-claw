@@ -8,11 +8,11 @@ import java.util.Optional;
 
 public interface UserProfileRepository extends JpaRepository<UserProfile, Long> {
 
-    List<UserProfile> findByUserId(String userId);
+    List<UserProfile> findByTenantIdAndUserId(String tenantId, String userId);
 
-    List<UserProfile> findByUserIdAndCategory(String userId, String category);
+    List<UserProfile> findByTenantIdAndUserIdAndCategory(String tenantId, String userId, String category);
 
-    Optional<UserProfile> findByUserIdAndCategoryAndKeyName(String userId, String category, String keyName);
+    Optional<UserProfile> findByTenantIdAndUserIdAndCategoryAndKeyName(String tenantId, String userId, String category, String keyName);
 
-    void deleteByUserId(String userId);
+    void deleteByTenantIdAndUserId(String tenantId, String userId);
 }

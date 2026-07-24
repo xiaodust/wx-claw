@@ -3,13 +3,11 @@ package com.dust.wxclawbackfront.ilink.inbound;
 import com.dust.wxclawbackfront.ilink.outbound.ILinkMessageSender;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Component;
 
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
+import java.time.Instant;
 
 /**
  * 等待提示服务
@@ -19,17 +17,8 @@ import java.util.concurrent.TimeUnit;
 @Component
 public class WaitNoticeService {
 
-    private static final ScheduledExecutorService EXECUTOR =
-            Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
-                @Override
-                public Thread newThread(Runnable r) {
-                    Thread thread = new Thread(r, "ai-wait-notice");
-                    thread.setDaemon(true);
-                    return thread;
-                }
-            });
-
     private final ILinkMessageSender messageSender;
+    private final TaskScheduler taskScheduler;
 
     @Value("${wxclaw.ai.wait-notice.enabled:true}")
     private boolean waitNoticeEnabled;
@@ -40,8 +29,9 @@ public class WaitNoticeService {
     @Value("${wxclaw.ai.wait-notice.text:我正在处理中，可能还需要几秒，请稍等一下。}")
     private String waitNoticeText;
 
-    public WaitNoticeService(ILinkMessageSender messageSender) {
+    public WaitNoticeService(ILinkMessageSender messageSender, TaskScheduler taskScheduler) {
         this.messageSender = messageSender;
+        this.taskScheduler = taskScheduler;
     }
 
     /**
@@ -58,13 +48,13 @@ public class WaitNoticeService {
                 ? "我正在处理中，可能还需要几秒，请稍等一下。"
                 : waitNoticeText.trim();
 
-        return EXECUTOR.schedule(() -> {
+        return taskScheduler.schedule(() -> {
             try {
                 messageSender.sendText(userId, text);
             } catch (Exception ex) {
                 log.debug("发送等待提示失败: userId={}, error={}", userId, ex.getMessage());
             }
-        }, delay, TimeUnit.SECONDS);
+        }, Instant.now().plusSeconds(delay));
     }
 
     /**

@@ -7,6 +7,7 @@ import com.dust.wxclawbackfront.bot.api.io.AiMessageDTO;
 import com.dust.wxclawbackfront.bot.dao.entity.AiConversation;
 import com.dust.wxclawbackfront.bot.dao.entity.AiMessage;
 import com.dust.wxclawbackfront.bot.service.AiConversationCrudService;
+import com.dust.wxclawbackfront.tenancy.TenantAccessGuard;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -15,7 +16,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -25,32 +25,34 @@ import java.util.List;
 public class AiConversationController {
 
     private final AiConversationCrudService crudService;
+    private final TenantAccessGuard accessGuard;
 
-    public AiConversationController(AiConversationCrudService crudService) {
+    public AiConversationController(AiConversationCrudService crudService, TenantAccessGuard accessGuard) {
         this.crudService = crudService;
+        this.accessGuard = accessGuard;
     }
 
     @PostMapping
     public ResponseEntity<AiConversationDTO> createConversation(@RequestBody AiConversationCreateRequest request) {
+        accessGuard.requireScope("conversation:write");
         if (request == null || request.getSessionId() == null || request.getSessionId().isBlank()) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
         }
-        AiConversation conversation = crudService.createOrGetConversation(request.getSessionId().trim(), request.getUsername());
+        AiConversation conversation = crudService.createOrGetConversation(request.getSessionId().trim(), null);
         return ResponseEntity.ok(toDto(conversation));
     }
 
     @PostMapping("/new")
-    public ResponseEntity<AiConversationDTO> createNewConversation(@RequestParam(name = "username", required = false) String username) {
-        AiConversation conversation = crudService.createNewConversation(username);
+    public ResponseEntity<AiConversationDTO> createNewConversation() {
+        accessGuard.requireScope("conversation:write");
+        AiConversation conversation = crudService.createNewConversation(null);
         return ResponseEntity.ok(toDto(conversation));
     }
 
     @GetMapping("/active")
-    public ResponseEntity<AiConversationDTO> getActiveConversation(@RequestParam(name = "username") String username) {
-        if (username == null || username.isBlank()) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
-        }
-        AiConversation conversation = crudService.getActiveConversation(username.trim());
+    public ResponseEntity<AiConversationDTO> getActiveConversation() {
+        accessGuard.requireScope("conversation:read");
+        AiConversation conversation = crudService.getActiveConversation(null);
         if (conversation == null) {
             return ResponseEntity.notFound().build();
         }
@@ -58,13 +60,15 @@ public class AiConversationController {
     }
 
     @GetMapping
-    public ResponseEntity<List<AiConversationDTO>> listConversations(@RequestParam(name = "username", required = false) String username) {
-        List<AiConversationDTO> list = crudService.listConversations(username).stream().map(AiConversationController::toDto).toList();
+    public ResponseEntity<List<AiConversationDTO>> listConversations() {
+        accessGuard.requireScope("conversation:read");
+        List<AiConversationDTO> list = crudService.listConversations(null).stream().map(AiConversationController::toDto).toList();
         return ResponseEntity.ok(list);
     }
 
     @GetMapping("/{sessionId}")
     public ResponseEntity<AiConversationDTO> getConversation(@PathVariable("sessionId") String sessionId) {
+        accessGuard.requireScope("conversation:read");
         if (sessionId == null || sessionId.isBlank()) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
         }
@@ -77,6 +81,7 @@ public class AiConversationController {
 
     @DeleteMapping("/{sessionId}")
     public ResponseEntity<Void> deleteConversation(@PathVariable("sessionId") String sessionId) {
+        accessGuard.requireScope("conversation:delete");
         if (sessionId == null || sessionId.isBlank()) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
         }
@@ -86,6 +91,7 @@ public class AiConversationController {
 
     @GetMapping("/{sessionId}/messages")
     public ResponseEntity<List<AiMessageDTO>> listMessages(@PathVariable("sessionId") String sessionId) {
+        accessGuard.requireScope("message:read");
         if (sessionId == null || sessionId.isBlank()) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
         }
@@ -95,6 +101,7 @@ public class AiConversationController {
 
     @PostMapping("/{sessionId}/messages")
     public ResponseEntity<AiMessageDTO> appendMessage(@PathVariable("sessionId") String sessionId, @RequestBody AiMessageCreateRequest request) {
+        accessGuard.requireScope("message:write");
         if (sessionId == null || sessionId.isBlank()) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
         }

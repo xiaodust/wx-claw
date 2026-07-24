@@ -4,6 +4,7 @@ import com.dust.wxclawbackfront.bot.dao.entity.UserLearning;
 import com.dust.wxclawbackfront.bot.dao.entity.UserProfile;
 import com.dust.wxclawbackfront.bot.dao.repository.UserLearningRepository;
 import com.dust.wxclawbackfront.bot.dao.repository.UserProfileRepository;
+import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -30,7 +31,8 @@ public class UserMemoryService {
     public void saveProfile(String userId, String category, String keyName, String keyValue, String source) {
         if (userId == null || userId.isBlank()) return;
 
-        Optional<UserProfile> existing = profileRepository.findByUserIdAndCategoryAndKeyName(userId, category, keyName);
+        Optional<UserProfile> existing = profileRepository.findByTenantIdAndUserIdAndCategoryAndKeyName(
+                tenantId(), userId, category, keyName);
         if (existing.isPresent()) {
             UserProfile profile = existing.get();
             profile.setKeyValue(keyValue);
@@ -51,12 +53,12 @@ public class UserMemoryService {
 
     public List<UserProfile> getProfiles(String userId) {
         if (userId == null || userId.isBlank()) return List.of();
-        return profileRepository.findByUserId(userId);
+        return profileRepository.findByTenantIdAndUserId(tenantId(), userId);
     }
 
     public List<UserProfile> getProfilesByCategory(String userId, String category) {
         if (userId == null || userId.isBlank()) return List.of();
-        return profileRepository.findByUserIdAndCategory(userId, category);
+        return profileRepository.findByTenantIdAndUserIdAndCategory(tenantId(), userId, category);
     }
 
     // ========== 学习规则 ==========
@@ -76,17 +78,17 @@ public class UserMemoryService {
 
     public List<UserLearning> getActiveLearnings(String userId) {
         if (userId == null || userId.isBlank()) return List.of();
-        return learningRepository.findByUserIdAndActiveTrue(userId);
+        return learningRepository.findByTenantIdAndUserIdAndActiveTrue(tenantId(), userId);
     }
 
     public List<UserLearning> getActiveLearningsByTrigger(String userId, String trigger) {
         if (userId == null || userId.isBlank()) return List.of();
-        return learningRepository.findByUserIdAndTriggerAndActiveTrue(userId, trigger);
+        return learningRepository.findByTenantIdAndUserIdAndTriggerAndActiveTrue(tenantId(), userId, trigger);
     }
 
     @Transactional
     public boolean deactivateLearning(Long learningId) {
-        Optional<UserLearning> opt = learningRepository.findById(learningId);
+        Optional<UserLearning> opt = learningRepository.findByTenantIdAndId(tenantId(), learningId);
         if (opt.isPresent()) {
             UserLearning learning = opt.get();
             learning.setActive(false);
@@ -120,7 +122,8 @@ public class UserMemoryService {
      */
     public String getRolePrompt(String userId) {
         if (userId == null || userId.isBlank()) return null;
-        return profileRepository.findByUserIdAndCategoryAndKeyName(userId, ROLE_PROMPT_CATEGORY, ROLE_PROMPT_KEY)
+        return profileRepository.findByTenantIdAndUserIdAndCategoryAndKeyName(
+                        tenantId(), userId, ROLE_PROMPT_CATEGORY, ROLE_PROMPT_KEY)
                 .map(UserProfile::getKeyValue)
                 .orElse(null);
     }
@@ -131,7 +134,8 @@ public class UserMemoryService {
     @Transactional
     public void removeRolePrompt(String userId) {
         if (userId == null || userId.isBlank()) return;
-        profileRepository.findByUserIdAndCategoryAndKeyName(userId, ROLE_PROMPT_CATEGORY, ROLE_PROMPT_KEY)
+        profileRepository.findByTenantIdAndUserIdAndCategoryAndKeyName(
+                        tenantId(), userId, ROLE_PROMPT_CATEGORY, ROLE_PROMPT_KEY)
                 .ifPresent(profile -> {
                     profileRepository.delete(profile);
                     log.info("角色提示词已删除: userId={}", userId);
@@ -217,5 +221,9 @@ public class UserMemoryService {
         sb.append("- 如果不确定是否应该记录，宁可记录也不要遗漏\n\n");
 
         return sb.toString();
+    }
+
+    private String tenantId() {
+        return TenantContextHolder.require().tenantId();
     }
 }

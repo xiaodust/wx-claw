@@ -12,30 +12,33 @@ import java.util.Optional;
 
 public interface AiMessageRepository extends JpaRepository<AiMessage, String> {
 
-    List<AiMessage> findAllBySessionIdOrderByMessageSeqAsc(String sessionId);
+    List<AiMessage> findAllByTenantIdAndConversationIdOrderByMessageSeqAsc(String tenantId, String conversationId);
 
     /**
      * 查询最近的N条消息（按messageSeq降序，然后在内存中反转）
      */
-    List<AiMessage> findTop20BySessionIdOrderByMessageSeqDesc(String sessionId);
+    List<AiMessage> findTop20ByTenantIdAndConversationIdOrderByMessageSeqDesc(String tenantId, String conversationId);
 
     /**
      * 使用 Pageable 查询最近的消息
      */
-    @Query("SELECT m FROM AiMessage m WHERE m.sessionId = :sessionId ORDER BY m.messageSeq DESC")
-    List<AiMessage> findRecentBySessionId(@Param("sessionId") String sessionId, Pageable pageable);
+    @Query("SELECT m FROM AiMessage m WHERE m.tenantId = :tenantId AND m.conversationId = :conversationId ORDER BY m.messageSeq DESC")
+    List<AiMessage> findRecent(@Param("tenantId") String tenantId,
+                               @Param("conversationId") String conversationId,
+                               Pageable pageable);
 
-    Optional<AiMessage> findTopBySessionIdOrderByMessageSeqDesc(String sessionId);
+    Optional<AiMessage> findTopByTenantIdAndConversationIdOrderByMessageSeqDesc(String tenantId, String conversationId);
 
-    long countBySessionId(String sessionId);
+    long countByTenantIdAndConversationId(String tenantId, String conversationId);
 
-    void deleteBySessionId(String sessionId);
+    void deleteByTenantIdAndConversationId(String tenantId, String conversationId);
 
-    @Query("SELECT m FROM AiMessage m WHERE m.sessionId IN " +
-           "(SELECT c.sessionId FROM AiConversation c WHERE c.username = :username) " +
+    @Query("SELECT m FROM AiMessage m WHERE m.tenantId = :tenantId AND m.conversationId IN " +
+           "(SELECT c.id FROM AiConversation c WHERE c.tenantId = :tenantId AND c.internalUserId = :internalUserId) " +
            "AND m.createTime >= :startTime AND m.createTime < :endTime " +
            "ORDER BY m.createTime ASC")
-    List<AiMessage> findByUsernameAndTimeRange(@Param("username") String username,
-                                                 @Param("startTime") LocalDateTime startTime,
-                                                 @Param("endTime") LocalDateTime endTime);
+    List<AiMessage> findByUserAndTimeRange(@Param("tenantId") String tenantId,
+                                            @Param("internalUserId") String internalUserId,
+                                            @Param("startTime") LocalDateTime startTime,
+                                            @Param("endTime") LocalDateTime endTime);
 }

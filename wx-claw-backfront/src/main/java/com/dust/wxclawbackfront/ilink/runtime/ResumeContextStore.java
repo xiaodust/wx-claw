@@ -22,7 +22,7 @@ import java.util.List;
 @Component
 public class ResumeContextStore {
 
-    private static final String CONTEXT_FILE_PATH = ".ilink-resume-context.json";
+    private static final String CONTEXT_FILE_PREFIX = ".ilink-resume-context-";
     private final ObjectMapper objectMapper;
 
     public ResumeContextStore() {
@@ -37,7 +37,7 @@ public class ResumeContextStore {
     /**
      * 保存 ResumeContext 到本地文件
      */
-    public void save(ResumeContext context) {
+    public void save(BotRuntimeKey key, ResumeContext context) {
         if (context == null) {
             log.warn("ResumeContext 为空，跳过保存");
             return;
@@ -47,7 +47,7 @@ public class ResumeContextStore {
             // 转换为可序列化的 DTO
             ResumeContextDTO dto = toDTO(context);
             
-            File file = new File(CONTEXT_FILE_PATH);
+            File file = contextFile(key);
             objectMapper.writerWithDefaultPrettyPrinter().writeValue(file, dto);
             log.info("ResumeContext 已保存到文件: {}，包含 {} 个用户的 context token", 
                     file.getAbsolutePath(), dto.getConversationContexts().size());
@@ -59,8 +59,8 @@ public class ResumeContextStore {
     /**
      * 从本地文件加载 ResumeContext
      */
-    public ResumeContext load() {
-        File file = new File(CONTEXT_FILE_PATH);
+    public ResumeContext load(BotRuntimeKey key) {
+        File file = contextFile(key);
         if (!file.exists()) {
             log.info("ResumeContext 文件不存在，将从空状态启动: {}", file.getAbsolutePath());
             return null;
@@ -81,11 +81,17 @@ public class ResumeContextStore {
     /**
      * 删除持久化文件
      */
-    public void delete() {
-        File file = new File(CONTEXT_FILE_PATH);
+    public void delete(BotRuntimeKey key) {
+        File file = contextFile(key);
         if (file.exists() && file.delete()) {
             log.info("ResumeContext 文件已删除: {}", file.getAbsolutePath());
         }
+    }
+
+    private File contextFile(BotRuntimeKey key) {
+        String safeTenantId = key.tenantId().replaceAll("[^a-zA-Z0-9._-]", "_");
+        String safeBotId = key.botId().replaceAll("[^a-zA-Z0-9._-]", "_");
+        return new File(CONTEXT_FILE_PREFIX + safeTenantId + "-" + safeBotId + ".json");
     }
 
     private ResumeContextDTO toDTO(ResumeContext context) {

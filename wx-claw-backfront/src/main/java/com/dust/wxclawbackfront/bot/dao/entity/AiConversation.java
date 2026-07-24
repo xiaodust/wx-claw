@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.bot.dao.entity;
 
+import com.dust.wxclawbackfront.tenancy.TenantOwnedEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -8,22 +9,24 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import org.hibernate.annotations.UuidGenerator;
 
 import java.time.LocalDateTime;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @Entity
 @Table(
         name = "ai_conversation",
         indexes = {
-                @Index(name = "idx_ai_conversation_session_id", columnList = "session_id"),
-                @Index(name = "idx_ai_conversation_username", columnList = "username"),
-                @Index(name = "idx_ai_conversation_username_active", columnList = "username,is_active")
+                @Index(name = "idx_ai_conversation_tenant_session", columnList = "tenant_id,session_id"),
+                @Index(name = "idx_ai_conversation_tenant_user_active", columnList = "tenant_id,internal_user_id,is_active"),
+                @Index(name = "idx_ai_conversation_tenant_bot", columnList = "tenant_id,bot_id,created_time")
         }
 )
-public class AiConversation {
+public class AiConversation extends TenantOwnedEntity {
     @Id
     @UuidGenerator
     @Column(length = 36)
@@ -35,7 +38,16 @@ public class AiConversation {
     @Column(name = "username")
     private String username;
 
-    @Column(name = "is_active", nullable = false, columnDefinition = "boolean default true")
+    @Column(name = "internal_user_id", nullable = false, length = 128)
+    private String internalUserId;
+
+    @Column(nullable = false, length = 20)
+    private String channel;
+
+    @Column(name = "bot_id", length = 128)
+    private String botId;
+
+    @Column(name = "is_active", nullable = false)
     private Boolean active = Boolean.TRUE;
 
     @Column(name = "message_count", nullable = false)

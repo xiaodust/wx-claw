@@ -3,6 +3,7 @@ package com.dust.wxclawbackfront.bot.agent.tools.reminder;
 import com.dust.wxclawbackfront.bot.dao.entity.ReminderTask;
 import com.dust.wxclawbackfront.bot.dao.repository.ReminderTaskRepository;
 import com.dust.wxclawbackfront.bot.scheduler.DynamicTaskSchedulerService;
+import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -376,7 +377,8 @@ public class ReminderHandler {
         if (userId == null || userId.isBlank()) {
             return List.of();
         }
-        return repository.findByUserIdAndStatusOrderByTriggerTimeAsc(userId, "PENDING");
+        return repository.findByTenantIdAndUserIdAndStatusOrderByTriggerTimeAsc(
+                TenantContextHolder.require().tenantId(), userId, "PENDING");
     }
 
     /**
@@ -391,7 +393,7 @@ public class ReminderHandler {
             return new ReminderCancelResult(false, "提醒ID为空");
         }
 
-        return repository.findById(reminderId)
+        return repository.findByTenantIdAndId(TenantContextHolder.require().tenantId(), reminderId)
                 .map(task -> {
                     if (!task.getUserId().equals(userId)) {
                         return new ReminderCancelResult(false, "无权取消此提醒");

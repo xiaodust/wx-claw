@@ -1,11 +1,13 @@
 package com.dust.wxclawbackfront.config.security;
 
+import com.dust.wxclawbackfront.tenancy.TenantContext;
+import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
+import com.dust.wxclawbackfront.tenancy.security.TenantApiKeyAuthenticator;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -17,8 +19,11 @@ import java.io.IOException;
 @ConditionalOnProperty(prefix = "wxclaw.api", name = "auth-enabled", havingValue = "true")
 public class ApiKeyAuthFilter extends OncePerRequestFilter {
 
-    @Value("${wxclaw.api.key:}")
-    private String apiKey;
+    private final TenantApiKeyAuthenticator authenticator;
+
+    public ApiKeyAuthFilter(TenantApiKeyAuthenticator authenticator) {
+        this.authenticator = authenticator;
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -41,13 +46,19 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
 
         String requestApiKey = request.getHeader("X-API-Key");
 
-        if (apiKey != null && !apiKey.isEmpty() && apiKey.equals(requestApiKey)) {
-            chain.doFilter(request, response);
-        } else {
+        TenantContext context = authenticator.authenticate(requestApiKey);
+        if (context == null) {
             log.warn("API 认证失败: path={}, remoteAddr={}", path, request.getRemoteAddr());
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType("application/json;charset=UTF-8");
             response.getWriter().write("{\"error\": \"Unauthorized\", \"message\": \"Invalid or missing API key\"}");
+            return;
+        }
+        try {
+            TenantContextHolder.set(context);
+            chain.doFilter(request, response);
+        } finally {
+            TenantContextHolder.clear();
         }
     }
 }

@@ -6,17 +6,20 @@ import com.dust.wxclawbackfront.bot.agent.llm.CommandHandler;
 import com.dust.wxclawbackfront.bot.ragflow.RagFlowClient;
 import com.dust.wxclawbackfront.bot.service.AiConversationCrudService;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.FileUploadValidator;
-import com.dust.wxclawbackfront.bot.agent.tools.shared.UserContextHolder;
+import com.dust.wxclawbackfront.tenancy.TenantContext;
+import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import com.dust.wxclawbackfront.exception.WxClawException;
 import com.dust.wxclawbackfront.ilink.ILinkUserInput;
 import com.dust.wxclawbackfront.ilink.ILinkUserInputExtractor;
 import com.dust.wxclawbackfront.ilink.outbound.ILinkMessageSender;
 import com.dust.wxclawbackfront.ilink.runtime.ILinkRuntimeManager;
+import com.dust.wxclawbackfront.ilink.runtime.BotRuntimeKey;
 import com.github.wechat.ilink.sdk.ILinkClient;
 import com.github.wechat.ilink.sdk.core.model.WeixinMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -25,9 +28,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ThreadFactory;
+import java.util.UUID;
 
 /**
  * ILink 入站消息处理器（薄协调层）
@@ -42,16 +44,6 @@ public class ILinkMessageDispatcher {
     private static final int MESSAGE_TYPE_ASSISTANT = 1;
     private static final String MEDIA_SENT_PLACEHOLDER = "[MEDIA_SENT]";
 
-    // 异步保存消息的线程池
-    private static final ExecutorService ASYNC_SAVE_EXECUTOR = Executors.newFixedThreadPool(2, new ThreadFactory() {
-        @Override
-        public Thread newThread(Runnable r) {
-            Thread thread = new Thread(r, "async-save");
-            thread.setDaemon(true);
-            return thread;
-        }
-    });
-
     // 核心依赖
     private final AiConversationCrudService crudService;
     private final CommandHandler commandHandler;
@@ -59,6 +51,8 @@ public class ILinkMessageDispatcher {
     private final ILinkMessageSender messageSender;
     private final ILinkRuntimeManager runtimeManager;
     private final ObjectProvider<RagFlowClient> ragFlowClientProvider;
+    @Qualifier("asyncSaveExecutor")
+    private final ExecutorService asyncSaveExecutor;
 
     // 拆分出的组件
     private final MessageDebouncer messageDebouncer;
@@ -75,7 +69,7 @@ public class ILinkMessageDispatcher {
     /**
      * 处理入站消息（主入口）
      */
-    public void dispatch(WeixinMessage msg) {
+    public void dispatch(BotRuntimeKey runtimeKey, WeixinMessage msg) {
         if (msg == null) {
             return;
         }
@@ -94,7 +88,8 @@ public class ILinkMessageDispatcher {
         }
 
         // 设置用户上下文
-        UserContextHolder.setUserId(userId);
+        TenantContextHolder.set(TenantContext.ilink(
+                runtimeKey.tenantId(), runtimeKey.botId(), userId, UUID.randomUUID().toString()));
         try {
             // 检查是否是新建对话指令
             if (isNewConversationIntent(userText)) {
@@ -112,9 +107,9 @@ public class ILinkMessageDispatcher {
             AiConversation activeConversation = crudService.getOrCreateActiveConversation(userId);
             String sessionId = activeConversation.getSessionId();
 
-            processMessage(msg, userId, contextToken, sessionId);
+            processMessage(runtimeKey, msg, userId, contextToken, sessionId);
         } finally {
-            UserContextHolder.clear();
+            TenantContextHolder.clear();
         }
     }
 
@@ -164,8 +159,8 @@ public class ILinkMessageDispatcher {
         }
     }
 
-    private void processMessage(WeixinMessage msg, String userId, String contextToken, String sessionId) {
-        ILinkClient client = runtimeManager.getActiveClient();
+    private void processMessage(BotRuntimeKey runtimeKey, WeixinMessage msg, String userId, String contextToken, String sessionId) {
+        ILinkClient client = runtimeManager.requireClient(runtimeKey);
         ILinkUserInput userInput = userInputExtractor.extract(client, msg);
         if (userInput == null) {
             String trimmed = userInputExtractor.extractText(msg);
@@ -354,6 +349,6 @@ public class ILinkMessageDispatcher {
             } catch (Exception e) {
                 log.warn("异步保存消息失败: {}", e.getMessage());
             }
-        }, ASYNC_SAVE_EXECUTOR);
+        }, asyncSaveExecutor);
     }
 }

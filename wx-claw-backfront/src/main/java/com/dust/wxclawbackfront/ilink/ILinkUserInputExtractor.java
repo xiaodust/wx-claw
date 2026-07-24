@@ -190,15 +190,25 @@ public class ILinkUserInputExtractor {
         
         // 遍历消息项，查找包含引用消息的项
         for (MessageItem item : items) {
-            if (item != null && item.hasRefMessage()) {
-                String refText = item.getRefMessageText();
-                if (refText != null && !refText.isBlank()) {
-                    return refText.trim();
-                }
+            String refText = extractRefText(item);
+            if (refText != null && !refText.isBlank()) {
+                return refText.trim();
             }
         }
         
         return null;
+    }
+
+    private String extractRefText(MessageItem item) {
+        if (item == null) {
+            return null;
+        }
+        try {
+            Object value = item.getClass().getMethod("getRefMessageText").invoke(item);
+            return value instanceof String text ? text : null;
+        } catch (ReflectiveOperationException ignored) {
+            return null;
+        }
     }
 
     private static String getMessageTypeName(int type) {

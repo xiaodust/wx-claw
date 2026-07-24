@@ -8,6 +8,7 @@ import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolInvocationStore;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.UserContextHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -15,7 +16,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * 通用聊天处理器
@@ -30,6 +30,7 @@ public class UniversalChatHandler implements ChatHandler {
     private final LlmToolRegistry toolRegistry;
     private final SkillLoader skillLoader;
     private final UserMemoryService userMemoryService;
+    private final ExecutorService promptExecutor;
 
     @Value("${spring.ai.openai.chat.model:}")
     private String model;
@@ -55,6 +56,7 @@ public class UniversalChatHandler implements ChatHandler {
                                 LlmToolRegistry toolRegistry,
                                 SkillLoader skillLoader,
                                 UserMemoryService userMemoryService,
+                                @Qualifier("promptExecutor") ExecutorService promptExecutor,
                                 @Value("${spring.ai.openai.chat.model:}") String model,
                                 @Value("${wxclaw.ai.thinking.type:disabled}") String thinkingType,
                                 @Value("${wxclaw.ai.chat.max-tokens:768}") int maxTokens,
@@ -67,6 +69,7 @@ public class UniversalChatHandler implements ChatHandler {
         this.toolRegistry = toolRegistry;
         this.skillLoader = skillLoader;
         this.userMemoryService = userMemoryService;
+        this.promptExecutor = promptExecutor;
         this.model = model;
         this.thinkingType = thinkingType;
         this.maxTokens = maxTokens;
@@ -88,9 +91,9 @@ public class UniversalChatHandler implements ChatHandler {
         // 3. 并行获取 skill prompt 和 memory prompt
         String userId = UserContextHolder.getUserId();
         CompletableFuture<String> skillFuture = CompletableFuture.supplyAsync(
-                () -> skillLoader.getSkillSystemPrompt(), PROMPT_EXECUTOR);
+                () -> skillLoader.getSkillSystemPrompt(), promptExecutor);
         CompletableFuture<String> memoryFuture = CompletableFuture.supplyAsync(
-                () -> userMemoryService.buildMemoryPrompt(userId), PROMPT_EXECUTOR);
+                () -> userMemoryService.buildMemoryPrompt(userId), promptExecutor);
 
         String skillPrompt = skillFuture.join();
         String memoryPrompt = memoryFuture.join();
@@ -168,6 +171,4 @@ public class UniversalChatHandler implements ChatHandler {
         if (text == null) return "null";
         return text.length() <= maxLen ? text : text.substring(0, maxLen) + "...";
     }
-
-    private static final ExecutorService PROMPT_EXECUTOR = Executors.newFixedThreadPool(2);
 }

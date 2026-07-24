@@ -8,13 +8,11 @@ import com.dust.wxclawbackfront.bot.agent.llm.video.VideoGenerationHandler;
 import com.dust.wxclawbackfront.bot.agent.llm.video.VideoGenerationResult;
 import com.dust.wxclawbackfront.ilink.outbound.ILinkMessageSender;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 视频生成工具处理器（异步模式）
@@ -27,23 +25,16 @@ public class VideoGenerateToolHandler implements ToolHandler {
 
     private static final String FILE_NAME = "generated_video.mp4";
 
-    private static final ExecutorService VIDEO_EXECUTOR = Executors.newFixedThreadPool(3, new ThreadFactory() {
-        private final AtomicInteger counter = new AtomicInteger(0);
-        @Override
-        public Thread newThread(Runnable r) {
-            Thread t = new Thread(r, "video-gen-" + counter.incrementAndGet());
-            t.setDaemon(true);
-            return t;
-        }
-    });
-
     private final VideoGenerationHandler videoGenerationHandler;
     private final ILinkMessageSender messageSender;
+    private final ExecutorService videoExecutor;
 
     public VideoGenerateToolHandler(VideoGenerationHandler videoGenerationHandler,
-                                     ILinkMessageSender messageSender) {
+                                     ILinkMessageSender messageSender,
+                                     @Qualifier("videoExecutor") ExecutorService videoExecutor) {
         this.videoGenerationHandler = videoGenerationHandler;
         this.messageSender = messageSender;
+        this.videoExecutor = videoExecutor;
     }
 
     @Override
@@ -115,7 +106,7 @@ public class VideoGenerateToolHandler implements ToolHandler {
                 } catch (Exception ignored) {
                 }
             }
-        }, VIDEO_EXECUTOR);
+        }, videoExecutor);
 
         // 立即返回，不阻塞
         return TaskResult.success("视频正在生成中，请稍候，生成完毕后会自动发送给你~", 0);

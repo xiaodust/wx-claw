@@ -4,6 +4,9 @@ import com.dust.wxclawbackfront.bot.dao.entity.ReminderTask;
 import com.dust.wxclawbackfront.bot.dao.repository.ReminderTaskRepository;
 import com.dust.wxclawbackfront.bot.agent.tools.reminder.executor.TaskActionExecutor;
 import com.dust.wxclawbackfront.bot.agent.tools.reminder.executor.TaskActionExecutorRegistry;
+import com.dust.wxclawbackfront.tenancy.TenantContext;
+import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
+import com.dust.wxclawbackfront.ilink.runtime.BotRuntimeKey;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +23,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 
@@ -50,7 +55,7 @@ public class DynamicTaskSchedulerService {
     private int cleanupRetentionDays;
 
     // 任务ID -> 调度句柄
-    private final Map<Long, ScheduledFuture<?>> scheduledTasks = new ConcurrentHashMap<>();
+    private final Map<TenantTaskKey, ScheduledFuture<?>> scheduledTasks = new ConcurrentHashMap<>();
 
     /**
      * 注册一次性延迟任务
@@ -75,7 +80,7 @@ public class DynamicTaskSchedulerService {
             triggerInstant
         );
 
-        scheduledTasks.put(task.getId(), future);
+        scheduledTasks.put(key(task), future);
         log.info("已注册一次性任务: taskId={}, triggerTime={}, actionType={}", 
                 task.getId(), task.getTriggerTime(), task.getActionType());
     }
@@ -98,7 +103,7 @@ public class DynamicTaskSchedulerService {
                 trigger
             );
 
-            scheduledTasks.put(task.getId(), future);
+            scheduledTasks.put(key(task), future);
             log.info("已注册周期任务: taskId={}, cron={}, actionType={}", 
                     task.getId(), cronExpression, task.getActionType());
         } catch (Exception e) {
@@ -119,7 +124,8 @@ public class DynamicTaskSchedulerService {
      * 取消任务调度
      */
     public void cancelTask(Long taskId) {
-        ScheduledFuture<?> future = scheduledTasks.remove(taskId);
+        String tenantId = TenantContextHolder.require().tenantId();
+        ScheduledFuture<?> future = scheduledTasks.remove(new TenantTaskKey(tenantId, taskId));
         if (future != null) {
             future.cancel(false);
             log.info("已取消任务调度: taskId={}", taskId);
@@ -130,7 +136,7 @@ public class DynamicTaskSchedulerService {
     public void shutdown() {
         int scheduledCount = scheduledTasks.size();
         log.info("调度服务开始关闭，待清理任务数: {}", scheduledCount);
-        scheduledTasks.forEach((taskId, future) -> {
+        scheduledTasks.forEach((taskKey, future) -> {
             if (future != null && !future.isCancelled()) {
                 future.cancel(false);
             }
@@ -145,15 +151,18 @@ public class DynamicTaskSchedulerService {
     @Transactional
     protected void executeTask(ReminderTask task) {
         Long taskId = task.getId();
+        TenantContext taskContext = new TenantContext(task.getTenantId(), task.getChannel(), task.getBotId(),
+                task.getInternalUserId(), task.getChannelUserId(), Set.of(), Set.of(), UUID.randomUUID().toString());
+        TenantContextHolder.set(taskContext);
         try {
             log.info("开始执行任务: taskId={}, userId={}, actionType={}, text={}", 
                     taskId, task.getUserId(), task.getActionType(), task.getReminderText());
 
             // 重新从数据库加载任务，确保状态最新
-            task = repository.findById(taskId).orElse(null);
+            task = repository.findByTenantIdAndId(taskContext.tenantId(), taskId).orElse(null);
             if (task == null) {
                 log.warn("任务已被删除: taskId={}", taskId);
-                scheduledTasks.remove(taskId);
+                scheduledTasks.remove(new TenantTaskKey(taskContext.tenantId(), taskId));
                 return;
             }
 
@@ -187,7 +196,7 @@ public class DynamicTaskSchedulerService {
                     task.setStatus("EXECUTED");
                     task.setExecutedAt(now);
                     repository.save(task);
-                    scheduledTasks.remove(taskId);
+                    scheduledTasks.remove(new TenantTaskKey(taskContext.tenantId(), taskId));
                     log.info("一次性任务执行成功: taskId={}", taskId);
                 } else {
                     // 周期任务，更新执行时间（但保持 PENDING 状态，继续等待下次触发）
@@ -202,6 +211,8 @@ public class DynamicTaskSchedulerService {
         } catch (Exception e) {
             log.error("任务执行异常: taskId={}, error={}", taskId, e.getMessage(), e);
             handleFailure(task, e.getMessage());
+        } finally {
+            TenantContextHolder.clear();
         }
     }
 
@@ -216,7 +227,7 @@ public class DynamicTaskSchedulerService {
         if ("ONE_TIME".equals(task.getTaskType())) {
             task.setStatus("FAILED");
             task.setExecutedAt(LocalDateTime.now(ZoneId.of(timeZone)));
-            scheduledTasks.remove(task.getId());
+            scheduledTasks.remove(key(task));
             log.warn("一次性任务执行失败: taskId={}, error={}", task.getId(), errorMessage);
         } else {
             // 周期任务失败，记录错误但保持 PENDING，等待下次重试
@@ -273,9 +284,10 @@ public class DynamicTaskSchedulerService {
      * 补偿执行触发时间已过的一次性任务。
      * 应在 iLink 登录成功、消息发送通道就绪后调用，避免连接未就绪时发送失败。
      */
-    public void runOverdueOnceTasks() {
+    public void runOverdueOnceTasks(BotRuntimeKey runtimeKey) {
         LocalDateTime now = LocalDateTime.now(ZoneId.of(timeZone));
-        List<ReminderTask> overdueTasks = repository.findByStatusAndTriggerTimeBefore("PENDING", now);
+        List<ReminderTask> overdueTasks = repository.findByTenantIdAndBotIdAndStatusAndTriggerTimeBefore(
+                runtimeKey.tenantId(), runtimeKey.botId(), "PENDING", now);
 
         int count = 0;
         for (ReminderTask task : overdueTasks) {
@@ -283,7 +295,7 @@ public class DynamicTaskSchedulerService {
                 continue;
             }
 
-            ScheduledFuture<?> future = scheduledTasks.remove(task.getId());
+            ScheduledFuture<?> future = scheduledTasks.remove(key(task));
             if (future != null) {
                 future.cancel(false);
             }
@@ -298,5 +310,12 @@ public class DynamicTaskSchedulerService {
         } else {
             log.info("没有需要补偿执行的过期一次性任务");
         }
+    }
+
+    private TenantTaskKey key(ReminderTask task) {
+        return new TenantTaskKey(task.getTenantId(), task.getId());
+    }
+
+    private record TenantTaskKey(String tenantId, Long taskId) {
     }
 }

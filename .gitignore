@@ -28,12 +28,38 @@ Thumbs.db
 # Database files
 *.db
 *.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal
 
 # Application config (contains secrets)
 application.yml
 application-local.yml
+.env
+.env.*
+!.env.example
+
+# Local runtime state
+**/.ilink-resume-context*.json
+.uploads/
+uploads/
+
+# Local tools and dependency caches
+.m2repo/
+.trae/
+
+# Frontend dependencies and build output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
 
 # Temporary files
 *.tmp
 *.swp
 *~
+hs_err_pid*.log

@@ -54,8 +54,8 @@ public class ConversationSummaryExecutor implements TaskActionExecutor {
                     task.getId(), task.getUserId(), summaryType, startTime, endTime);
 
             // 查询时间范围内的消息
-            List<AiMessage> messages = messageRepository.findByUsernameAndTimeRange(
-                    task.getUserId(), startTime, endTime);
+            List<AiMessage> messages = messageRepository.findByUserAndTimeRange(
+                    task.getTenantId(), task.getInternalUserId(), startTime, endTime);
 
             if (messages == null || messages.isEmpty()) {
                 String reply = buildEmptyReply(summaryType, startTime, endTime);

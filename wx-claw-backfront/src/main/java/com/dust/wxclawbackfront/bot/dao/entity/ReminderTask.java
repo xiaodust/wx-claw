@@ -1,7 +1,11 @@
 package com.dust.wxclawbackfront.bot.dao.entity;
 
+import com.dust.wxclawbackfront.tenancy.TenantContext;
+import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
+import com.dust.wxclawbackfront.tenancy.TenantOwnedEntity;
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.time.LocalDateTime;
 
@@ -9,12 +13,14 @@ import java.time.LocalDateTime;
  * 提醒任务实体
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @Entity
 @Table(name = "reminder_task")
-public class ReminderTask {
+public class ReminderTask extends TenantOwnedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(columnDefinition = "integer")
     private Long id;
 
     /**
@@ -22,6 +28,18 @@ public class ReminderTask {
      */
     @Column(nullable = false, length = 128)
     private String userId;
+
+    @Column(name = "internal_user_id", nullable = false, length = 128)
+    private String internalUserId;
+
+    @Column(nullable = false, length = 20)
+    private String channel;
+
+    @Column(name = "bot_id", length = 128)
+    private String botId;
+
+    @Column(name = "channel_user_id", length = 128)
+    private String channelUserId;
 
     /**
      * 提醒内容
@@ -91,6 +109,11 @@ public class ReminderTask {
 
     @PrePersist
     protected void onCreate() {
+        TenantContext context = TenantContextHolder.require();
+        if (internalUserId == null || internalUserId.isBlank()) internalUserId = userId;
+        if (channel == null || channel.isBlank()) channel = context.channel();
+        if (botId == null) botId = context.botId();
+        if (channelUserId == null) channelUserId = context.channelUserId();
         if (createdAt == null) {
             createdAt = LocalDateTime.now();
         }

@@ -1,0 +1,35 @@
+spring:
+  ai:
+    openai:
+      api-key: test-key
+      base-url: http://localhost
+  datasource:
+    url: jdbc:sqlite:target/wx-claw-test-v6.db
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      maximum-pool-size: 1
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.community.dialect.SQLiteDialect
+  flyway:
+    enabled: true
+
+wxclaw:
+  api:
+    auth-enabled: true
+    bootstrap-key: test-secret
+  tenancy:
+    default-tenant-id: default
+    require-context: true
+  ilink:
+    monitor:
+      enabled: false
+  ragflow:
+    enabled: false
+  reminder:
+    enabled: true
+  mail:
+    enabled: false

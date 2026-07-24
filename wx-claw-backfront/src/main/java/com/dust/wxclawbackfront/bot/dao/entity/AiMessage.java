@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.bot.dao.entity;
 
+import com.dust.wxclawbackfront.tenancy.TenantOwnedEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -9,25 +10,27 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import org.hibernate.annotations.UuidGenerator;
 
 import java.time.LocalDateTime;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @Entity
 @Table(
         name = "ai_message",
         indexes = {
-                @Index(name = "idx_ai_message_session_id", columnList = "session_id"),
-                @Index(name = "idx_ai_message_session_seq", columnList = "session_id,message_seq")
+                @Index(name = "idx_ai_message_tenant_session", columnList = "tenant_id,session_id"),
+                @Index(name = "idx_ai_message_tenant_conversation", columnList = "tenant_id,conversation_id,message_seq")
         },
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_session_message_seq",
-                columnNames = {"session_id", "message_seq"}
+                columnNames = {"tenant_id", "conversation_id", "message_seq"}
         )
 )
-public class AiMessage {
+public class AiMessage extends TenantOwnedEntity {
     @Id
     @UuidGenerator
     @Column(length = 36)
@@ -35,6 +38,9 @@ public class AiMessage {
 
     @Column(name = "session_id", nullable = false)
     private String sessionId;
+
+    @Column(name = "conversation_id", nullable = false, length = 36)
+    private String conversationId;
 
     @Column(name = "message_type", nullable = false)
     private Integer messageType;

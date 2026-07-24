@@ -23,15 +23,20 @@ public interface ReminderTaskRepository extends JpaRepository<ReminderTask, Long
      */
     List<ReminderTask> findByStatusAndTriggerTimeBefore(String status, LocalDateTime time);
 
+    List<ReminderTask> findByTenantIdAndBotIdAndStatusAndTriggerTimeBefore(
+            String tenantId, String botId, String status, LocalDateTime time);
+
+    java.util.Optional<ReminderTask> findByTenantIdAndId(String tenantId, Long id);
+
     /**
      * 查询用户的待执行任务
      */
-    List<ReminderTask> findByUserIdAndStatusOrderByTriggerTimeAsc(String userId, String status);
+    List<ReminderTask> findByTenantIdAndUserIdAndStatusOrderByTriggerTimeAsc(String tenantId, String userId, String status);
 
     /**
      * 查询用户的所有任务（按创建时间倒序）
      */
-    List<ReminderTask> findByUserIdOrderByCreatedAtDesc(String userId);
+    List<ReminderTask> findByTenantIdAndUserIdOrderByCreatedAtDesc(String tenantId, String userId);
 
     /**
      * 删除指定状态且创建时间早于指定时间的任务

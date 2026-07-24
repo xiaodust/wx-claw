@@ -1,5 +1,7 @@
 package com.dust.wxclawbackfront.config;
 
+import com.dust.wxclawbackfront.tenancy.TenantContextTaskDecorator;
+import com.dust.wxclawbackfront.tenancy.TenantContextExecutorService;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -15,17 +17,18 @@ import java.util.concurrent.ThreadPoolExecutor;
 @Data
 public class ThreadPoolConfig {
 
-    private final UserContextTaskDecorator userContextTaskDecorator;
+    private final TenantContextTaskDecorator tenantContextTaskDecorator;
 
     @Autowired
-    public ThreadPoolConfig(UserContextTaskDecorator userContextTaskDecorator) {
-        this.userContextTaskDecorator = userContextTaskDecorator;
+    public ThreadPoolConfig(TenantContextTaskDecorator tenantContextTaskDecorator) {
+        this.tenantContextTaskDecorator = tenantContextTaskDecorator;
     }
 
     private PoolConfig messageProcessing = new PoolConfig(4, 8, 100);
     private PoolConfig asyncSave = new PoolConfig(2, 4, 100);
     private PoolConfig promptExecutor = new PoolConfig(2, 4, 50);
     private PoolConfig videoExecutor = new PoolConfig(1, 2, 10);
+    private PoolConfig botRuntime = new PoolConfig(1, 32, 0);
 
     @Data
     public static class PoolConfig {
@@ -60,17 +63,21 @@ public class ThreadPoolConfig {
         return createExecutor("video-", videoExecutor, false);
     }
 
+    @Bean("botRuntimeExecutor")
+    public ExecutorService botRuntimeExecutor() {
+        return createExecutor("ilink-runtime-", botRuntime, false);
+    }
+
     private ExecutorService createExecutor(String prefix, PoolConfig config, boolean callerRunsPolicy) {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(config.getCoreSize());
         executor.setMaxPoolSize(config.getMaxSize());
         executor.setQueueCapacity(config.getQueueCapacity());
         executor.setThreadNamePrefix(prefix);
-        executor.setTaskDecorator(userContextTaskDecorator);
         if (callerRunsPolicy) {
             executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         }
         executor.initialize();
-        return executor.getThreadPoolExecutor();
+        return new TenantContextExecutorService(executor.getThreadPoolExecutor(), tenantContextTaskDecorator);
     }
 }

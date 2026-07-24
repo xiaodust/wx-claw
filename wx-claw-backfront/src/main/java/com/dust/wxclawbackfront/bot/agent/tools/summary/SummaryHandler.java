@@ -3,6 +3,7 @@ package com.dust.wxclawbackfront.bot.agent.tools.summary;
 import com.dust.wxclawbackfront.bot.agent.llm.chat.PlainTextLlmService;
 import com.dust.wxclawbackfront.bot.dao.entity.AiMessage;
 import com.dust.wxclawbackfront.bot.dao.repository.AiMessageRepository;
+import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import com.dust.wxclawbackfront.bot.service.ConversationCompressor;
 import com.dust.wxclawbackfront.bot.agent.tools.reminder.ReminderHandler;
 import com.dust.wxclawbackfront.ilink.outbound.ILinkMessageSender;
@@ -106,7 +107,8 @@ public class SummaryHandler {
                 userId, summaryType, startTime, endTime);
 
         // 查询时间范围内的消息
-        List<AiMessage> messages = messageRepository.findByUsernameAndTimeRange(userId, startTime, endTime);
+        List<AiMessage> messages = messageRepository.findByUserAndTimeRange(
+                TenantContextHolder.require().tenantId(), userId, startTime, endTime);
 
         if (messages == null || messages.isEmpty()) {
             String reply = String.format("【%s总结】\n\n时间范围：%s\n\n在此期间暂无对话记录。",

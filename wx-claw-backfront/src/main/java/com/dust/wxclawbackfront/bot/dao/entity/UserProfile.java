@@ -1,7 +1,9 @@
 package com.dust.wxclawbackfront.bot.dao.entity;
 
+import com.dust.wxclawbackfront.tenancy.TenantOwnedEntity;
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.time.LocalDateTime;
 
@@ -10,12 +12,14 @@ import java.time.LocalDateTime;
  * 存储用户的基本信息、偏好、习惯等
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @Entity
-@Table(name = "user_profile", uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "category", "key_name"}))
-public class UserProfile {
+@Table(name = "user_profile", uniqueConstraints = @UniqueConstraint(columnNames = {"tenant_id", "user_id", "category", "key_name"}))
+public class UserProfile extends TenantOwnedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(columnDefinition = "integer")
     private Long id;
 
     @Column(nullable = false, length = 128)

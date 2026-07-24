@@ -1,7 +1,9 @@
 package com.dust.wxclawbackfront.bot.dao.entity;
 
+import com.dust.wxclawbackfront.tenancy.TenantOwnedEntity;
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.time.LocalDateTime;
 
@@ -10,12 +12,14 @@ import java.time.LocalDateTime;
  * 存储用户"教"给 AI 的任务处理规则
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @Entity
 @Table(name = "user_learning")
-public class UserLearning {
+public class UserLearning extends TenantOwnedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(columnDefinition = "integer")
     private Long id;
 
     @Column(nullable = false, length = 128)

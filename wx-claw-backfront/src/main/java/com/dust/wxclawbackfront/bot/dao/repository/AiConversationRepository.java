@@ -9,9 +9,10 @@ import java.util.Optional;
 
 public interface AiConversationRepository extends JpaRepository<AiConversation, String> {
 
-    Optional<AiConversation> findBySessionId(String sessionId);
+    Optional<AiConversation> findByTenantIdAndSessionId(String tenantId, String sessionId);
 
-    Optional<AiConversation> findFirstByUsernameAndActiveTrueOrderByUpdatedTimeDesc(String username);
+    Optional<AiConversation> findFirstByTenantIdAndInternalUserIdAndChannelAndBotIdAndActiveTrueOrderByUpdatedTimeDesc(
+            String tenantId, String internalUserId, String channel, String botId);
 
-    List<AiConversation> findAllByUsername(String username, Sort sort);
+    List<AiConversation> findAllByTenantIdAndInternalUserId(String tenantId, String internalUserId, Sort sort);
 }

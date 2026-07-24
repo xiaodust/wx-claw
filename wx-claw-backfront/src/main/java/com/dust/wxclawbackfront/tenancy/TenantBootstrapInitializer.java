@@ -1,0 +1,79 @@
+package com.dust.wxclawbackfront.tenancy;
+
+import com.dust.wxclawbackfront.tenancy.entity.Tenant;
+import com.dust.wxclawbackfront.tenancy.entity.TenantApiCredential;
+import com.dust.wxclawbackfront.tenancy.repository.TenantApiCredentialRepository;
+import com.dust.wxclawbackfront.tenancy.repository.TenantBotRepository;
+import com.dust.wxclawbackfront.tenancy.repository.TenantRepository;
+import com.dust.wxclawbackfront.tenancy.entity.TenantBot;
+import com.dust.wxclawbackfront.tenancy.security.ApiSecretHasher;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.stereotype.Component;
+import org.springframework.core.annotation.Order;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Collections;
+import java.util.List;
+
+@Component
+@RequiredArgsConstructor
+@Order(0)
+public class TenantBootstrapInitializer implements ApplicationRunner {
+    private final TenantRepository tenantRepository;
+    private final TenantApiCredentialRepository credentialRepository;
+    private final TenantBotRepository tenantBotRepository;
+    private final ApiSecretHasher secretHasher;
+
+    @Value("${wxclaw.tenancy.default-tenant-id:default}")
+    private String defaultTenantId;
+
+    @Value("${wxclaw.api.bootstrap-credential-id:default}")
+    private String credentialId;
+
+    @Value("${wxclaw.api.bootstrap-key:}")
+    private String bootstrapKey;
+
+    @Value("${wxclaw.ilink.bot-ids:${wxclaw.ilink.default-bot-id:default}}")
+    private List<String> botIds;
+
+    @Override
+    @Transactional
+    public void run(ApplicationArguments args) {
+        Tenant tenant = tenantRepository.findByTenantId(defaultTenantId).orElseGet(() -> {
+            Tenant created = new Tenant();
+            created.setTenantId(defaultTenantId);
+            created.setTenantCode(defaultTenantId);
+            created.setTenantName("Default Tenant");
+            created.setStatus("ACTIVE");
+            return tenantRepository.save(created);
+        });
+        TenantContextHolder.set(new TenantContext(tenant.getTenantId(), "SYSTEM", null, "bootstrap", null,
+                Collections.singleton("TENANT_ADMIN"), Collections.singleton("*"), "bootstrap"));
+        try {
+            List<TenantBot> activeBots = tenantBotRepository.findByChannelAndStatus("ILINK", "ACTIVE");
+            for (String configuredBotId : botIds) {
+                String botId = configuredBotId == null ? "" : configuredBotId.trim();
+                if (botId.isEmpty() || activeBots.stream().anyMatch(bot ->
+                        bot.getTenantId().equals(tenant.getTenantId()) && botId.equals(bot.getBotId()))) continue;
+                TenantBot bot = new TenantBot();
+                bot.setChannel("ILINK");
+                bot.setBotId(botId);
+                bot.setDisplayName("ILink Bot " + botId);
+                tenantBotRepository.save(bot);
+            }
+            if (bootstrapKey != null && !bootstrapKey.isBlank() && credentialRepository.findByCredentialId(credentialId).isEmpty()) {
+                TenantApiCredential credential = new TenantApiCredential();
+                credential.setCredentialId(credentialId);
+                credential.setName("Bootstrap credential");
+                credential.setSecretHash(secretHasher.hash(bootstrapKey));
+                credential.setScopes("*");
+                credentialRepository.save(credential);
+            }
+        } finally {
+            TenantContextHolder.clear();
+        }
+    }
+}

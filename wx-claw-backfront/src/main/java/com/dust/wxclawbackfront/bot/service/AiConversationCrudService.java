@@ -4,6 +4,8 @@ import com.dust.wxclawbackfront.bot.dao.entity.AiConversation;
 import com.dust.wxclawbackfront.bot.dao.entity.AiMessage;
 import com.dust.wxclawbackfront.bot.dao.repository.AiConversationRepository;
 import com.dust.wxclawbackfront.bot.dao.repository.AiMessageRepository;
+import com.dust.wxclawbackfront.tenancy.TenantContext;
+import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -30,12 +32,15 @@ public class AiConversationCrudService {
 
     @Transactional
     public AiConversation createOrGetConversation(String sessionId, String username) {
-        Optional<AiConversation> existing = conversationRepository.findBySessionId(sessionId);
+        TenantContext context = TenantContextHolder.require();
+        String internalUserId = resolveSubject(context, username);
+        Optional<AiConversation> existing = conversationRepository.findByTenantIdAndSessionId(context.tenantId(), sessionId);
         if (existing.isPresent()) {
             AiConversation conversation = existing.get();
+            ensureOwner(context, conversation);
             boolean changed = false;
-            if (username != null && !username.isBlank() && (conversation.getUsername() == null || conversation.getUsername().isBlank())) {
-                conversation.setUsername(username.trim());
+            if (conversation.getUsername() == null || conversation.getUsername().isBlank()) {
+                conversation.setUsername(internalUserId);
                 changed = true;
             }
             if (!Boolean.TRUE.equals(conversation.getActive())) {
@@ -47,7 +52,10 @@ public class AiConversationCrudService {
 
         AiConversation conversation = new AiConversation();
         conversation.setSessionId(sessionId);
-        conversation.setUsername(username == null ? null : username.trim());
+        conversation.setUsername(internalUserId);
+        conversation.setInternalUserId(internalUserId);
+        conversation.setChannel(context.channel());
+        conversation.setBotId(context.botId());
         conversation.setActive(Boolean.TRUE);
         conversation.setMessageCount(0);
         return conversationRepository.save(conversation);
@@ -55,10 +63,11 @@ public class AiConversationCrudService {
 
     @Transactional
     public AiConversation createNewConversation(String username) {
-        String normalizedUsername = username == null ? null : username.trim();
-        if (normalizedUsername != null && !normalizedUsername.isBlank()) {
-            List<AiConversation> conversations = conversationRepository.findAllByUsername(
-                    normalizedUsername,
+        TenantContext context = TenantContextHolder.require();
+        String internalUserId = resolveSubject(context, username);
+        if (internalUserId != null && !internalUserId.isBlank()) {
+            List<AiConversation> conversations = conversationRepository.findAllByTenantIdAndInternalUserId(
+                    context.tenantId(), internalUserId,
                     Sort.by(Sort.Direction.DESC, "updatedTime")
             );
             for (AiConversation conversation : conversations) {
@@ -69,10 +78,13 @@ public class AiConversationCrudService {
             }
         }
 
-        String sessionId = buildSessionId(normalizedUsername);
+        String sessionId = buildSessionId();
         AiConversation conversation = new AiConversation();
         conversation.setSessionId(sessionId);
-        conversation.setUsername(normalizedUsername);
+        conversation.setUsername(internalUserId);
+        conversation.setInternalUserId(internalUserId);
+        conversation.setChannel(context.channel());
+        conversation.setBotId(context.botId());
         conversation.setActive(Boolean.TRUE);
         conversation.setMessageCount(0);
         return conversationRepository.save(conversation);
@@ -80,10 +92,10 @@ public class AiConversationCrudService {
 
     @Transactional(readOnly = true)
     public AiConversation getActiveConversation(String username) {
-        if (username == null || username.isBlank()) {
-            return null;
-        }
-        return conversationRepository.findFirstByUsernameAndActiveTrueOrderByUpdatedTimeDesc(username.trim()).orElse(null);
+        TenantContext context = TenantContextHolder.require();
+        String internalUserId = resolveSubject(context, username);
+        return conversationRepository.findFirstByTenantIdAndInternalUserIdAndChannelAndBotIdAndActiveTrueOrderByUpdatedTimeDesc(
+                context.tenantId(), internalUserId, context.channel(), context.botId()).orElse(null);
     }
 
     @Transactional
@@ -102,12 +114,14 @@ public class AiConversationCrudService {
                                    String reasoningContent,
                                    Integer responseTime,
                                    String errorMsg) {
+        TenantContext context = TenantContextHolder.require();
         AiConversation conversation = createOrGetConversation(sessionId, null);
 
         int maxRetries = 3;
         for (int attempt = 0; attempt < maxRetries; attempt++) {
             try {
-                int nextSeq = messageRepository.findTopBySessionIdOrderByMessageSeqDesc(sessionId)
+                int nextSeq = messageRepository.findTopByTenantIdAndConversationIdOrderByMessageSeqDesc(
+                                context.tenantId(), conversation.getId())
                         .map(AiMessage::getMessageSeq)
                         .filter(Objects::nonNull)
                         .map(seq -> seq + 1)
@@ -115,6 +129,7 @@ public class AiConversationCrudService {
 
                 AiMessage message = new AiMessage();
                 message.setSessionId(sessionId);
+                message.setConversationId(conversation.getId());
                 message.setMessageType(messageType == null ? 0 : messageType);
                 message.setContent(content);
                 message.setReasoningContent(reasoningContent);
@@ -157,21 +172,26 @@ public class AiConversationCrudService {
 
     @Transactional(readOnly = true)
     public AiConversation getConversationBySessionId(String sessionId) {
-        return conversationRepository.findBySessionId(sessionId).orElse(null);
+        TenantContext context = TenantContextHolder.require();
+        return conversationRepository.findByTenantIdAndSessionId(context.tenantId(), sessionId)
+                .filter(conversation -> canAccess(context, conversation))
+                .orElse(null);
     }
 
     @Transactional(readOnly = true)
     public List<AiConversation> listConversations(String username) {
+        TenantContext context = TenantContextHolder.require();
+        String internalUserId = resolveSubject(context, username);
         Sort sort = Sort.by(Sort.Direction.DESC, "updatedTime");
-        if (username == null || username.isBlank()) {
-            return conversationRepository.findAll(sort);
-        }
-        return conversationRepository.findAllByUsername(username.trim(), sort);
+        return conversationRepository.findAllByTenantIdAndInternalUserId(context.tenantId(), internalUserId, sort);
     }
 
     @Transactional(readOnly = true)
     public List<AiMessage> listMessages(String sessionId) {
-        return messageRepository.findAllBySessionIdOrderByMessageSeqAsc(sessionId);
+        TenantContext context = TenantContextHolder.require();
+        AiConversation conversation = requireConversation(context, sessionId);
+        return messageRepository.findAllByTenantIdAndConversationIdOrderByMessageSeqAsc(
+                context.tenantId(), conversation.getId());
     }
 
     /**
@@ -182,8 +202,11 @@ public class AiConversationCrudService {
         if (sessionId == null || sessionId.isBlank() || limit <= 0) {
             return Collections.emptyList();
         }
-        List<AiMessage> messages = messageRepository.findRecentBySessionId(
-                sessionId, PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "messageSeq")));
+        TenantContext context = TenantContextHolder.require();
+        AiConversation conversation = requireConversation(context, sessionId);
+        List<AiMessage> messages = messageRepository.findRecent(
+                context.tenantId(), conversation.getId(),
+                PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "messageSeq")));
         // 反转为正序
         Collections.reverse(messages);
         return messages;
@@ -191,13 +214,44 @@ public class AiConversationCrudService {
 
     @Transactional
     public void deleteConversationBySessionId(String sessionId) {
-        messageRepository.deleteBySessionId(sessionId);
-        conversationRepository.findBySessionId(sessionId).ifPresent(conversationRepository::delete);
+        TenantContext context = TenantContextHolder.require();
+        AiConversation conversation = requireConversation(context, sessionId);
+        messageRepository.deleteByTenantIdAndConversationId(context.tenantId(), conversation.getId());
+        conversationRepository.delete(conversation);
     }
 
-    private String buildSessionId(String username) {
-        String prefix = (username == null || username.isBlank()) ? "anonymous" : username.trim();
-        return prefix + "::" + UUID.randomUUID();
+    private String buildSessionId() {
+        return UUID.randomUUID().toString();
+    }
+
+    private AiConversation requireConversation(TenantContext context, String sessionId) {
+        AiConversation conversation = conversationRepository.findByTenantIdAndSessionId(context.tenantId(), sessionId)
+                .orElseThrow(() -> new IllegalArgumentException("Conversation not found"));
+        ensureOwner(context, conversation);
+        return conversation;
+    }
+
+    private String resolveSubject(TenantContext context, String requestedUserId) {
+        String currentUserId = context.internalUserId();
+        if (requestedUserId == null || requestedUserId.isBlank() || requestedUserId.equals(currentUserId)) {
+            return currentUserId;
+        }
+        if (context.scopes().contains("tenant:admin") || context.scopes().contains("*")) {
+            return requestedUserId.trim();
+        }
+        throw new SecurityException("Cannot access another user's conversations");
+    }
+
+    private void ensureOwner(TenantContext context, AiConversation conversation) {
+        if (!canAccess(context, conversation)) {
+            throw new SecurityException("Conversation does not belong to the current principal");
+        }
+    }
+
+    private boolean canAccess(TenantContext context, AiConversation conversation) {
+        return context.tenantId().equals(conversation.getTenantId())
+                && (context.internalUserId().equals(conversation.getInternalUserId())
+                || context.scopes().contains("tenant:admin") || context.scopes().contains("*"));
     }
 
     private boolean isDatabaseLockError(Exception e) {

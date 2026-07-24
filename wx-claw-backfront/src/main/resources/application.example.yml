@@ -30,10 +30,15 @@ spring:
   # JPA 配置
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     properties:
       hibernate:
         dialect: org.hibernate.community.dialect.SQLiteDialect
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 1
 
   # 邮件服务配置
   mail:
@@ -50,13 +55,16 @@ spring:
 wxclaw:
   # API 安全配置
   api:
-    auth-enabled: ${API_AUTH_ENABLED:false}
-    key: ${API_KEY:your-secret-api-key-here}
+    auth-enabled: ${API_AUTH_ENABLED:true}
+    bootstrap-credential-id: ${API_CREDENTIAL_ID:default}
+    bootstrap-key: ${API_BOOTSTRAP_KEY:}
     cors:
       allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
 
   # ILink 配置
   ilink:
+    default-bot-id: ${ILINK_BOT_ID:default}
+    bot-ids: ${ILINK_BOT_IDS:default}
     monitor:
       enabled: true
     reconnect:
@@ -159,11 +167,17 @@ wxclaw:
   log:
     level: info
 
+  tenancy:
+    enabled: true
+    default-tenant-id: ${DEFAULT_TENANT_ID:default}
+    require-context: true
+
 # ===========================================
 # 环境变量配置说明
 # ===========================================
 # API_AUTH_ENABLED     - 是否启用 API 认证（true/false）
-# API_KEY              - API 认证密钥
+# API_CREDENTIAL_ID    - 租户 API 凭据公开 ID
+# API_BOOTSTRAP_KEY    - 首次启动时创建默认租户凭据的 Secret
 # CORS_ALLOWED_ORIGINS - CORS 允许的来源（逗号分隔）
 # AI_API_KEY           - AI 模型 API 密钥
 # AI_BASE_URL          - AI 模型 API 地址
@@ -182,4 +196,3 @@ wxclaw:
 # RAGFLOW_API_KEY      - RAGFlow API 密钥
 # RAGFLOW_DATASET_ID   - RAGFlow 知识库 ID
 # RAGFLOW_CHAT_ID      - RAGFlow 聊天助手 ID
-

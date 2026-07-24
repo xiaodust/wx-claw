@@ -351,7 +351,7 @@ wxclaw:
   # ILink 重连配置
   ilink:
     reconnect:
-      max-attempts: 5      # 最大重连尝试次数
+      max-attempts: 5      # 连续失败达到上限后清除旧会话并重新扫码
       delay-seconds: 30    # 重连间隔（秒）
 
   # Agent 规划配置
