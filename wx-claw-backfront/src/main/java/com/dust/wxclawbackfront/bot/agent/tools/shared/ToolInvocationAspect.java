@@ -28,7 +28,7 @@ public class ToolInvocationAspect {
         String toolName = toolInvocationLog.value();
         String args = formatArgs(joinPoint);
 
-        log.info("AI调用 {}: {}", toolName, args);
+        log.info("AI调用 {}: {}", toolName, truncate(args, 200));
 
         try {
             Object result = joinPoint.proceed();
@@ -55,7 +55,7 @@ public class ToolInvocationAspect {
                 .map(i -> {
                     int index = Arrays.asList(paramNames).indexOf(i);
                     Object value = index < args.length ? args[index] : "null";
-                    return i + "=" + truncate(String.valueOf(value), 100);
+                    return i + "=" + String.valueOf(value);
                 })
                 .collect(Collectors.joining(", "));
     }
@@ -65,7 +65,7 @@ public class ToolInvocationAspect {
             return "null";
         }
         String str = result.toString();
-        return truncate(str, 200);
+        return str;
     }
 
     private String truncate(String text, int maxLen) {

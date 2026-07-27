@@ -1,6 +1,7 @@
 package com.dust.wxclawbackfront.bot.agent.llm.voice;
 
 import com.dust.wxclawbackfront.bot.agent.tools.shared.TextSanitizer;
+import com.dust.wxclawbackfront.observability.llm.service.LlmInvocationRecorder;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -38,8 +39,10 @@ public class VolcTtsHandler {
     private final int maxVoiceMs;
     private final int ilinkEncodeType;
     private final int ilinkBitsPerSample;
+    private final LlmInvocationRecorder invocationRecorder;
 
     public VolcTtsHandler(ObjectMapper objectMapper,
+                          LlmInvocationRecorder invocationRecorder,
                           @Value("${wxclaw.ai.tts.url:https://openspeech.bytedance.com/api/v3/tts/create}") String url,
                           @Value("${wxclaw.ai.tts.timeout:PT30S}") Duration timeout,
                           @Value("${wxclaw.ai.tts.api-key:}") String apiKey,
@@ -53,6 +56,7 @@ public class VolcTtsHandler {
                           @Value("${wxclaw.ai.tts.ilink.encode-type:1}") int ilinkEncodeType,
                           @Value("${wxclaw.ai.tts.ilink.bits-per-sample:16}") int ilinkBitsPerSample) {
         this.objectMapper = objectMapper;
+        this.invocationRecorder = invocationRecorder;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(8))
                 .build();
@@ -90,6 +94,8 @@ public class VolcTtsHandler {
 
         Map<String, Object> payload = buildRequestPayload(actualModel, text.trim());
         String requestJson = toPrettyJsonOrNull(payload);
+        LlmInvocationRecorder.InvocationHandle handle = invocationRecorder.start(
+                "TTS", "VOLCENGINE", actualModel, requestJson);
 
         long start = System.currentTimeMillis();
         try {
@@ -109,19 +115,19 @@ public class VolcTtsHandler {
             String responseJson = TextSanitizer.sanitizeForPrompt(toPrettyJsonOrRaw(responseText));
 
             if (resp.statusCode() / 100 != 2) {
-                return new VolcTtsResult(requestJson, responseJson, "TTS 请求失败，HTTP " + resp.statusCode(), null, null, null, null, null, null);
+                return complete(handle, new VolcTtsResult(requestJson, responseJson, "TTS 请求失败，HTTP " + resp.statusCode(), null, null, null, null, null, null));
             }
 
             Integer code = extractIntField(responseText, "code");
             if (code != null && code != 0) {
                 String message = extractStringField(responseText, "message");
                 String msg = message == null || message.isBlank() ? ("TTS 返回错误码: " + code) : ("TTS 返回错误: " + message);
-                return new VolcTtsResult(requestJson, responseJson, msg, null, null, null, null, null, null);
+                return complete(handle, new VolcTtsResult(requestJson, responseJson, msg, null, null, null, null, null, null));
             }
 
             String b64 = extractAudioBase64(responseText);
             if (b64 == null || b64.isBlank()) {
-                return new VolcTtsResult(requestJson, responseJson, "TTS 响应缺少 audio/data 字段", null, null, null, null, null, null);
+                return complete(handle, new VolcTtsResult(requestJson, responseJson, "TTS 响应缺少 audio/data 字段", null, null, null, null, null, null));
             }
 
             byte[] audioBytes = Base64.getDecoder().decode(b64);
@@ -154,10 +160,19 @@ public class VolcTtsHandler {
                 playTimeMs = maxVoiceMs;
             }
 
-            return new VolcTtsResult(requestJson, responseJson, null, audioBytes, playTimeMs, actualSampleRate, bitsPerSample, encodeType, fileName);
+            return complete(handle, new VolcTtsResult(requestJson, responseJson, null, audioBytes, playTimeMs, actualSampleRate, bitsPerSample, encodeType, fileName));
         } catch (Exception ex) {
-            return new VolcTtsResult(requestJson, null, ex.getMessage(), null, null, null, null, null, null);
+            return complete(handle, new VolcTtsResult(requestJson, null, ex.getMessage(), null, null, null, null, null, null));
         }
+    }
+
+    private VolcTtsResult complete(LlmInvocationRecorder.InvocationHandle handle, VolcTtsResult result) {
+        if (result.getErrorMsg() == null) {
+            invocationRecorder.success(handle, result.getResponseJson(), null, null, null);
+        } else {
+            invocationRecorder.failure(handle, new IllegalStateException(result.getErrorMsg()), result.getResponseJson());
+        }
+        return result;
     }
 
     private Map<String, Object> buildRequestPayload(String model, String text) {
@@ -266,4 +281,3 @@ public class VolcTtsHandler {
         }
     }
 }
-

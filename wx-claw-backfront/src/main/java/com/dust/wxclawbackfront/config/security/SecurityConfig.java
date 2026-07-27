@@ -13,7 +13,7 @@ public class SecurityConfig {
     public FilterRegistrationBean<ApiKeyAuthFilter> apiKeyFilter(ApiKeyAuthFilter filter) {
         FilterRegistrationBean<ApiKeyAuthFilter> registration = new FilterRegistrationBean<>();
         registration.setFilter(filter);
-        registration.addUrlPatterns("/api/ai/*");
+        registration.addUrlPatterns("/api/ai/*", "/api/admin/*");
         registration.setOrder(1);
         registration.setName("apiKeyAuthFilter");
         return registration;

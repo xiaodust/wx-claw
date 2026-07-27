@@ -33,6 +33,10 @@ public interface AiMessageRepository extends JpaRepository<AiMessage, String> {
 
     void deleteByTenantIdAndConversationId(String tenantId, String conversationId);
 
+    long countByTenantIdAndCreateTimeGreaterThanEqual(String tenantId, LocalDateTime createTime);
+
+    long countByCreateTimeGreaterThanEqual(LocalDateTime createTime);
+
     @Query("SELECT m FROM AiMessage m WHERE m.tenantId = :tenantId AND m.conversationId IN " +
            "(SELECT c.id FROM AiConversation c WHERE c.tenantId = :tenantId AND c.internalUserId = :internalUserId) " +
            "AND m.createTime >= :startTime AND m.createTime < :endTime " +

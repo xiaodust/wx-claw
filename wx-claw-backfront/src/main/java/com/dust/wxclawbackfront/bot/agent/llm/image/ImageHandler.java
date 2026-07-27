@@ -4,10 +4,13 @@ import com.dust.wxclawbackfront.bot.agent.tools.shared.TextSanitizer;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolInvocationStore;
 import com.dust.wxclawbackfront.bot.agent.tools.time.TimeTools;
 import com.dust.wxclawbackfront.bot.agent.tools.weather.WeatherTools;
+import com.dust.wxclawbackfront.observability.llm.service.LlmInvocationRecorder;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.metadata.Usage;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.content.Media;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,12 +39,14 @@ public class ImageHandler {
     private final TimeTools timeTools;
     private final WeatherTools weatherTools;
     private final AiToolInvocationStore toolInvocationStore;
+    private final LlmInvocationRecorder invocationRecorder;
 
     public ImageHandler(ChatClient.Builder chatClientBuilder,
                         ObjectMapper objectMapper,
                         TimeTools timeTools,
                         WeatherTools weatherTools,
                         AiToolInvocationStore toolInvocationStore,
+                        LlmInvocationRecorder invocationRecorder,
                         @Value("${spring.ai.openai.image.model:}") String imageModel,
                         @Value("${spring.ai.openai.chat.model:}") String defaultModel,
                         @Value("${wxclaw.ai.image.prompt:请用中文描述这张图片的内容，尽量提取关键信息与可用于对话的细节。}") String prompt,
@@ -59,6 +64,7 @@ public class ImageHandler {
         this.timeTools = timeTools;
         this.weatherTools = weatherTools;
         this.toolInvocationStore = toolInvocationStore;
+        this.invocationRecorder = invocationRecorder;
     }
 
     public ImageUnderstandingResult understandByUrl(String imageUrl) {
@@ -101,6 +107,8 @@ public class ImageHandler {
                 .build();
 
         String requestJson = buildImageRequestJson(modelToUse, imageUrl, promptToUse, thinkingType);
+        LlmInvocationRecorder.InvocationHandle handle = invocationRecorder.start(
+                "IMAGE_UNDERSTANDING", "OPENAI_COMPATIBLE", modelToUse, requestJson);
         try {
             if (toolInvocationStore != null) {
                 toolInvocationStore.reset();
@@ -116,16 +124,29 @@ public class ImageHandler {
                 optionsBuilder = optionsBuilder.timeout(timeout);
             }
             long start = System.currentTimeMillis();
-            String description = chatClient.prompt()
+            ChatResponse response = chatClient.prompt()
                     .tools(timeTools, weatherTools)
                     .options(optionsBuilder)
                     .messages(userMessage)
                     .call()
-                    .content();
+                    .chatResponse();
+            String description = response == null || response.getResult() == null
+                    ? null : response.getResult().getOutput().getText();
+            Usage usage = response == null || response.getMetadata() == null
+                    ? null : response.getMetadata().getUsage();
+            String toolCalls = toolInvocationStore == null ? null
+                    : objectMapper.writeValueAsString(toolInvocationStore.drain());
+            invocationRecorder.success(handle, objectMapper.writeValueAsString(Map.of(
+                            "content", description == null ? "" : description,
+                            "metadata", response == null ? "" : String.valueOf(response.getMetadata()))),
+                    toolCalls,
+                    usage == null ? null : usage.getPromptTokens(),
+                    usage == null ? null : usage.getCompletionTokens());
             long elapsed = System.currentTimeMillis() - start;
             log.info("图片理解完成, 耗时={}ms, model={}", elapsed, modelToUse);
             return new ImageUnderstandingResult(modelToUse, requestJson, description, null);
         } catch (Exception ex) {
+            invocationRecorder.failure(handle, ex);
             return new ImageUnderstandingResult(modelToUse, requestJson, null, ex.getMessage());
         }
     }

@@ -1,6 +1,7 @@
 package com.dust.wxclawbackfront.bot.agent.llm.image;
 
 import com.dust.wxclawbackfront.bot.agent.tools.shared.TextSanitizer;
+import com.dust.wxclawbackfront.observability.llm.service.LlmInvocationRecorder;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -29,8 +30,10 @@ public class ImageGenerationHandler {
     private final int numInferenceSteps;
     private final double guidanceScale;
     private final String replyText;
+    private final LlmInvocationRecorder invocationRecorder;
 
     public ImageGenerationHandler(ObjectMapper objectMapper,
+                                  LlmInvocationRecorder invocationRecorder,
                                   @Value("${wxclaw.ai.image.generate.api-key:${spring.ai.openai.api-key:}}") String apiKey,
                                   @Value("${wxclaw.ai.image.generate.url:https://api.siliconflow.cn/v1/images/generations}") String url,
                                   @Value("${wxclaw.ai.image.generate.timeout:PT35S}") Duration timeout,
@@ -40,6 +43,7 @@ public class ImageGenerationHandler {
                                   @Value("${wxclaw.ai.image.generate.guidance-scale:7.5}") double guidanceScale,
                                   @Value("${wxclaw.ai.image.generate.reply-text:已根据你的描述生成了一张图片，请查收。}") String replyText) {
         this.objectMapper = objectMapper;
+        this.invocationRecorder = invocationRecorder;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
@@ -72,9 +76,25 @@ public class ImageGenerationHandler {
             return new ImageGenerationResult(generationModel, null, null, null, null, null, null, null, "未配置生图 API Key");
         }
 
+        Map<String, Object> auditRequest = new LinkedHashMap<>();
+        auditRequest.put("model", model);
+        auditRequest.put("prompt", normalizedPrompt);
+        auditRequest.put("image_size", imageSize);
+        auditRequest.put("batch_size", 1);
+        auditRequest.put("num_inference_steps", numInferenceSteps);
+        auditRequest.put("guidance_scale", guidanceScale);
+        LlmInvocationRecorder.InvocationHandle handle = invocationRecorder.start(
+                "IMAGE_GENERATION", "SILICONFLOW", model, toJson(auditRequest));
         try {
-            return generateWithSiliconFlow(actualUrl, key, model, normalizedPrompt);
+            ImageGenerationResult result = generateWithSiliconFlow(actualUrl, key, model, normalizedPrompt);
+            if (result.getErrorMsg() == null) {
+                invocationRecorder.success(handle, result.getResponseJson(), null, null, null);
+            } else {
+                invocationRecorder.failure(handle, new IllegalStateException(result.getErrorMsg()), result.getResponseJson());
+            }
+            return result;
         } catch (Exception ex) {
+            invocationRecorder.failure(handle, ex);
             return new ImageGenerationResult(generationModel, null, null, null, null, null, null, null, ex.getMessage());
         }
     }
@@ -219,6 +239,14 @@ public class ImageGenerationHandler {
             return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(any);
         } catch (Exception ignore) {
             return text;
+        }
+    }
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(value);
+        } catch (Exception ex) {
+            return String.valueOf(value);
         }
     }
 }

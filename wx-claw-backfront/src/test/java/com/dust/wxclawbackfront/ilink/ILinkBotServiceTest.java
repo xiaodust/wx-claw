@@ -4,6 +4,7 @@ import com.dust.wxclawbackfront.bot.scheduler.DynamicTaskSchedulerService;
 import com.dust.wxclawbackfront.ilink.inbound.ILinkMessageDispatcher;
 import com.dust.wxclawbackfront.ilink.runtime.BotRuntimeKey;
 import com.dust.wxclawbackfront.ilink.runtime.ILinkRuntimeManager;
+import com.dust.wxclawbackfront.ilink.runtime.status.BotRuntimeStatusRegistry;
 import com.dust.wxclawbackfront.tenancy.repository.TenantBotRepository;
 import com.github.wechat.ilink.sdk.ILinkClient;
 import com.github.wechat.ilink.sdk.core.exception.SessionExpiredException;
@@ -40,6 +41,7 @@ class ILinkBotServiceTest {
         TenantBotRepository tenantBotRepository = mock(TenantBotRepository.class);
         ExecutorService messageExecutor = mock(ExecutorService.class);
         ExecutorService runtimeExecutor = mock(ExecutorService.class);
+        BotRuntimeStatusRegistry statusRegistry = new BotRuntimeStatusRegistry();
         ILinkClient expiredClient = mock(ILinkClient.class);
         ILinkClient qrLoginClient = mock(ILinkClient.class);
         SessionExpiredException sessionExpired = mock(SessionExpiredException.class);
@@ -47,7 +49,7 @@ class ILinkBotServiceTest {
         AtomicReference<ILinkBotService> serviceReference = new AtomicReference<>();
 
         ILinkBotService service = new ILinkBotService(runtimeManager, messageDispatcher, schedulerService,
-                tenantBotRepository, messageExecutor, runtimeExecutor);
+                tenantBotRepository, statusRegistry, messageExecutor, runtimeExecutor);
         serviceReference.set(service);
         ReflectionTestUtils.setField(service, "maxReconnectAttempts", 2);
         ReflectionTestUtils.setField(service, "reconnectDelaySeconds", 0);

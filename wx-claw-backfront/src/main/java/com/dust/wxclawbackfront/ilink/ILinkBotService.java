@@ -3,6 +3,7 @@ package com.dust.wxclawbackfront.ilink;
 import com.dust.wxclawbackfront.ilink.inbound.ILinkMessageDispatcher;
 import com.dust.wxclawbackfront.ilink.runtime.ILinkRuntimeManager;
 import com.dust.wxclawbackfront.ilink.runtime.BotRuntimeKey;
+import com.dust.wxclawbackfront.ilink.runtime.status.BotRuntimeStatusRegistry;
 import com.dust.wxclawbackfront.tenancy.repository.TenantBotRepository;
 import com.dust.wxclawbackfront.bot.scheduler.DynamicTaskSchedulerService;
 import com.github.wechat.ilink.sdk.ILinkClient;
@@ -35,6 +36,7 @@ public class ILinkBotService {
     private final ILinkMessageDispatcher messageDispatcher;
     private final DynamicTaskSchedulerService taskSchedulerService;
     private final TenantBotRepository tenantBotRepository;
+    private final BotRuntimeStatusRegistry statusRegistry;
     @Qualifier("messageProcessingExecutor")
     private final ExecutorService messageProcessingExecutor;
     @Qualifier("botRuntimeExecutor")
@@ -59,7 +61,10 @@ public class ILinkBotService {
             log.warn("未配置任何 ACTIVE ILink Bot，跳过启动");
             return;
         }
-        keys.forEach(key -> botRuntimeExecutor.submit(() -> runILinkMonitor(key)));
+        keys.forEach(key -> {
+            statusRegistry.starting(key, false);
+            botRuntimeExecutor.submit(() -> runILinkMonitor(key));
+        });
         log.info("已启动 {} 个 ILink Bot 运行时", keys.size());
     }
 
@@ -85,6 +90,7 @@ public class ILinkBotService {
                 while (!stopFlag.get()) {
                     try {
                         List<WeixinMessage> messages = client.getUpdates();
+                        statusRegistry.pollSucceeded(key, messages != null && !messages.isEmpty());
                         if (reconnectAttempts > 0) {
                             log.info("Bot {} / {} 重连成功，连续失败计数已重置",
                                     key.tenantId(), key.botId());
@@ -92,18 +98,25 @@ public class ILinkBotService {
                         }
                         if (messages != null) {
                             for (WeixinMessage msg : messages) {
+                                if (!messageDispatcher.claim(key, msg)) {
+                                    continue;
+                                }
                                 // 异步处理消息，避免阻塞消息拉取
                                 messageProcessingExecutor.submit(() -> {
                                     try {
-                                        messageDispatcher.dispatch(key, msg);
+                                        messageDispatcher.dispatchClaimed(key, msg);
                                     } catch (Exception e) {
                                         log.error("消息处理异常: {}", e.getMessage(), e);
                                     }
                                 });
                             }
+                            if (!messages.isEmpty()) {
+                                runtimeManager.checkpointResumeContext(key, client);
+                            }
                         }
                     } catch (SessionExpiredException ex) {
                         reconnectAttempts++;
+                        statusRegistry.reconnecting(key, reconnectAttempts, ex);
                         discardResumeContext = reconnectAttempts >= maxReconnectAttempts;
                         if (discardResumeContext) {
                             log.warn("Bot {} / {} 登录会话连续重连失败达到上限（{} 次），将清除旧会话并重新扫码登录",
@@ -125,10 +138,12 @@ public class ILinkBotService {
                 if (isQrCodeExpired(ex)) {
                     log.warn("Bot {} / {} 登录二维码已过期，即将自动刷新",
                             key.tenantId(), key.botId());
+                    statusRegistry.waitingForQr(key);
                     sleepQuietly(1000L);
                 } else {
                     log.error("iLink 启动失败: {}", ex.getMessage(), ex);
                     reconnectAttempts++;
+                    statusRegistry.error(key, reconnectAttempts, ex);
                     discardResumeContext = reconnectAttempts >= maxReconnectAttempts;
                     if (discardResumeContext) {
                         log.warn("Bot {} / {} 连续重连失败达到上限（{} 次），将清除旧会话并重新扫码登录",
@@ -142,11 +157,13 @@ public class ILinkBotService {
                 runtimeManager.closeClient(key, client, !discardResumeContext);
                 if (discardResumeContext) {
                     runtimeManager.deleteResumeContext(key);
+                    statusRegistry.waitingForQr(key);
                     reconnectAttempts = 0;
                 }
             }
         }
 
+        statusRegistry.stopped(key);
         stopFlags.remove(key);
     }
 

@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.bot.agent.llm.video;
 
+import com.dust.wxclawbackfront.observability.llm.service.LlmInvocationRecorder;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -44,9 +45,11 @@ public class VideoGenerationHandler {
     private final String dashscopeApiKey;
     private final String dashscopeT2vModel;
     private final String dashscopeI2vModel;
+    private final LlmInvocationRecorder invocationRecorder;
 
     public VideoGenerationHandler(
             ObjectMapper objectMapper,
+            LlmInvocationRecorder invocationRecorder,
             @Value("${wxclaw.ai.video-gen.provider:ark}") String provider,
             @Value("${wxclaw.ai.video-gen.ratio:16:9}") String ratio,
             @Value("${wxclaw.ai.video-gen.duration:5}") int duration,
@@ -62,6 +65,7 @@ public class VideoGenerationHandler {
             @Value("${wxclaw.ai.video-gen.dashscope.t2v-model:wan2.7-t2v-2026-06-12}") String dashscopeT2vModel,
             @Value("${wxclaw.ai.video-gen.dashscope.i2v-model:wan2.7-i2v-2026-04-25}") String dashscopeI2vModel) {
         this.objectMapper = objectMapper;
+        this.invocationRecorder = invocationRecorder;
         this.provider = provider;
         this.ratio = ratio;
         this.duration = duration;
@@ -99,17 +103,25 @@ public class VideoGenerationHandler {
         String ratioToUse = customRatio != null ? customRatio : ratio;
         int durationToUse = customDuration != null ? customDuration : duration;
         String resolutionToUse = customResolution != null ? customResolution : resolution;
+        String model = "dashscope".equalsIgnoreCase(provider) ? dashscopeT2vModel : arkModel;
+        LlmInvocationRecorder.InvocationHandle handle = invocationRecorder.start(
+                "VIDEO_GENERATION", provider, model,
+                auditRequest("text", prompt, null, ratioToUse, durationToUse, resolutionToUse));
 
-        long start = System.currentTimeMillis();
-        String taskId = createTextToVideoTask(prompt, ratioToUse, durationToUse, resolutionToUse);
-        if (taskId == null) {
-            return VideoGenerationResult.failure("创建视频生成任务失败");
+        try {
+            long start = System.currentTimeMillis();
+            String taskId = createTextToVideoTask(prompt, ratioToUse, durationToUse, resolutionToUse);
+            if (taskId == null) {
+                return complete(handle, VideoGenerationResult.failure("创建视频生成任务失败"));
+            }
+            log.info("文生视频任务已创建: provider={}, taskId={}", provider, taskId);
+            VideoGenerationResult result = pollTask(taskId);
+            log.info("视频生成完成, 耗时={}ms, provider={}", System.currentTimeMillis() - start, provider);
+            return complete(handle, result);
+        } catch (RuntimeException ex) {
+            invocationRecorder.failure(handle, ex);
+            throw ex;
         }
-        log.info("文生视频任务已创建: provider={}, taskId={}", provider, taskId);
-
-        VideoGenerationResult result = pollTask(taskId);
-        log.info("视频生成完成, 耗时={}ms, provider={}", System.currentTimeMillis() - start, provider);
-        return result;
     }
 
     /**
@@ -127,17 +139,60 @@ public class VideoGenerationHandler {
         String ratioToUse = customRatio != null ? customRatio : ratio;
         int durationToUse = customDuration != null ? customDuration : duration;
         String resolutionToUse = customResolution != null ? customResolution : resolution;
+        String model = "dashscope".equalsIgnoreCase(provider) ? dashscopeI2vModel : arkModel;
+        LlmInvocationRecorder.InvocationHandle handle = invocationRecorder.start(
+                "VIDEO_GENERATION", provider, model,
+                auditRequest("image", prompt, imageUrl, ratioToUse, durationToUse, resolutionToUse));
 
-        long start = System.currentTimeMillis();
-        String taskId = createImageToVideoTask(imageUrl, prompt, ratioToUse, durationToUse, resolutionToUse);
-        if (taskId == null) {
-            return VideoGenerationResult.failure("创建视频生成任务失败");
+        try {
+            long start = System.currentTimeMillis();
+            String taskId = createImageToVideoTask(imageUrl, prompt, ratioToUse, durationToUse, resolutionToUse);
+            if (taskId == null) {
+                return complete(handle, VideoGenerationResult.failure("创建视频生成任务失败"));
+            }
+            log.info("图生视频任务已创建: provider={}, taskId={}", provider, taskId);
+            VideoGenerationResult result = pollTask(taskId);
+            log.info("视频生成完成, 耗时={}ms, provider={}", System.currentTimeMillis() - start, provider);
+            return complete(handle, result);
+        } catch (RuntimeException ex) {
+            invocationRecorder.failure(handle, ex);
+            throw ex;
         }
-        log.info("图生视频任务已创建: provider={}, taskId={}", provider, taskId);
+    }
 
-        VideoGenerationResult result = pollTask(taskId);
-        log.info("视频生成完成, 耗时={}ms, provider={}", System.currentTimeMillis() - start, provider);
+    private VideoGenerationResult complete(LlmInvocationRecorder.InvocationHandle handle,
+                                           VideoGenerationResult result) {
+        String response = toJson(Map.of(
+                "success", result.isSuccess(),
+                "videoUrl", result.getVideoUrl() == null ? "" : result.getVideoUrl(),
+                "videoBytesLength", result.getVideoBytes() == null ? 0 : result.getVideoBytes().length,
+                "error", result.getErrorMsg() == null ? "" : result.getErrorMsg()));
+        if (result.isSuccess()) {
+            invocationRecorder.success(handle, response, null, null, null);
+        } else {
+            invocationRecorder.failure(handle, new IllegalStateException(result.getErrorMsg()), response);
+        }
         return result;
+    }
+
+    private String auditRequest(String mode, String prompt, String imageUrl, String ratio,
+                                int duration, String resolution) {
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("mode", mode);
+        request.put("prompt", prompt);
+        request.put("imageUrl", imageUrl);
+        request.put("ratio", ratio);
+        request.put("duration", duration);
+        request.put("resolution", resolution);
+        return toJson(request);
+    }
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(value);
+        } catch (Exception ex) {
+            return String.valueOf(value);
+        }
     }
 
     public boolean isEnabled() {

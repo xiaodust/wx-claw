@@ -1,0 +1,12 @@
+<script setup lang="ts">
+import { onBeforeUnmount,onMounted,reactive,ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { getBots } from '../api/admin'
+import type { BotStatus } from '../types/admin'
+import BotStatusTag from '../components/BotStatusTag.vue'
+const rows=ref<BotStatus[]>([]),loading=ref(false),filters=reactive({keyword:'',runtimeStatus:''}),router=useRouter();let timer:number|undefined
+async function load(){if(loading.value||document.hidden)return;loading.value=true;try{rows.value=await getBots(filters)}finally{loading.value=false}}
+function visibilityChanged(){if(!document.hidden)load()}
+onMounted(()=>{load();timer=window.setInterval(load,5000);document.addEventListener('visibilitychange',visibilityChanged)});onBeforeUnmount(()=>{clearInterval(timer);document.removeEventListener('visibilitychange',visibilityChanged)});const fmt=(v?:string)=>v?new Date(v).toLocaleString():'—'
+</script>
+<template><div><h1 class="page-title">Bot 状态</h1><p class="page-subtitle">配置状态与实时运行状态分开显示，每 5 秒自动刷新</p><section class="panel"><div class="toolbar"><el-input v-model="filters.keyword" placeholder="Bot 名称或 ID" clearable style="width:240px" @keyup.enter="load"/><el-select v-model="filters.runtimeStatus" placeholder="全部状态" clearable style="width:170px"><el-option v-for="s in ['ONLINE','WAITING_QR','STARTING','RECONNECTING','OFFLINE','ERROR','STOPPED']" :key="s" :value="s" :label="s"/></el-select><el-button type="primary" @click="load">查询</el-button></div><el-table :data="rows" v-loading="loading"><el-table-column prop="displayName" label="名称"/><el-table-column prop="botId" label="Bot ID"/><el-table-column prop="tenantId" label="租户"/><el-table-column prop="configuredStatus" label="配置" width="90"/><el-table-column label="运行状态" width="120"><template #default="s"><BotStatusTag :status="s.row.runtimeStatus"/></template></el-table-column><el-table-column label="连接时间" width="180"><template #default="s">{{fmt(s.row.connectedAt)}}</template></el-table-column><el-table-column label="最后消息" width="180"><template #default="s">{{fmt(s.row.lastMessageAt)}}</template></el-table-column><el-table-column prop="lastError" label="最近错误" show-overflow-tooltip/><el-table-column label="操作" width="90"><template #default="s"><el-button link type="primary" @click="router.push({path:'/conversations',query:{botId:s.row.botId}})">对话</el-button></template></el-table-column></el-table></section></div></template>

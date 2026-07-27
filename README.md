@@ -281,6 +281,26 @@ cd wx-claw-backfront
 mvn spring-boot:run
 ```
 
+### 6. 运行管理端
+
+管理端用于查看 Bot 实时状态、对话历史和模型原始调用记录：
+
+```bash
+cd wx-claw-admin
+npm install
+npm run dev
+```
+
+浏览器访问 `http://localhost:3000`，使用 `<credentialId>.<secret>` 格式的管理 API Key 登录。当前 Bootstrap 凭据的 `*` scope 可以访问管理端；正式创建凭据时建议只授予 `admin:read`，跨租户管理员授予 `platform:admin`。
+
+生产构建：
+
+```bash
+npm run build
+```
+
+模型调用审计默认最多保存每个请求或响应 2 MB，密钥、Token 和 Base64 媒体会在持久化前自动脱敏。
+
 ## 配置说明
 
 ### 环境变量
@@ -383,6 +403,7 @@ wxclaw:
 wx-claw/
 ├── wx-claw-backfront/
 │   └── src/main/java/com/dust/wxclawbackfront/
+├── wx-claw-admin/                  # Vue 3 只读管理端
 │       ├── ai/
 │       │   ├── agent/             # Agent 编排系统
 │       │   │   ├── model/         # 数据模型（AgentContext, AgentResult, TaskPlan, TaskStep, TaskResult）

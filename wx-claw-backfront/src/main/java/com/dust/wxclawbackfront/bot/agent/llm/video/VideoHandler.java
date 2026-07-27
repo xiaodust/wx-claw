@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.bot.agent.llm.video;
 
+import com.dust.wxclawbackfront.observability.llm.service.LlmInvocationRecorder;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -33,9 +34,11 @@ public class VideoHandler {
     private final float fps;
     private final int maxTokens;
     private final Duration timeout;
+    private final LlmInvocationRecorder invocationRecorder;
 
     public VideoHandler(
             ObjectMapper objectMapper,
+            LlmInvocationRecorder invocationRecorder,
             @Value("${spring.ai.openai.base-url:https://ark.cn-beijing.volces.com/api/v3}") String baseUrl,
             @Value("${spring.ai.openai.api-key:}") String apiKey,
             @Value("${wxclaw.ai.video.model:}") String videoModel,
@@ -45,6 +48,7 @@ public class VideoHandler {
             @Value("${wxclaw.ai.video.max-tokens:1024}") int maxTokens,
             @Value("${wxclaw.ai.video.timeout:PT60S}") Duration timeout) {
         this.objectMapper = objectMapper;
+        this.invocationRecorder = invocationRecorder;
         this.apiUrl = baseUrl + "/chat/completions";
         this.apiKey = apiKey;
         this.videoModel = videoModel;
@@ -80,43 +84,7 @@ public class VideoHandler {
         }
 
         String requestJson = buildRequestJson(modelToUse, videoUrl, promptToUse);
-        try {
-            Map<String, Object> requestBody = objectMapper.readValue(requestJson, Map.class);
-
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(apiUrl))
-                    .timeout(timeout)
-                    .header("Content-Type", "application/json")
-                    .header("Authorization", "Bearer " + apiKey)
-                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)))
-                    .build();
-
-            long start = System.currentTimeMillis();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            long elapsed = System.currentTimeMillis() - start;
-            log.info("视频理解完成, 耗时={}ms, model={}", elapsed, modelToUse);
-
-            if (response.statusCode() / 100 != 2) {
-                log.error("视频理解API调用失败: HTTP {}, body={}", response.statusCode(), response.body());
-                return new VideoUnderstandingResult(modelToUse, requestJson, null, "API返回HTTP " + response.statusCode());
-            }
-
-            JsonNode root = objectMapper.readTree(response.body());
-            JsonNode choices = root.get("choices");
-            if (choices != null && choices.isArray() && !choices.isEmpty()) {
-                JsonNode message = choices.get(0).get("message");
-                if (message != null && message.has("content")) {
-                    String content = message.get("content").asText();
-                    return new VideoUnderstandingResult(modelToUse, requestJson, content, null);
-                }
-            }
-
-            return new VideoUnderstandingResult(modelToUse, requestJson, null, "无法解析API响应");
-
-        } catch (Exception ex) {
-            log.error("视频理解异常: {}", ex.getMessage(), ex);
-            return new VideoUnderstandingResult(modelToUse, requestJson, null, ex.getMessage());
-        }
+        return executeUnderstanding(requestJson, modelToUse);
     }
 
     public VideoUnderstandingResult understandByBase64(String base64Data, String mimeType) {
@@ -131,10 +99,14 @@ public class VideoHandler {
 
         String dataUrl = "data:" + (mimeType != null ? mimeType : "video/mp4") + ";base64," + base64Data;
         String requestJson = buildRequestJson(modelToUse, dataUrl, prompt);
+        return executeUnderstanding(requestJson, modelToUse);
+    }
 
+    private VideoUnderstandingResult executeUnderstanding(String requestJson, String model) {
+        LlmInvocationRecorder.InvocationHandle handle = invocationRecorder.start(
+                "VIDEO_UNDERSTANDING", "VOLCENGINE", model, requestJson);
         try {
             Map<String, Object> requestBody = objectMapper.readValue(requestJson, Map.class);
-
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(apiUrl))
                     .timeout(timeout)
@@ -142,32 +114,31 @@ public class VideoHandler {
                     .header("Authorization", "Bearer " + apiKey)
                     .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)))
                     .build();
-
             long start = System.currentTimeMillis();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            long elapsed = System.currentTimeMillis() - start;
-            log.info("视频理解完成, 耗时={}ms, model={}", elapsed, modelToUse);
-
+            log.info("视频理解完成, 耗时={}ms, model={}", System.currentTimeMillis() - start, model);
             if (response.statusCode() / 100 != 2) {
-                log.error("视频理解API调用失败: HTTP {}, body={}", response.statusCode(), response.body());
-                return new VideoUnderstandingResult(modelToUse, requestJson, null, "API返回HTTP " + response.statusCode());
+                String error = "API返回HTTP " + response.statusCode();
+                invocationRecorder.failure(handle, new IllegalStateException(error), response.body());
+                return new VideoUnderstandingResult(model, requestJson, null, error);
             }
-
             JsonNode root = objectMapper.readTree(response.body());
             JsonNode choices = root.get("choices");
             if (choices != null && choices.isArray() && !choices.isEmpty()) {
                 JsonNode message = choices.get(0).get("message");
                 if (message != null && message.has("content")) {
                     String content = message.get("content").asText();
-                    return new VideoUnderstandingResult(modelToUse, requestJson, content, null);
+                    invocationRecorder.success(handle, response.body(), null, null, null);
+                    return new VideoUnderstandingResult(model, requestJson, content, null);
                 }
             }
-
-            return new VideoUnderstandingResult(modelToUse, requestJson, null, "无法解析API响应");
-
+            String error = "无法解析API响应";
+            invocationRecorder.failure(handle, new IllegalStateException(error), response.body());
+            return new VideoUnderstandingResult(model, requestJson, null, error);
         } catch (Exception ex) {
             log.error("视频理解异常: {}", ex.getMessage(), ex);
-            return new VideoUnderstandingResult(modelToUse, requestJson, null, ex.getMessage());
+            invocationRecorder.failure(handle, ex);
+            return new VideoUnderstandingResult(model, requestJson, null, ex.getMessage());
         }
     }
 

@@ -4,6 +4,12 @@
 # IDE
 .idea/
 .vscode/
+.settings/
+.classpath
+.factorypath
+.project
+.springBeans
+.sts4-cache/
 *.iml
 *.iws
 *.ipr
@@ -20,6 +26,10 @@ out/
 # Logs
 *.log
 logs/
+*.pid
+*.hprof
+replay_pid*.log
+hs_err_pid*.mdmp
 
 # OS
 .DS_Store
@@ -39,9 +49,22 @@ Thumbs.db
 # Application config (contains secrets)
 application.yml
 application-local.yml
+application.properties
+application-local.properties
+**/src/main/resources/application-*.yml
+**/src/main/resources/application-*.yaml
+**/src/main/resources/application-*.properties
 .env
 .env.*
 !.env.example
+
+# Local credentials and certificates
+.secrets/
+secrets/
+credentials/
+*.p12
+*.pfx
+*.jks
 
 # Local runtime state
 **/.ilink-resume-context*.json
@@ -51,15 +74,24 @@ uploads/
 # Local tools and dependency caches
 .m2repo/
 .trae/
+.npm-cache/
 
 # Frontend dependencies and build output
 node_modules/
 dist/
 coverage/
+.vite/
+.cache/
+.eslintcache
 *.tsbuildinfo
 
 # Temporary files
 *.tmp
+*.temp
+*.bak
+*.orig
 *.swp
 *~
+tmp/
+temp/
 hs_err_pid*.log

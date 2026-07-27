@@ -72,7 +72,7 @@ public class AgentOrchestrator {
 
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
             try {
-                String response = plainTextLlmService.chat(prompt);
+                String response = plainTextLlmService.chat(prompt, "PLAN");
                 String json = extractJson(response);
 
                 PlanValidator.ValidationResult validation = planValidator.validate(json);

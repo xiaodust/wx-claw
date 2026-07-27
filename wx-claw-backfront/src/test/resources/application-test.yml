@@ -8,7 +8,10 @@ spring:
     driver-class-name: org.sqlite.JDBC
     hikari:
       maximum-pool-size: 1
+      minimum-idle: 1
+      connection-timeout: 30000
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: validate
     properties:

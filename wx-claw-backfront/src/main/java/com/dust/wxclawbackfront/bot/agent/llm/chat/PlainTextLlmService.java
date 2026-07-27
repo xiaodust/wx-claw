@@ -1,13 +1,20 @@
 package com.dust.wxclawbackfront.bot.agent.llm.chat;
 
+import com.dust.wxclawbackfront.observability.llm.service.LlmInvocationRecorder;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.metadata.Usage;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * 纯文本 LLM 调用服务
@@ -18,6 +25,8 @@ import java.time.Duration;
 public class PlainTextLlmService {
 
     private final ChatClient chatClient;
+    private final LlmInvocationRecorder invocationRecorder;
+    private final ObjectMapper objectMapper;
     private OpenAiChatOptions.Builder cachedOptionsBuilder;
 
     @Value("${spring.ai.openai.chat.model:}")
@@ -32,8 +41,12 @@ public class PlainTextLlmService {
     @Value("${wxclaw.ai.chat.timeout:PT35S}")
     private Duration timeout;
 
-    public PlainTextLlmService(ChatClient.Builder chatClientBuilder) {
+    public PlainTextLlmService(ChatClient.Builder chatClientBuilder,
+                               LlmInvocationRecorder invocationRecorder,
+                               ObjectMapper objectMapper) {
         this.chatClient = chatClientBuilder.build();
+        this.invocationRecorder = invocationRecorder;
+        this.objectMapper = objectMapper;
     }
 
     @PostConstruct
@@ -47,14 +60,58 @@ public class PlainTextLlmService {
     }
 
     public String chat(String prompt) {
+        return chat(prompt, "PLAIN_TEXT");
+    }
+
+    public String chat(String prompt, String invocationType) {
         long start = System.currentTimeMillis();
-        String content = chatClient.prompt()
-                .options(cachedOptionsBuilder)
-                .user(prompt)
-                .call()
-                .content();
-        long elapsed = System.currentTimeMillis() - start;
-        log.info("LLM响应完成, 耗时={}ms, model={}", elapsed, model);
-        return content;
+        LlmInvocationRecorder.InvocationHandle handle = invocationRecorder.start(
+                invocationType, "OPENAI_COMPATIBLE", model, requestPayload(prompt));
+        try {
+            ChatResponse response = chatClient.prompt()
+                    .options(cachedOptionsBuilder)
+                    .user(prompt)
+                    .call()
+                    .chatResponse();
+            String content = response == null || response.getResult() == null
+                    ? null : response.getResult().getOutput().getText();
+            Usage usage = response == null || response.getMetadata() == null
+                    ? null : response.getMetadata().getUsage();
+            invocationRecorder.success(handle, responsePayload(response, content), null,
+                    usage == null ? null : usage.getPromptTokens(),
+                    usage == null ? null : usage.getCompletionTokens());
+            long elapsed = System.currentTimeMillis() - start;
+            log.info("LLM响应完成, 耗时={}ms, model={}", elapsed, model);
+            return content;
+        } catch (RuntimeException ex) {
+            invocationRecorder.failure(handle, ex);
+            throw ex;
+        }
+    }
+
+    private String requestPayload(String prompt) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("model", model);
+        payload.put("thinkingType", thinkingType);
+        payload.put("maxTokens", maxTokens);
+        payload.put("timeout", timeout.toString());
+        payload.put("user", prompt);
+        return toJson(payload);
+    }
+
+    private String responsePayload(ChatResponse response, String content) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("content", content);
+        payload.put("metadata", response == null ? null : String.valueOf(response.getMetadata()));
+        payload.put("results", response == null ? null : String.valueOf(response.getResults()));
+        return toJson(payload);
+    }
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(value);
+        } catch (JsonProcessingException ex) {
+            return String.valueOf(value);
+        }
     }
 }

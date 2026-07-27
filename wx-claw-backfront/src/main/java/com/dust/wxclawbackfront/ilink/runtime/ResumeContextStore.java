@@ -78,6 +78,10 @@ public class ResumeContextStore {
         }
     }
 
+    public boolean exists(BotRuntimeKey key) {
+        return contextFile(key).exists();
+    }
+
     /**
      * 删除持久化文件
      */

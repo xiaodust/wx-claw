@@ -6,14 +6,22 @@ import com.dust.wxclawbackfront.bot.dao.entity.AiMessage;
 import com.dust.wxclawbackfront.bot.agent.tools.memory.UserMemoryService;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolInvocationStore;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.UserContextHolder;
+import com.dust.wxclawbackfront.observability.llm.service.LlmInvocationRecorder;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.metadata.Usage;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 
@@ -31,6 +39,8 @@ public class UniversalChatHandler implements ChatHandler {
     private final SkillLoader skillLoader;
     private final UserMemoryService userMemoryService;
     private final ExecutorService promptExecutor;
+    private final LlmInvocationRecorder invocationRecorder;
+    private final ObjectMapper objectMapper;
 
     @Value("${spring.ai.openai.chat.model:}")
     private String model;
@@ -57,6 +67,8 @@ public class UniversalChatHandler implements ChatHandler {
                                 SkillLoader skillLoader,
                                 UserMemoryService userMemoryService,
                                 @Qualifier("promptExecutor") ExecutorService promptExecutor,
+                                LlmInvocationRecorder invocationRecorder,
+                                ObjectMapper objectMapper,
                                 @Value("${spring.ai.openai.chat.model:}") String model,
                                 @Value("${wxclaw.ai.thinking.type:disabled}") String thinkingType,
                                 @Value("${wxclaw.ai.chat.max-tokens:768}") int maxTokens,
@@ -70,6 +82,8 @@ public class UniversalChatHandler implements ChatHandler {
         this.skillLoader = skillLoader;
         this.userMemoryService = userMemoryService;
         this.promptExecutor = promptExecutor;
+        this.invocationRecorder = invocationRecorder;
+        this.objectMapper = objectMapper;
         this.model = model;
         this.thinkingType = thinkingType;
         this.maxTokens = maxTokens;
@@ -113,9 +127,6 @@ public class UniversalChatHandler implements ChatHandler {
         // 5. 使用 Spring AI 原生 function calling（模型自主决定调用工具）
         String content = callWithTools(requestText, systemPrompt);
 
-        // 6. 打印工具调用日志
-        logToolInvocations();
-
         return content;
     }
 
@@ -143,18 +154,34 @@ public class UniversalChatHandler implements ChatHandler {
         }
 
         long start = System.currentTimeMillis();
-        String content = finalSpec.call().content();
-        long elapsed = System.currentTimeMillis() - start;
-        log.info("LLM响应完成, 耗时={}ms, model={}", elapsed, model);
-        return content;
+        LlmInvocationRecorder.InvocationHandle handle = invocationRecorder.start(
+                "CHAT", "OPENAI_COMPATIBLE", model, requestPayload(requestText, systemPrompt));
+        try {
+            ChatResponse response = finalSpec.call().chatResponse();
+            String content = response == null || response.getResult() == null
+                    ? null : response.getResult().getOutput().getText();
+            List<AiToolInvocationStore.Invocation> toolInvocations = drainToolInvocations();
+            Usage usage = response == null || response.getMetadata() == null
+                    ? null : response.getMetadata().getUsage();
+            invocationRecorder.success(handle, responsePayload(response, content), toJson(toolInvocations),
+                    usage == null ? null : usage.getPromptTokens(),
+                    usage == null ? null : usage.getCompletionTokens());
+            long elapsed = System.currentTimeMillis() - start;
+            log.info("LLM响应完成, 耗时={}ms, model={}", elapsed, model);
+            return content;
+        } catch (RuntimeException ex) {
+            drainToolInvocations();
+            invocationRecorder.failure(handle, ex);
+            throw ex;
+        }
     }
 
     /**
      * 打印本轮工具调用日志
      */
-    private void logToolInvocations() {
+    private List<AiToolInvocationStore.Invocation> drainToolInvocations() {
         if (toolInvocationStore == null) {
-            return;
+            return List.of();
         }
         List<AiToolInvocationStore.Invocation> invocations = toolInvocationStore.drain();
         if (!invocations.isEmpty()) {
@@ -164,6 +191,36 @@ public class UniversalChatHandler implements ChatHandler {
                         truncate(inv.toolRequest(), 200),
                         truncate(inv.toolResponse(), 200));
             }
+        }
+        return invocations;
+    }
+
+    private String requestPayload(String requestText, String systemPrompt) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("model", model);
+        payload.put("thinkingType", thinkingType);
+        payload.put("maxTokens", maxTokens);
+        payload.put("timeout", timeout.toString());
+        payload.put("system", systemPrompt);
+        payload.put("user", requestText);
+        payload.put("tools", Arrays.stream(toolRegistry.getAllTools())
+                .map(tool -> tool.getClass().getName()).toList());
+        return toJson(payload);
+    }
+
+    private String responsePayload(ChatResponse response, String content) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("content", content);
+        payload.put("metadata", response == null ? null : String.valueOf(response.getMetadata()));
+        payload.put("results", response == null ? null : String.valueOf(response.getResults()));
+        return toJson(payload);
+    }
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(value);
+        } catch (JsonProcessingException ex) {
+            return String.valueOf(value);
         }
     }
 

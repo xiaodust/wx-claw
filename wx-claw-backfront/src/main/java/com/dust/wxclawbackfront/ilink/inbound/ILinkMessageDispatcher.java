@@ -14,6 +14,8 @@ import com.dust.wxclawbackfront.ilink.ILinkUserInputExtractor;
 import com.dust.wxclawbackfront.ilink.outbound.ILinkMessageSender;
 import com.dust.wxclawbackfront.ilink.runtime.ILinkRuntimeManager;
 import com.dust.wxclawbackfront.ilink.runtime.BotRuntimeKey;
+import com.dust.wxclawbackfront.observability.llm.InvocationTraceContext;
+import com.dust.wxclawbackfront.observability.llm.InvocationTraceContextHolder;
 import com.github.wechat.ilink.sdk.ILinkClient;
 import com.github.wechat.ilink.sdk.core.model.WeixinMessage;
 import lombok.RequiredArgsConstructor;
@@ -62,6 +64,7 @@ public class ILinkMessageDispatcher {
     private final WaitNoticeService waitNoticeService;
     private final ErrorHandler errorHandler;
     private final FileUploadValidator fileUploadValidator;
+    private final ILinkMessageReceiptStore messageReceiptStore;
 
     @Value("${wxclaw.ai.context.max-history-messages:12}")
     private int maxHistoryMessages;
@@ -70,17 +73,31 @@ public class ILinkMessageDispatcher {
      * 处理入站消息（主入口）
      */
     public void dispatch(BotRuntimeKey runtimeKey, WeixinMessage msg) {
-        if (msg == null) {
+        if (!claim(runtimeKey, msg)) {
             return;
         }
+        dispatchClaimed(runtimeKey, msg);
+    }
 
+    public boolean claim(BotRuntimeKey runtimeKey, WeixinMessage msg) {
+        if (msg == null) {
+            return false;
+        }
+        String userId = msg.getFrom_user_id();
+        if (userId == null || userId.isBlank()) {
+            return false;
+        }
+        if (!messageReceiptStore.claim(runtimeKey, msg)) {
+            log.info("忽略已处理的 iLink 重放消息: tenantId={}, botId={}, messageId={}, userId={}",
+                    runtimeKey.tenantId(), runtimeKey.botId(), msg.getMessage_id(), userId);
+            return false;
+        }
+        return true;
+    }
+
+    public void dispatchClaimed(BotRuntimeKey runtimeKey, WeixinMessage msg) {
         String userId = msg.getFrom_user_id();
         String contextToken = msg.getContext_token();
-
-        if (userId == null || userId.isBlank()) {
-            return;
-        }
-
         // 消息防抖
         String userText = userInputExtractor.extractText(msg);
         if (!messageDebouncer.shouldProcess(userId, userText)) {
@@ -106,9 +123,14 @@ public class ILinkMessageDispatcher {
             // 获取或创建当前用户的活跃会话
             AiConversation activeConversation = crudService.getOrCreateActiveConversation(userId);
             String sessionId = activeConversation.getSessionId();
+            TenantContext tenantContext = TenantContextHolder.require();
+            InvocationTraceContextHolder.set(new InvocationTraceContext(
+                    runtimeKey.tenantId(), runtimeKey.botId(), activeConversation.getId(), sessionId,
+                    tenantContext.requestId()));
 
             processMessage(runtimeKey, msg, userId, contextToken, sessionId);
         } finally {
+            InvocationTraceContextHolder.clear();
             TenantContextHolder.clear();
         }
     }

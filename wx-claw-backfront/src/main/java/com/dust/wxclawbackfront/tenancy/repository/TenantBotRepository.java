@@ -7,4 +7,6 @@ import java.util.List;
 
 public interface TenantBotRepository extends JpaRepository<TenantBot, Long> {
     List<TenantBot> findByChannelAndStatus(String channel, String status);
+
+    List<TenantBot> findAllByTenantId(String tenantId);
 }
