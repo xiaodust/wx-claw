@@ -67,7 +67,7 @@ public class ReminderTaskBuilder {
     }
 
     /**
-     * 设置动作类型（REMINDER, WEB_SEARCH_PUSH, AI_CHAT, WEATHER_PUSH, EMAIL, CONVERSATION_SUMMARY）
+     * 设置动作类型（REMINDER, WEB_SEARCH_PUSH, AI_CHAT, WEATHER_PUSH, WEATHER_EMAIL, SCHEDULED_BRIEFING_EMAIL, EMAIL, CONVERSATION_SUMMARY）
      */
     public ReminderTaskBuilder actionType(String actionType) {
         this.actionType = actionType;

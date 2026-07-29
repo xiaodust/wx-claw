@@ -86,6 +86,7 @@ description: "负责识别用户的定时动作意图，并在提醒、搜索、
 优先工具：
 
 - 天气定时推送工具
+- 如果用户要求把天气发到邮箱，必须使用 `schedule_daily_weather_email`，不能用 `schedule_daily_email` 保存一段静态占位正文
 
 ### E. 对话总结
 
@@ -100,6 +101,22 @@ description: "负责识别用户的定时动作意图，并在提醒、搜索、
 - `create_daily_summary`
 - `create_weekly_summary`
 - `create_monthly_summary`
+
+### F. 定时资讯简报邮件
+
+适用场景：
+
+- 按用户指定周期发送资讯简报到邮箱
+- 每天、每周或每月定时发送新闻和天气汇总
+- 在用户指定的具体时刻生成动态资讯邮件
+
+优先工具：
+
+- 必须使用 `schedule_briefing_email`
+- 不得使用 `schedule_daily_email` 保存静态占位正文
+- 不得使用 `schedule_daily_ai_chat` 编造实时新闻或天气
+
+创建前必须明确收件邮箱、执行周期、具体时间、天气地点和资讯主题；每周任务还需星期几，每月任务还需几号，缺少时应向用户补问。不要擅自假定每天或早晨执行。
 
 ## 强约束
 

@@ -564,6 +564,147 @@ public class ReminderHandler {
         }
     }
 
+    @Transactional
+    public ReminderCreateResult createDailyWeatherEmail(String userId, String to, String subject, String location,
+                                                        int hour, int minute, boolean includeForecast) {
+        String error;
+        if ((error = ReminderValidator.validateUserId(userId)) != null) {
+            return ReminderValidator.createErrorResult(error);
+        }
+        if ((error = ReminderValidator.validateEmailTo(to)) != null) {
+            return ReminderValidator.createErrorResult(error);
+        }
+        if ((error = ReminderValidator.validateEmailSubject(subject)) != null) {
+            return ReminderValidator.createErrorResult(error);
+        }
+        if ((error = ReminderValidator.validateLocation(location)) != null) {
+            return ReminderValidator.createErrorResult(error);
+        }
+        if ((error = ReminderValidator.validateHourAndMinute(hour, minute)) != null) {
+            return ReminderValidator.createErrorResult(error);
+        }
+
+        try {
+            LocalDateTime now = LocalDateTime.now(ZoneId.of(timeZone));
+            LocalDateTime triggerTime = now.toLocalDate().atTime(hour, minute);
+            if (!triggerTime.isAfter(now)) {
+                triggerTime = triggerTime.plusDays(1);
+            }
+
+            ReminderTask task = ReminderTaskBuilder.builder()
+                    .userId(userId)
+                    .reminderText("每日天气邮件：" + location)
+                    .triggerTime(triggerTime)
+                    .taskType("DAILY")
+                    .actionType("WEATHER_EMAIL")
+                    .actionParams(Map.of(
+                            "to", to,
+                            "subject", subject,
+                            "location", location,
+                            "includeForecast", includeForecast))
+                    .cronExpression(String.format("0 %d %d * * *", minute, hour))
+                    .build();
+
+            ReminderTask saved = repository.save(task);
+            schedulerService.scheduleCronTask(saved);
+            log.info("创建每日天气邮件成功: userId={}, taskId={}, to={}, location={}, cron={}",
+                    userId, saved.getId(), to, location, saved.getCronExpression());
+            return new ReminderCreateResult(true, saved.getId(),
+                    String.format("好的，我会每天 %02d:%02d 查询%s天气并发送到 %s（首次发送：%s）",
+                            hour, minute, location, to, formatTime(triggerTime)));
+        } catch (Exception e) {
+            log.error("创建天气邮件任务失败", e);
+            return new ReminderCreateResult(false, null, "创建失败：" + e.getMessage());
+        }
+    }
+
+    @Transactional
+    public ReminderCreateResult createScheduledBriefingEmail(String userId, String to, String subject, String location,
+                                                             String newsQuery, int newsCount, String scheduleType,
+                                                             int dayOfWeek, int dayOfMonth, int hour, int minute,
+                                                             boolean includeForecast) {
+        String error;
+        if ((error = ReminderValidator.validateUserId(userId)) != null) {
+            return ReminderValidator.createErrorResult(error);
+        }
+        if ((error = ReminderValidator.validateEmailTo(to)) != null) {
+            return ReminderValidator.createErrorResult(error);
+        }
+        if ((error = ReminderValidator.validateEmailSubject(subject)) != null) {
+            return ReminderValidator.createErrorResult(error);
+        }
+        if ((error = ReminderValidator.validateLocation(location)) != null) {
+            return ReminderValidator.createErrorResult(error);
+        }
+        if ((error = ReminderValidator.validateQuery(newsQuery)) != null) {
+            return ReminderValidator.createErrorResult(error);
+        }
+        if (newsCount < 1 || newsCount > 10) {
+            return ReminderValidator.createErrorResult("简报资讯条数必须在1到10之间");
+        }
+        String normalizedScheduleType = scheduleType == null ? "" : scheduleType.trim().toUpperCase();
+        if (!List.of("DAILY", "WEEKLY", "MONTHLY").contains(normalizedScheduleType)) {
+            return ReminderValidator.createErrorResult("执行周期必须是 DAILY、WEEKLY 或 MONTHLY");
+        }
+        if ("WEEKLY".equals(normalizedScheduleType)
+                && (error = ReminderValidator.validateDayOfWeek(dayOfWeek)) != null) {
+            return ReminderValidator.createErrorResult(error);
+        }
+        if ("MONTHLY".equals(normalizedScheduleType)
+                && (error = ReminderValidator.validateDayOfMonth(dayOfMonth)) != null) {
+            return ReminderValidator.createErrorResult(error);
+        }
+        if ((error = ReminderValidator.validateHourAndMinute(hour, minute)) != null) {
+            return ReminderValidator.createErrorResult(error);
+        }
+
+        try {
+            LocalDateTime now = LocalDateTime.now(ZoneId.of(timeZone));
+            LocalDateTime triggerTime;
+            String cronExpression;
+            if ("WEEKLY".equals(normalizedScheduleType)) {
+                triggerTime = now.with(TemporalAdjusters.nextOrSame(DayOfWeek.of(dayOfWeek)))
+                        .toLocalDate().atTime(hour, minute);
+                if (!triggerTime.isAfter(now)) triggerTime = triggerTime.plusWeeks(1);
+                cronExpression = String.format("0 %d %d * * %s", minute, hour, getDayOfWeekCron(dayOfWeek));
+            } else if ("MONTHLY".equals(normalizedScheduleType)) {
+                triggerTime = calculateNextMonthlyTrigger(now, dayOfMonth, hour, minute);
+                cronExpression = String.format("0 %d %d %d * *", minute, hour, dayOfMonth);
+            } else {
+                triggerTime = now.toLocalDate().atTime(hour, minute);
+                if (!triggerTime.isAfter(now)) triggerTime = triggerTime.plusDays(1);
+                cronExpression = String.format("0 %d %d * * *", minute, hour);
+            }
+
+            ReminderTask task = ReminderTaskBuilder.builder()
+                    .userId(userId)
+                    .reminderText("定时资讯简报邮件：" + subject)
+                    .triggerTime(triggerTime)
+                    .taskType(normalizedScheduleType)
+                    .actionType("SCHEDULED_BRIEFING_EMAIL")
+                    .actionParams(Map.of(
+                            "to", to,
+                            "subject", subject,
+                            "location", location,
+                            "newsQuery", newsQuery,
+                            "newsCount", newsCount,
+                            "includeForecast", includeForecast))
+                    .cronExpression(cronExpression)
+                    .build();
+
+            ReminderTask saved = repository.save(task);
+            schedulerService.scheduleCronTask(saved);
+            log.info("创建定时简报邮件成功: userId={}, taskId={}, type={}, to={}, location={}, query={}, cron={}",
+                    userId, saved.getId(), normalizedScheduleType, to, location, newsQuery, saved.getCronExpression());
+            return new ReminderCreateResult(true, saved.getId(),
+                    String.format("好的，我会按你设置的%s周期在 %02d:%02d 查询天气和资讯，并把简报发送到 %s（首次发送：%s）",
+                            normalizedScheduleType, hour, minute, to, formatTime(triggerTime)));
+        } catch (Exception e) {
+            log.error("创建定时简报邮件任务失败", e);
+            return new ReminderCreateResult(false, null, "创建失败：" + e.getMessage());
+        }
+    }
+
     /**
      * 创建定时网络搜索推送（每天）
      */

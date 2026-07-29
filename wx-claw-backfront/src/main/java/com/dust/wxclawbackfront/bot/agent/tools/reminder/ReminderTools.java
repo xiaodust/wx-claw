@@ -170,6 +170,39 @@ public class ReminderTools implements AiToolProvider {
         return new ReminderCreateToolResult(result.success(), result.reminderId(), result.message());
     }
 
+    @Tool(name = "schedule_daily_weather_email",
+          description = "创建每天定时天气邮件。执行时实时查询指定地点天气，再把实际天气内容发送到指定邮箱；天气邮件必须使用本工具，不要使用静态定时邮件工具。")
+    @ToolInvocationLog("schedule_daily_weather_email")
+    public ReminderCreateToolResult scheduleDailyWeatherEmail(String to, String subject, String location,
+                                                              int hour, int minute, boolean includeForecast) {
+        String userId = UserContextHolder.getUserId();
+        if (userId == null) {
+            return new ReminderCreateToolResult(false, null, "无法获取用户信息");
+        }
+
+        ReminderHandler.ReminderCreateResult result = reminderHandler.createDailyWeatherEmail(
+                userId, to, subject, location, hour, minute, includeForecast);
+        return new ReminderCreateToolResult(result.success(), result.reminderId(), result.message());
+    }
+
+    @Tool(name = "schedule_briefing_email",
+          description = "创建定时资讯简报邮件。用户决定 DAILY、WEEKLY 或 MONTHLY 周期及具体时间；执行时实时查询天气和资讯后发送。dayOfWeek 仅每周使用（1至7），dayOfMonth 仅每月使用（1至31）。不得使用静态邮件或无工具AI聊天替代。")
+    @ToolInvocationLog("schedule_briefing_email")
+    public ReminderCreateToolResult scheduleBriefingEmail(String to, String subject, String location,
+                                                          String newsQuery, int newsCount, String scheduleType,
+                                                          int dayOfWeek, int dayOfMonth, int hour, int minute,
+                                                          boolean includeForecast) {
+        String userId = UserContextHolder.getUserId();
+        if (userId == null) {
+            return new ReminderCreateToolResult(false, null, "无法获取用户信息");
+        }
+
+        ReminderHandler.ReminderCreateResult result = reminderHandler.createScheduledBriefingEmail(
+                userId, to, subject, location, newsQuery, newsCount, scheduleType,
+                dayOfWeek, dayOfMonth, hour, minute, includeForecast);
+        return new ReminderCreateToolResult(result.success(), result.reminderId(), result.message());
+    }
+
     /**
      * 创建每天定时网络搜索推送
      */
