@@ -36,6 +36,23 @@ class AdminAccessGuardTest {
         assertEquals("tenant-b", guard.resolveTenant("tenant-b"));
     }
 
+    @Test
+    void ownedResourceDefaultsPlatformAdminToCurrentTenant() {
+        TenantContextHolder.set(context("control", Set.of("platform:admin")));
+
+        assertEquals("control", guard.resolveOwnedTenant(null));
+        assertEquals("tenant-b", guard.resolveOwnedTenant("tenant-b"));
+    }
+
+    @Test
+    void writeScopeIsRequiredForTenantMutation() {
+        TenantContextHolder.set(context("tenant-a", Set.of("admin:read")));
+        assertThrows(SecurityException.class, () -> guard.resolveWriteTenant(null));
+
+        TenantContextHolder.set(context("tenant-a", Set.of("admin:write")));
+        assertEquals("tenant-a", guard.resolveWriteTenant(null));
+    }
+
     private TenantContext context(String tenantId, Set<String> scopes) {
         return new TenantContext(tenantId, "REST", null, "admin", null,
                 Set.of("API_CLIENT"), scopes, "request");

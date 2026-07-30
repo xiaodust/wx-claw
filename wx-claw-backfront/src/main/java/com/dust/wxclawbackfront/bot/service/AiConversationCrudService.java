@@ -152,18 +152,6 @@ public class AiConversationCrudService {
                 if (attempt == maxRetries - 1) {
                     throw e;
                 }
-                // 唯一约束冲突，重试
-            } catch (Exception e) {
-                if (attempt == maxRetries - 1 || !isDatabaseLockError(e)) {
-                    throw e;
-                }
-                // SQLITE_BUSY: 数据库锁定，指数退避后重试
-                try {
-                    Thread.sleep(50L * (1L << attempt)); // 50ms, 100ms, 200ms
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw e;
-                }
             }
         }
 
@@ -254,15 +242,4 @@ public class AiConversationCrudService {
                 || context.scopes().contains("tenant:admin") || context.scopes().contains("*"));
     }
 
-    private boolean isDatabaseLockError(Exception e) {
-        Throwable cause = e;
-        while (cause != null) {
-            if (cause.getClass().getSimpleName().contains("SQLiteException")
-                    || (cause.getMessage() != null && cause.getMessage().contains("database is locked"))) {
-                return true;
-            }
-            cause = cause.getCause();
-        }
-        return false;
-    }
 }

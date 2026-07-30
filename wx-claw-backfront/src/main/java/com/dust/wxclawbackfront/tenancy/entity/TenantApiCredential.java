@@ -20,7 +20,6 @@ import java.time.LocalDateTime;
 public class TenantApiCredential extends TenantOwnedEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(columnDefinition = "integer")
     private Long id;
 
     @Column(name = "credential_id", nullable = false, unique = true, updatable = false, length = 64)

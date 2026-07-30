@@ -19,7 +19,6 @@ public class UserProfile extends TenantOwnedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(columnDefinition = "integer")
     private Long id;
 
     @Column(nullable = false, length = 128)

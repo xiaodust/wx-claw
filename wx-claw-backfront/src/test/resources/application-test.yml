@@ -3,20 +3,10 @@ spring:
     openai:
       api-key: test-key
       base-url: http://localhost
-  datasource:
-    url: jdbc:sqlite:target/wx-claw-test-v6.db
-    driver-class-name: org.sqlite.JDBC
-    hikari:
-      maximum-pool-size: 1
-      minimum-idle: 1
-      connection-timeout: 30000
   jpa:
     open-in-view: false
     hibernate:
       ddl-auto: validate
-    properties:
-      hibernate:
-        dialect: org.hibernate.community.dialect.SQLiteDialect
   flyway:
     enabled: true
 

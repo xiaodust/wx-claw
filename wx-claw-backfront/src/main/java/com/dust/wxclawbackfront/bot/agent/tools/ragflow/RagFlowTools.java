@@ -85,11 +85,22 @@ public class RagFlowTools implements AiToolProvider {
      * 上传文件到知识库
      */
     @Tool(name = "knowledge_upload",
-          description = "上传文件到知识库。当用户要求上传文件到知识库时使用。参数fileUrl为文件的URL地址，fileName为文件名。支持的文件类型包括：PDF、DOCX、TXT、MD、CSV、XLSX等。")
+          description = "上传公开URL中的文件到知识库。fileUrl必须是完整的http或https地址，不能传文件名或本地路径；微信聊天中用户刚发送的文件由系统直接处理，不要调用本工具。")
     @ToolInvocationLog("knowledge_upload")
     public KnowledgeUploadResult uploadToKnowledge(String fileUrl, String fileName) {
         if (fileUrl == null || fileUrl.isBlank()) {
             return new KnowledgeUploadResult(false, null, "文件URL不能为空");
+        }
+
+        java.net.URI fileUri;
+        try {
+            fileUri = java.net.URI.create(fileUrl.trim());
+        } catch (IllegalArgumentException ex) {
+            return new KnowledgeUploadResult(false, null, "文件URL格式无效，请提供完整的 HTTP/HTTPS 地址");
+        }
+        String scheme = fileUri.getScheme();
+        if (scheme == null || !(scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"))) {
+            return new KnowledgeUploadResult(false, null, "文件URL必须是完整的 HTTP/HTTPS 地址，不能只传文件名");
         }
 
         if (fileName == null || fileName.isBlank()) {
@@ -102,7 +113,7 @@ public class RagFlowTools implements AiToolProvider {
 
         try {
             // 下载文件
-            byte[] fileContent = downloadFile(fileUrl);
+            byte[] fileContent = downloadFile(fileUri);
 
             // 上传到RAGFlow
             RagFlowClient.UploadResult result = ragFlowClient.uploadDocument(fileContent, fileName);
@@ -140,9 +151,7 @@ public class RagFlowTools implements AiToolProvider {
     /**
      * 下载文件
      */
-    private byte[] downloadFile(String fileUrl) throws Exception {
-        java.net.URI uri = java.net.URI.create(fileUrl);
-
+    private byte[] downloadFile(java.net.URI uri) throws Exception {
         java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
                 .uri(uri)
                 .timeout(java.time.Duration.ofSeconds(60))

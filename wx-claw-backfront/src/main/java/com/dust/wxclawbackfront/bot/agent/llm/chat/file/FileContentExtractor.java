@@ -6,7 +6,11 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.apache.poi.xwpf.usermodel.IBodyElement;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
+import org.apache.poi.xwpf.usermodel.XWPFTable;
+import org.apache.poi.xwpf.usermodel.XWPFTableCell;
+import org.apache.poi.xwpf.usermodel.XWPFTableRow;
 import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayInputStream;
@@ -24,6 +28,7 @@ import java.util.Set;
 public class FileContentExtractor {
 
     private static final int MAX_TEXT_LENGTH = 8000; // 提取文本最大长度
+    private static final int MAX_COMPLETE_TEXT_LENGTH = 100_000;
 
     private static final Set<String> TEXT_EXTENSIONS = Set.of(
             ".txt", ".csv", ".md", ".json", ".xml", ".html", ".htm",
@@ -44,6 +49,14 @@ public class FileContentExtractor {
      * @return 提取结果
      */
     public FileExtractResult extract(byte[] fileBytes, String fileName) {
+        return extract(fileBytes, fileName, MAX_TEXT_LENGTH);
+    }
+
+    public FileExtractResult extractComplete(byte[] fileBytes, String fileName) {
+        return extract(fileBytes, fileName, MAX_COMPLETE_TEXT_LENGTH);
+    }
+
+    private FileExtractResult extract(byte[] fileBytes, String fileName, int maxTextLength) {
         if (fileBytes == null || fileBytes.length == 0) {
             return FileExtractResult.failure("文件内容为空");
         }
@@ -77,8 +90,8 @@ public class FileContentExtractor {
             }
 
             // 截断过长内容
-            if (content.length() > MAX_TEXT_LENGTH) {
-                content = content.substring(0, MAX_TEXT_LENGTH) + "\n\n...[内容过长，已截断]";
+            if (content.length() > maxTextLength) {
+                content = content.substring(0, maxTextLength) + "\n\n...[内容过长，已截断]";
             }
 
             return FileExtractResult.success(content, ext);
@@ -111,14 +124,29 @@ public class FileContentExtractor {
         try (InputStream is = new ByteArrayInputStream(bytes);
              XWPFDocument document = new XWPFDocument(is)) {
             StringBuilder sb = new StringBuilder();
-            for (XWPFParagraph para : document.getParagraphs()) {
-                String text = para.getText();
-                if (text != null && !text.isBlank()) {
-                    sb.append(text).append("\n");
+            for (IBodyElement element : document.getBodyElements()) {
+                if (element instanceof XWPFParagraph paragraph) {
+                    appendLine(sb, paragraph.getText());
+                } else if (element instanceof XWPFTable table) {
+                    for (XWPFTableRow row : table.getRows()) {
+                        boolean firstCell = true;
+                        for (XWPFTableCell cell : row.getTableCells()) {
+                            String text = cell.getText();
+                            if (text == null || text.isBlank()) continue;
+                            if (!firstCell) sb.append("\t");
+                            sb.append(text.trim());
+                            firstCell = false;
+                        }
+                        if (!firstCell) sb.append("\n");
+                    }
                 }
             }
             return sb.toString();
         }
+    }
+
+    private void appendLine(StringBuilder builder, String value) {
+        if (value != null && !value.isBlank()) builder.append(value.trim()).append("\n");
     }
 
     private String extractExcel(byte[] bytes) throws Exception {

@@ -150,7 +150,7 @@ public class RagFlowClient {
      * 解析对话响应
      */
     @SuppressWarnings("unchecked")
-    private RagFlowResult parseResponse(String responseText) {
+    RagFlowResult parseResponse(String responseText) {
         try {
             log.debug("RAGFlow 原始响应: {}", responseText);
 
@@ -180,14 +180,14 @@ public class RagFlowClient {
                 Object reference = message != null ? message.get("reference") : null;
 
                 if (content != null && !content.isBlank()) {
-                    return new RagFlowResult(content, reference, null);
+                    return contentResult(content, reference);
                 }
             }
 
             // 尝试直接从响应中提取 content（某些 RAGFlow 版本）
             Object directContent = responseMap.get("content");
             if (directContent instanceof String && !((String) directContent).isBlank()) {
-                return new RagFlowResult((String) directContent, responseMap.get("reference"), null);
+                return contentResult((String) directContent, responseMap.get("reference"));
             }
 
             // 尝试从 data 中提取
@@ -195,7 +195,7 @@ public class RagFlowClient {
             if (data != null) {
                 Object dataContent = data.get("content");
                 if (dataContent instanceof String && !((String) dataContent).isBlank()) {
-                    return new RagFlowResult((String) dataContent, data.get("reference"), null);
+                    return contentResult((String) dataContent, data.get("reference"));
                 }
             }
 
@@ -206,6 +206,21 @@ public class RagFlowClient {
             log.error("解析 RAGFlow 响应失败: {}", ex.getMessage());
             return new RagFlowResult(null, null, "解析响应失败");
         }
+    }
+
+    private RagFlowResult contentResult(String content, Object reference) {
+        String normalized = content.trim().toUpperCase(Locale.ROOT);
+        if (normalized.startsWith("**ERROR**") || normalized.startsWith("ERROR:")) {
+            String error;
+            if (normalized.contains("QUOTA_EXCEEDED") || normalized.contains("INSUFFICIENT_BALANCE")) {
+                error = "RAGFlow 下游模型额度不足，请检查模型供应商余额";
+            } else {
+                error = "RAGFlow 下游模型调用失败";
+            }
+            log.error("RAGFlow 在成功响应中返回业务错误: {}", error);
+            return new RagFlowResult(null, reference, error);
+        }
+        return new RagFlowResult(content, reference, null);
     }
 
     /**

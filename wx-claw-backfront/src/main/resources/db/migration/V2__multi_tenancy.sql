@@ -1,5 +1,5 @@
 CREATE TABLE tenant (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     tenant_id VARCHAR(64) NOT NULL UNIQUE,
     tenant_code VARCHAR(64) NOT NULL UNIQUE,
     tenant_name VARCHAR(128) NOT NULL,
@@ -13,7 +13,7 @@ INSERT INTO tenant (tenant_id, tenant_code, tenant_name, status, created_at, upd
 VALUES ('default', 'default', 'Default Tenant', 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
 CREATE TABLE tenant_bot (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     tenant_id VARCHAR(64) NOT NULL,
     channel VARCHAR(20) NOT NULL,
     bot_id VARCHAR(128) NOT NULL,
@@ -26,7 +26,7 @@ CREATE TABLE tenant_bot (
 CREATE INDEX idx_tenant_bot_tenant_status ON tenant_bot (tenant_id, status);
 
 CREATE TABLE tenant_user (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     tenant_id VARCHAR(64) NOT NULL,
     internal_user_id VARCHAR(128) NOT NULL,
     channel VARCHAR(20) NOT NULL,
@@ -40,7 +40,7 @@ CREATE TABLE tenant_user (
 );
 
 CREATE TABLE tenant_api_credential (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     tenant_id VARCHAR(64) NOT NULL,
     credential_id VARCHAR(64) NOT NULL UNIQUE,
     secret_hash VARCHAR(512) NOT NULL,
@@ -105,7 +105,7 @@ CREATE INDEX idx_ai_message_tenant_conversation ON ai_message (tenant_id, conver
 
 ALTER TABLE reminder_task RENAME TO reminder_task_legacy;
 CREATE TABLE reminder_task (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     tenant_id VARCHAR(64) NOT NULL,
     user_id VARCHAR(128) NOT NULL,
     internal_user_id VARCHAR(128) NOT NULL,
@@ -134,7 +134,7 @@ CREATE INDEX idx_reminder_tenant_user_status ON reminder_task (tenant_id, user_i
 
 ALTER TABLE user_profile RENAME TO user_profile_legacy;
 CREATE TABLE user_profile (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     tenant_id VARCHAR(64) NOT NULL,
     user_id VARCHAR(128) NOT NULL,
     category VARCHAR(50) NOT NULL,
@@ -152,16 +152,16 @@ DROP TABLE user_profile_legacy;
 
 ALTER TABLE user_learning RENAME TO user_learning_legacy;
 CREATE TABLE user_learning (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     tenant_id VARCHAR(64) NOT NULL,
     user_id VARCHAR(128) NOT NULL,
-    trigger VARCHAR(50) NOT NULL,
+    trigger_pattern VARCHAR(50) NOT NULL,
     instruction VARCHAR(500) NOT NULL,
     active BOOLEAN NOT NULL,
     created_at TIMESTAMP
 );
 INSERT INTO user_learning
-SELECT id, 'default', user_id, trigger, instruction, active, created_at
+SELECT id, 'default', user_id, trigger_pattern, instruction, active, created_at
 FROM user_learning_legacy;
 DROP TABLE user_learning_legacy;
 CREATE INDEX idx_user_learning_tenant_user_active ON user_learning (tenant_id, user_id, active);

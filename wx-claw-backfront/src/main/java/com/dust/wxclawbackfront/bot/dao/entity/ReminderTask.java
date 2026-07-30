@@ -20,7 +20,6 @@ public class ReminderTask extends TenantOwnedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(columnDefinition = "integer")
     private Long id;
 
     /**

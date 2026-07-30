@@ -2,6 +2,11 @@
 # 复制此文件为 application.yml 并填入实际配置值
 
 spring:
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
+
   application:
     name: wx-claw-backfront
 
@@ -18,28 +23,29 @@ spring:
     thinking:
       type: disabled
 
-  # 数据库配置（SQLite）
+  # 数据库配置（本地 MySQL）
   datasource:
-    url: jdbc:sqlite:wx-claw-backfront.db?journal_mode=WAL&busy_timeout=5000&synchronous=NORMAL&cache_size=8000
-    driver-class-name: org.sqlite.JDBC
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/wx_claw_bot?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&connectTimeout=30000&socketTimeout=60000&tcpKeepAlive=true}
+    username: ${DB_USERNAME:wxclaw}
+    password: ${DB_PASSWORD:wxclaw-local}
+    driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
-      maximum-pool-size: 1
-      minimum-idle: 1
-      connection-timeout: 30000
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
+      minimum-idle: ${DB_POOL_MIN_IDLE:2}
+      connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:30000}
+      validation-timeout: ${DB_VALIDATION_TIMEOUT_MS:5000}
+      initialization-fail-timeout: ${DB_INITIALIZATION_TIMEOUT_MS:30000}
 
   # JPA 配置
   jpa:
     open-in-view: false
     hibernate:
       ddl-auto: validate
-    properties:
-      hibernate:
-        dialect: org.hibernate.community.dialect.SQLiteDialect
-
   flyway:
     enabled: true
     baseline-on-migrate: true
     baseline-version: 1
+    validate-on-migrate: true
 
   # 邮件服务配置
   mail:

@@ -279,6 +279,16 @@ public class ILinkMessageDispatcher {
     }
 
     private String handleTextMessage(ILinkUserInput userInput, String userId, String sessionId) {
+        String userIntent = userInput.getDisplayText();
+        if (mediaContextManager.isKnowledgeBaseUploadIntent(userIntent)) {
+            MediaContextManager.PendingFileUpload pendingFile = mediaContextManager.takePendingFileUpload(userId);
+            mediaContextManager.takeFileContext(userId);
+            if (pendingFile == null) {
+                return "没有找到可上传的文件，请重新发送文件后再说“上传到知识库”。";
+            }
+            return handleFileUploadDirect(pendingFile.fileName(), pendingFile.fileBytes(), userId);
+        }
+
         // 检查是否有待处理的图片上下文
         String pendingImageDesc = mediaContextManager.takeImageContext(userId);
         if (pendingImageDesc != null && !pendingImageDesc.isBlank()) {
@@ -298,22 +308,10 @@ public class ILinkMessageDispatcher {
         // 检查是否有待处理的文件上下文
         String pendingFileInfo = mediaContextManager.takeFileContext(userId);
         if (pendingFileInfo != null && !pendingFileInfo.isBlank()) {
-            String userIntent = userInput.getDisplayText();
-
-            // 检查用户是否要求上传到知识库
-            if (mediaContextManager.isKnowledgeBaseUploadIntent(userIntent)) {
-                MediaContextManager.PendingFileUpload pendingFile = mediaContextManager.takePendingFileUpload(userId);
-                if (pendingFile != null) {
-                    return handleFileUploadDirect(pendingFile.fileName(), pendingFile.fileBytes(), userId);
-                } else {
-                    return "文件数据已过期，请重新发送文件。";
-                }
-            } else {
-                // 其他意图：组合文件信息 + 用户需求，交给 Agent 处理
-                mediaContextManager.takePendingFileUpload(userId); // 清理
-                String combinedText = pendingFileInfo + "\n\n用户的要求：" + userIntent;
-                return agentResponseProcessor.process(ILinkUserInput.text(combinedText), Collections.emptyList(), userId, sessionId);
-            }
+            // 其他意图：组合文件信息 + 用户需求，交给 Agent 处理
+            mediaContextManager.takePendingFileUpload(userId); // 清理
+            String combinedText = pendingFileInfo + "\n\n用户的要求：" + userIntent;
+            return agentResponseProcessor.process(ILinkUserInput.text(combinedText), Collections.emptyList(), userId, sessionId);
         }
 
         // 普通文本消息，交给 Agent 处理

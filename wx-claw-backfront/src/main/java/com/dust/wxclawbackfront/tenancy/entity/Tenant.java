@@ -18,7 +18,6 @@ import java.time.LocalDateTime;
 public class Tenant {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(columnDefinition = "integer")
     private Long id;
 
     @Column(name = "tenant_id", nullable = false, unique = true, updatable = false, length = 64)

@@ -16,6 +16,7 @@ const router = createRouter({ history:createWebHistory(), routes:[
     { path:'conversations', component:ConversationsView },
     { path:'conversations/:id', component:ConversationDetailView },
   ]},
+  { path:'/:pathMatch(.*)*', redirect:'/overview' },
 ]})
 router.beforeEach(to => {
   const authenticated = Boolean(sessionStorage.getItem(API_KEY_STORAGE))

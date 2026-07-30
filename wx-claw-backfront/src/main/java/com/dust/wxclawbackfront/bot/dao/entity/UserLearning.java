@@ -19,7 +19,6 @@ public class UserLearning extends TenantOwnedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(columnDefinition = "integer")
     private Long id;
 
     @Column(nullable = false, length = 128)
@@ -28,7 +27,7 @@ public class UserLearning extends TenantOwnedEntity {
     /**
      * 触发场景：summary / daily_report / reply / general 等
      */
-    @Column(nullable = false, length = 50)
+    @Column(name = "trigger_pattern", nullable = false, length = 50)
     private String trigger;
 
     /**

@@ -21,7 +21,6 @@ import lombok.EqualsAndHashCode;
 public class TenantUser extends TenantOwnedEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(columnDefinition = "integer")
     private Long id;
 
     @Column(name = "internal_user_id", nullable = false, length = 128)

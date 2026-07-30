@@ -42,7 +42,13 @@ public class MediaContextManager {
         String fileInfo = buildFileInfo(userInput);
         pendingFileContexts.put(userId, fileInfo);
 
-        // 存储文件字节，用于后续上传到知识库
+        storePendingFileUpload(userId, userInput);
+    }
+
+    /**
+     * 单独保留文件字节，供后续知识库上传
+     */
+    public void storePendingFileUpload(String userId, ILinkUserInput userInput) {
         if (userInput.getFileBytes() != null && userInput.getFileBytes().length > 0) {
             pendingFileUploads.put(userId, new PendingFileUpload(
                     userInput.getFileName(), userInput.getFileBytes()));
