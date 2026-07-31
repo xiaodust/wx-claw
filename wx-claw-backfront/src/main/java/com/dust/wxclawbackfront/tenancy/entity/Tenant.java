@@ -12,6 +12,10 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * 租户主数据，是所有租户私有数据的归属根节点。
+ * {@code tenantId} 是业务隔离键，{@code tenantCode} 是面向配置和管理的稳定编码。
+ */
 @Data
 @Entity
 @Table(name = "tenant")
@@ -29,6 +33,7 @@ public class Tenant {
     @Column(name = "tenant_name", nullable = false, length = 128)
     private String tenantName;
 
+    /** ACTIVE 租户才允许通过 API Key 建立访问上下文。 */
     @Column(nullable = false, length = 20)
     private String status = "ACTIVE";
 

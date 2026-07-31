@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -29,7 +30,8 @@ class ILinkMessageReceiptStoreTest {
         assertTrue(store.claim(runtimeKey, message));
         assertFalse(store.claim(runtimeKey, message));
 
-        verify(jdbcTemplate, times(2)).update(anyString(), any(Object[].class));
+        verify(jdbcTemplate, times(2)).update(
+                argThat(sql -> sql.contains("INSERT IGNORE INTO")), any(Object[].class));
     }
 
     @Test

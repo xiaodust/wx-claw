@@ -12,6 +12,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 
+/**
+ * 业务异步线程池配置。
+ *
+ * <p>所有执行器统一包装为 {@link TenantContextExecutorService}，确保消息处理、异步保存、
+ * Prompt 构建及 Bot 运行任务在切换线程后仍携带任务提交者的租户和调用链上下文。</p>
+ */
 @Configuration
 @ConfigurationProperties(prefix = "wxclaw.thread-pool")
 @Data
@@ -78,6 +84,7 @@ public class ThreadPoolConfig {
             executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         }
         executor.initialize();
+        // 禁止直接暴露原生执行器，否则 submit 后会丢失 ThreadLocal 中的租户身份。
         return new TenantContextExecutorService(executor.getThreadPoolExecutor(), tenantContextTaskDecorator);
     }
 }

@@ -3,7 +3,6 @@ package com.dust.wxclawbackfront.admin.api;
 import com.dust.wxclawbackfront.admin.api.dto.AdminDtos;
 import com.dust.wxclawbackfront.admin.service.AdminQueryService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,7 +20,7 @@ public class AdminConversationController {
     private final AdminQueryService queryService;
 
     @GetMapping
-    public Page<AdminDtos.Conversation> conversations(
+    public AdminDtos.PageResult<AdminDtos.Conversation> conversations(
             @RequestParam(required = false) String tenantId,
             @RequestParam(required = false) String botId,
             @RequestParam(required = false) String internalUserId,
@@ -32,8 +31,9 @@ public class AdminConversationController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return queryService.conversations(tenantId, botId, internalUserId, sessionId, keyword,
-                active, startTime, endTime, page, size);
+        return AdminDtos.PageResult.from(queryService.conversations(
+                tenantId, botId, internalUserId, sessionId, keyword,
+                active, startTime, endTime, page, size));
     }
 
     @GetMapping("/{conversationId}")

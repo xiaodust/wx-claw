@@ -22,6 +22,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
 
+/**
+ * 将请求头中的 API Key 认证为 {@link TenantContext}。
+ *
+ * <p>Key 格式为 {@code credentialId.secret}。credentialId 用于定位凭据，secret 仅参与
+ * PBKDF2 校验，绝不写入日志或缓存；短期缓存保存完整 Key 的 SHA-256 指纹、租户和 Scope，
+ * 用于减少高频请求对数据库及 PBKDF2 的压力。</p>
+ */
 @Service
 @RequiredArgsConstructor
 public class TenantApiKeyAuthenticator {
@@ -38,6 +45,7 @@ public class TenantApiKeyAuthenticator {
     private long authenticationCacheTtlSeconds;
 
     public TenantContext authenticate(String apiKey) {
+        // 只按第一个点分隔，允许 secret 本身包含点号。
         int separator = apiKey == null ? -1 : apiKey.indexOf('.');
         if (separator <= 0 || separator == apiKey.length() - 1) {
             return null;
@@ -48,8 +56,10 @@ public class TenantApiKeyAuthenticator {
         Instant now = Instant.now();
         CachedAuthentication cached = authenticationCache.get(credentialId);
         if (isFresh(cached, now)) {
+            // 同一 credentialId 提交不同 secret 时不能复用已有认证结果。
             return cached.fingerprint().equals(fingerprint) ? toContext(credentialId, cached) : null;
         }
+        // compute 保证同一 credentialId 缓存失效时只有一个线程访问数据库并执行 PBKDF2。
         cached = authenticationCache.compute(credentialId, (ignored, current) -> {
             if (isFresh(current, now)) {
                 return current;
@@ -60,6 +70,7 @@ public class TenantApiKeyAuthenticator {
     }
 
     private CachedAuthentication loadAuthentication(String credentialId, String secret, String fingerprint, Instant now) {
+        // 凭据和租户必须同时有效；停用任意一方都会拒绝认证。
         TenantApiCredential credential = credentialRepository.findByCredentialId(credentialId).orElse(null);
         if (credential == null || !"ACTIVE".equals(credential.getStatus())
                 || credential.getExpiresAt() != null && credential.getExpiresAt().isBefore(LocalDateTime.now())
@@ -71,6 +82,7 @@ public class TenantApiKeyAuthenticator {
             return null;
         }
         if (shouldUpdateLastUsed(credentialId)) {
+            // 限频更新 last_used_at，避免每个 API 请求都产生数据库写入。
             credential.setLastUsedAt(LocalDateTime.now());
             credentialRepository.save(credential);
         }
@@ -82,6 +94,7 @@ public class TenantApiKeyAuthenticator {
     }
 
     private TenantContext toContext(String credentialId, CachedAuthentication cached) {
+        // 每次请求生成独立 requestId，缓存只复用认证结论，不复用请求级上下文对象。
         return new TenantContext(cached.tenantId(), "REST", null, "api:" + credentialId, null,
                 Set.of("API_CLIENT"), cached.scopes(), UUID.randomUUID().toString());
     }

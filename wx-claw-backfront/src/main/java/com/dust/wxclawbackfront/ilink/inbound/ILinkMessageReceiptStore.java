@@ -16,7 +16,7 @@ public class ILinkMessageReceiptStore {
             return true;
         }
         return jdbcTemplate.update("""
-                        INSERT OR IGNORE INTO ilink_message_receipt
+                        INSERT IGNORE INTO ilink_message_receipt
                             (tenant_id, bot_id, message_id, from_user_id, create_time_ms, received_at)
                         VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                         """,

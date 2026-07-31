@@ -13,6 +13,10 @@ import lombok.EqualsAndHashCode;
 
 import java.time.LocalDateTime;
 
+/**
+ * 租户调用 REST API 使用的凭据。
+ * 原始 Key 仅在创建时展示，数据库只持久化 PBKDF2 哈希和授权 Scope。
+ */
 @Data
 @EqualsAndHashCode(callSuper = true)
 @Entity
@@ -22,9 +26,11 @@ public class TenantApiCredential extends TenantOwnedEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** API Key 中点号前的公开定位部分。 */
     @Column(name = "credential_id", nullable = false, unique = true, updatable = false, length = 64)
     private String credentialId;
 
+    /** API Key 中 secret 部分的 PBKDF2 编码值，不可反向还原。 */
     @Column(name = "secret_hash", nullable = false, length = 512)
     private String secretHash;
 

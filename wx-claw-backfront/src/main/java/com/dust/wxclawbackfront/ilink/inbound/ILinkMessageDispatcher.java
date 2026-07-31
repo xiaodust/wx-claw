@@ -281,12 +281,17 @@ public class ILinkMessageDispatcher {
     private String handleTextMessage(ILinkUserInput userInput, String userId, String sessionId) {
         String userIntent = userInput.getDisplayText();
         if (mediaContextManager.isKnowledgeBaseUploadIntent(userIntent)) {
-            MediaContextManager.PendingFileUpload pendingFile = mediaContextManager.takePendingFileUpload(userId);
-            mediaContextManager.takeFileContext(userId);
+            MediaContextManager.PendingFileUpload pendingFile = mediaContextManager.getPendingFileUpload(userId);
             if (pendingFile == null) {
                 return "没有找到可上传的文件，请重新发送文件后再说“上传到知识库”。";
             }
-            return handleFileUploadDirect(pendingFile.fileName(), pendingFile.fileBytes(), userId);
+            FileUploadOutcome outcome = handleFileUploadDirect(
+                    pendingFile.fileName(), pendingFile.fileBytes(), userId);
+            if (outcome.success()) {
+                mediaContextManager.clearPendingFileUpload(userId);
+                mediaContextManager.takeFileContext(userId);
+            }
+            return outcome.message();
         }
 
         // 检查是否有待处理的图片上下文
@@ -309,7 +314,6 @@ public class ILinkMessageDispatcher {
         String pendingFileInfo = mediaContextManager.takeFileContext(userId);
         if (pendingFileInfo != null && !pendingFileInfo.isBlank()) {
             // 其他意图：组合文件信息 + 用户需求，交给 Agent 处理
-            mediaContextManager.takePendingFileUpload(userId); // 清理
             String combinedText = pendingFileInfo + "\n\n用户的要求：" + userIntent;
             return agentResponseProcessor.process(ILinkUserInput.text(combinedText), Collections.emptyList(), userId, sessionId);
         }
@@ -322,19 +326,19 @@ public class ILinkMessageDispatcher {
     /**
      * 直接上传文件到知识库
      */
-    private String handleFileUploadDirect(String fileName, byte[] fileBytes, String userId) {
+    private FileUploadOutcome handleFileUploadDirect(String fileName, byte[] fileBytes, String userId) {
         try {
             // 文件验证
             FileUploadValidator.ValidationResult validation = fileUploadValidator.validate(fileName, fileBytes);
             if (!validation.isValid()) {
                 log.warn("文件验证失败: fileName={}, userId={}, error={}", fileName, userId, validation.getError());
-                return validation.getError();
+                return new FileUploadOutcome(false, validation.getError());
             }
 
             RagFlowClient ragFlowClient = ragFlowClientProvider.getIfAvailable();
             if (ragFlowClient == null) {
                 log.warn("RagFlowClient 不可用，无法上传文件到知识库");
-                return "知识库服务暂不可用，请稍后再试。";
+                return new FileUploadOutcome(false, "知识库服务暂不可用，请稍后再试。");
             }
             if (fileName == null || fileName.isBlank()) {
                 fileName = "unknown_file";
@@ -345,15 +349,18 @@ public class ILinkMessageDispatcher {
 
             if (result.success()) {
                 log.info("文件上传成功: fileName={}, documentId={}, userId={}", fileName, result.documentId(), userId);
-                return "文件「" + fileName + "」已成功上传到知识库。";
+                return new FileUploadOutcome(true, "文件「" + fileName + "」已成功上传到知识库。");
             } else {
                 log.error("文件上传失败: fileName={}, error={}, userId={}", fileName, result.message(), userId);
-                return "上传到知识库失败：" + result.message();
+                return new FileUploadOutcome(false, "上传到知识库失败：" + result.message());
             }
         } catch (Exception ex) {
             log.error("上传文件到知识库失败: userId={}, error={}", userId, ex.getMessage(), ex);
-            return "上传失败：" + ex.getMessage();
+            return new FileUploadOutcome(false, "上传失败：" + ex.getMessage());
         }
+    }
+
+    private record FileUploadOutcome(boolean success, String message) {
     }
 
     /**

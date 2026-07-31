@@ -18,6 +18,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * 在应用启动早期准备默认租户、配置文件中的 iLink Bot 和首个 API 凭据。
+ *
+ * <p>初始化过程是幂等的：数据库中已存在的租户、Bot 或凭据不会重复创建。
+ * 创建租户私有实体前会显式建立 SYSTEM 上下文，以复用正常的实体租户校验机制。</p>
+ */
 @Component
 @RequiredArgsConstructor
 @Order(0)
@@ -42,6 +48,7 @@ public class TenantBootstrapInitializer implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
+        // 租户是上下文的根，必须先创建，再处理其下属 Bot 和凭据。
         Tenant tenant = tenantRepository.findByTenantId(defaultTenantId).orElseGet(() -> {
             Tenant created = new Tenant();
             created.setTenantId(defaultTenantId);
@@ -50,6 +57,7 @@ public class TenantBootstrapInitializer implements ApplicationRunner {
             created.setStatus("ACTIVE");
             return tenantRepository.save(created);
         });
+        // 后续实体继承 TenantOwnedEntity，需要有效上下文才能持久化。
         TenantContextHolder.set(new TenantContext(tenant.getTenantId(), "SYSTEM", null, "bootstrap", null,
                 Collections.singleton("TENANT_ADMIN"), Collections.singleton("*"), "bootstrap"));
         try {
@@ -73,6 +81,7 @@ public class TenantBootstrapInitializer implements ApplicationRunner {
                 credentialRepository.save(credential);
             }
         } finally {
+            // ApplicationRunner 运行在线程池外也必须清理，避免污染后续启动逻辑。
             TenantContextHolder.clear();
         }
     }

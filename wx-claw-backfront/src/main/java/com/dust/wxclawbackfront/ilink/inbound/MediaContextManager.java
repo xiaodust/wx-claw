@@ -84,6 +84,17 @@ public class MediaContextManager {
     }
 
     /**
+     * 获取但不移除待上传文件，上传失败时允许用户重试
+     */
+    public PendingFileUpload getPendingFileUpload(String userId) {
+        return pendingFileUploads.get(userId);
+    }
+
+    public void clearPendingFileUpload(String userId) {
+        pendingFileUploads.remove(userId);
+    }
+
+    /**
      * 构建文件信息文本，用于存储到 pending 上下文
      */
     private String buildFileInfo(ILinkUserInput userInput) {
@@ -106,13 +117,21 @@ public class MediaContextManager {
     public boolean isKnowledgeBaseUploadIntent(String text) {
         if (text == null) return false;
         String lower = text.trim().toLowerCase();
-        return lower.contains("上传") && lower.contains("知识库")
-                || lower.contains("导入") && lower.contains("知识库")
-                || lower.contains("加入") && lower.contains("知识库")
-                || lower.contains("存入") && lower.contains("知识库")
-                || lower.equals("上传到知识库")
-                || lower.equals("上传知识库")
-                || lower.equals("入库");
+        if (lower.contains("不要") || lower.contains("不用") || lower.contains("取消")) {
+            return false;
+        }
+        boolean hasDestination = lower.contains("知识库")
+                || lower.contains("数据库")
+                || lower.contains("资料库")
+                || lower.contains("文档库");
+        boolean hasUploadAction = lower.contains("上传")
+                || lower.contains("导入")
+                || lower.contains("加入")
+                || lower.contains("保存")
+                || lower.contains("存")
+                || lower.contains("放到")
+                || lower.contains("放入");
+        return hasDestination && hasUploadAction || lower.equals("入库");
     }
 
     /**

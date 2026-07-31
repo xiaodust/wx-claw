@@ -1,10 +1,21 @@
 package com.dust.wxclawbackfront.admin.api.dto;
 
+import org.springframework.data.domain.Page;
+
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public final class AdminDtos {
     private AdminDtos() {
+    }
+
+    public record PageResult<T>(List<T> content, long totalElements, int totalPages,
+                                int number, int size) {
+        public static <T> PageResult<T> from(Page<T> page) {
+            return new PageResult<>(page.getContent(), page.getTotalElements(), page.getTotalPages(),
+                    page.getNumber(), page.getSize());
+        }
     }
 
     public record Overview(long botCount, long onlineBotCount, long waitingQrBotCount,

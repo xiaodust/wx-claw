@@ -11,6 +11,12 @@ import jakarta.persistence.UniqueConstraint;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+/**
+ * 外部渠道用户与租户内部用户的映射。
+ *
+ * <p>同一个微信用户在不同 Bot 下可拥有不同渠道身份，但在租户内统一映射到
+ * internalUserId，供会话、记忆和权限数据关联。</p>
+ */
 @Data
 @EqualsAndHashCode(callSuper = true)
 @Entity
@@ -41,6 +47,7 @@ public class TenantUser extends TenantOwnedEntity {
     @Column(nullable = false, length = 20)
     private String status = "ACTIVE";
 
+    /** 逗号或空白分隔的业务角色集合。 */
     @Column(columnDefinition = "TEXT")
     private String roles;
 }

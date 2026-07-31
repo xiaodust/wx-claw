@@ -11,6 +11,10 @@ import jakarta.persistence.UniqueConstraint;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+/**
+ * 租户下的渠道 Bot 配置。
+ * channel 与 botId 全局唯一，用于把 iLink 运行实例准确映射回租户。
+ */
 @Data
 @EqualsAndHashCode(callSuper = true)
 @Entity
@@ -32,9 +36,11 @@ public class TenantBot extends TenantOwnedEntity {
     @Column(nullable = false, length = 20)
     private String status = "ACTIVE";
 
+    /** 外部凭据的引用标识；实体本身不保存渠道明文密钥。 */
     @Column(name = "credential_ref", length = 255)
     private String credentialRef;
 
+    /** 当前 Bot 独立的 iLink 会话恢复文件路径。 */
     @Column(name = "resume_context_path", length = 512)
     private String resumeContextPath;
 }
