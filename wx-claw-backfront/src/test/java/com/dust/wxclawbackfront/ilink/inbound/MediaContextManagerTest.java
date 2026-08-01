@@ -45,4 +45,20 @@ class MediaContextManagerTest {
         assertThat(upload.fileName()).isEqualTo("resume.pdf");
         assertThat(upload.fileBytes()).containsExactly(content);
     }
+
+    @Test
+    void keepsMediaContextUntilExplicitlyCleared() {
+        MediaContextManager manager = new MediaContextManager();
+        manager.storeImageContext("user-a", "图片描述");
+        manager.storeVideoContext("user-a", "视频描述");
+
+        assertThat(manager.getImageContext("user-a")).isEqualTo("图片描述");
+        assertThat(manager.getImageContext("user-a")).isEqualTo("图片描述");
+        assertThat(manager.getVideoContext("user-a")).isEqualTo("视频描述");
+
+        manager.clearImageContext("user-a");
+        manager.clearVideoContext("user-a");
+        assertThat(manager.getImageContext("user-a")).isNull();
+        assertThat(manager.getVideoContext("user-a")).isNull();
+    }
 }

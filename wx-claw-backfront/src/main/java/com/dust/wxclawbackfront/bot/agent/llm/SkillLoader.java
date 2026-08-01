@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.core.io.support.ResourcePatternResolver;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
@@ -22,8 +23,8 @@ public class SkillLoader {
 
     private final String skillSystemPrompt;
 
-    public SkillLoader() {
-        this.skillSystemPrompt = loadAllSkills();
+    public SkillLoader(@Value("${wxclaw.career.enabled:false}") boolean careerEnabled) {
+        this.skillSystemPrompt = loadAllSkills(careerEnabled);
     }
 
     /**
@@ -33,7 +34,7 @@ public class SkillLoader {
         return skillSystemPrompt;
     }
 
-    private String loadAllSkills() {
+    private String loadAllSkills(boolean careerEnabled) {
         try {
             ResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
             Resource[] resources = resolver.getResources("classpath:ai/skills/**/*.md");
@@ -45,6 +46,9 @@ public class SkillLoader {
 
             List<String> skillContents = new ArrayList<>();
             for (Resource resource : resources) {
+                if (!careerEnabled && resource.getDescription().contains("career-assistant")) {
+                    continue;
+                }
                 try {
                     String content = readResource(resource);
                     if (content != null && !content.isBlank()) {

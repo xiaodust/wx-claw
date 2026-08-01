@@ -62,6 +62,14 @@ public class MediaContextManager {
         return pendingImageContexts.remove(userId);
     }
 
+    public String getImageContext(String userId) {
+        return pendingImageContexts.get(userId);
+    }
+
+    public void clearImageContext(String userId) {
+        pendingImageContexts.remove(userId);
+    }
+
     /**
      * 获取并移除视频上下文
      */
@@ -69,11 +77,27 @@ public class MediaContextManager {
         return pendingVideoContexts.remove(userId);
     }
 
+    public String getVideoContext(String userId) {
+        return pendingVideoContexts.get(userId);
+    }
+
+    public void clearVideoContext(String userId) {
+        pendingVideoContexts.remove(userId);
+    }
+
     /**
      * 获取并移除文件上下文
      */
     public String takeFileContext(String userId) {
         return pendingFileContexts.remove(userId);
+    }
+
+    public String getFileContext(String userId) {
+        return pendingFileContexts.get(userId);
+    }
+
+    public void clearFileContext(String userId) {
+        pendingFileContexts.remove(userId);
     }
 
     /**

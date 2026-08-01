@@ -9,4 +9,7 @@ import java.util.List;
  */
 public interface ChatHandler {
     String chat(String userMessage, List<AiMessage> historyMessages);
+
+    String chatWithDocument(String instruction, String fileName, String documentContent,
+                            List<AiMessage> historyMessages);
 }

@@ -24,7 +24,7 @@ public class WebSearchTools implements AiToolProvider {
 
     private final BochaWebSearchHandler searchHandler;
 
-    @Tool(name = "web_search", description = "联网搜索全网网页信息。适合查询新闻、时效性信息、百科和公开网页资料。参数 query 为搜索词；freshness 可选 noLimit、oneDay、oneWeek、oneMonth、oneYear；count 建议 1 到 10。")
+    @Tool(name = "web_search", description = "联网搜索全网网页信息。适合查询新闻、时效性信息、百科和公开网页资料；不用于招聘岗位、在招职位或简历推荐，这些场景必须使用 search_jobs 或 recommend_jobs_by_resume。参数 query 为搜索词；freshness 可选 noLimit、oneDay、oneWeek、oneMonth、oneYear；count 建议 1 到 10。")
     @ToolInvocationLog("web_search")
     public WebSearchToolResult search(String query, String freshness, Integer count) {
         BochaWebSearchResult result = searchHandler.search(query, freshness, count);

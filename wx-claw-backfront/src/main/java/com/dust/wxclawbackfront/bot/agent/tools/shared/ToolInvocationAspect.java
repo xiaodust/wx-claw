@@ -22,11 +22,13 @@ import java.util.stream.Collectors;
 public class ToolInvocationAspect {
 
     private final AiToolInvocationStore invocationStore;
+    private final AgentToolLoopGuard loopGuard;
 
     @Around("@annotation(toolInvocationLog)")
     public Object logInvocation(ProceedingJoinPoint joinPoint, ToolInvocationLog toolInvocationLog) throws Throwable {
         String toolName = toolInvocationLog.value();
         String args = formatArgs(joinPoint);
+        loopGuard.check(toolName, args);
 
         log.info("AI调用 {}: {}", toolName, truncate(args, 200));
 

@@ -6,6 +6,7 @@ import com.dust.wxclawbackfront.bot.dao.entity.AiMessage;
 import com.dust.wxclawbackfront.bot.agent.tools.memory.UserMemoryService;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolInvocationStore;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.UserContextHolder;
+import com.dust.wxclawbackfront.bot.agent.tools.shared.AgentToolLoopGuard;
 import com.dust.wxclawbackfront.observability.llm.service.LlmInvocationRecorder;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -41,6 +42,7 @@ public class UniversalChatHandler implements ChatHandler {
     private final ExecutorService promptExecutor;
     private final LlmInvocationRecorder invocationRecorder;
     private final ObjectMapper objectMapper;
+    private final AgentToolLoopGuard loopGuard;
 
     @Value("${spring.ai.openai.chat.model:}")
     private String model;
@@ -60,6 +62,15 @@ public class UniversalChatHandler implements ChatHandler {
     @Value("${wxclaw.ai.context.max-message-chars:800}")
     private int maxMessageChars;
 
+    @Value("${wxclaw.ai.chat.max-tool-calls:8}")
+    private int maxToolCalls;
+
+    @Value("${wxclaw.ai.chat.max-repeated-tool-calls:2}")
+    private int maxRepeatedToolCalls;
+
+    @Value("${wxclaw.ai.chat.hard-timeout:PT60S}")
+    private Duration hardTimeout;
+
     public UniversalChatHandler(ChatClient.Builder chatClientBuilder,
                                 AiToolInvocationStore toolInvocationStore,
                                 ChatRequestBuilder requestBuilder,
@@ -69,6 +80,7 @@ public class UniversalChatHandler implements ChatHandler {
                                 @Qualifier("promptExecutor") ExecutorService promptExecutor,
                                 LlmInvocationRecorder invocationRecorder,
                                 ObjectMapper objectMapper,
+                                AgentToolLoopGuard loopGuard,
                                 @Value("${spring.ai.openai.chat.model:}") String model,
                                 @Value("${wxclaw.ai.thinking.type:disabled}") String thinkingType,
                                 @Value("${wxclaw.ai.chat.max-tokens:768}") int maxTokens,
@@ -84,6 +96,7 @@ public class UniversalChatHandler implements ChatHandler {
         this.promptExecutor = promptExecutor;
         this.invocationRecorder = invocationRecorder;
         this.objectMapper = objectMapper;
+        this.loopGuard = loopGuard;
         this.model = model;
         this.thinkingType = thinkingType;
         this.maxTokens = maxTokens;
@@ -96,6 +109,24 @@ public class UniversalChatHandler implements ChatHandler {
     public String chat(String userMessage, List<AiMessage> historyMessages) {
         // 1. 构建请求文本
         String requestText = requestBuilder.buildRequestText(userMessage, historyMessages, maxContextChars, maxMessageChars);
+
+        return chatRequest(requestText);
+    }
+
+    @Override
+    public String chatWithDocument(String instruction, String fileName, String documentContent,
+                                   List<AiMessage> historyMessages) {
+        int instructionBudget = Math.min(2000, Math.max(500, maxContextChars / 3));
+        String requestText = requestBuilder.buildRequestText(
+                instruction, historyMessages, instructionBudget, maxMessageChars);
+        String header = "\n\n【原始文件：" + fileName + "】\n";
+        int remaining = Math.max(0, maxContextChars - requestText.length() - header.length());
+        String content = documentContent == null ? "" : documentContent;
+        if (content.length() > remaining) content = content.substring(0, remaining) + "\n...[文件内容已截断]";
+        return chatRequest(requestText + header + content);
+    }
+
+    private String chatRequest(String requestText) {
 
         // 2. 重置工具调用记录
         if (toolInvocationStore != null) {
@@ -156,8 +187,10 @@ public class UniversalChatHandler implements ChatHandler {
         long start = System.currentTimeMillis();
         LlmInvocationRecorder.InvocationHandle handle = invocationRecorder.start(
                 "CHAT", "OPENAI_COMPATIBLE", model, requestPayload(requestText, systemPrompt));
+        loopGuard.begin(maxToolCalls, maxRepeatedToolCalls, hardTimeout);
         try {
             ChatResponse response = finalSpec.call().chatResponse();
+            loopGuard.verifyWithinDeadline();
             String content = response == null || response.getResult() == null
                     ? null : response.getResult().getOutput().getText();
             List<AiToolInvocationStore.Invocation> toolInvocations = drainToolInvocations();
@@ -173,6 +206,8 @@ public class UniversalChatHandler implements ChatHandler {
             drainToolInvocations();
             invocationRecorder.failure(handle, ex);
             throw ex;
+        } finally {
+            loopGuard.clear();
         }
     }
 

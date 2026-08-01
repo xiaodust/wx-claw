@@ -1,5 +1,8 @@
 spring:
   ai:
+    mcp:
+      client:
+        enabled: false
     openai:
       api-key: test-key
       base-url: http://localhost
@@ -11,6 +14,9 @@ spring:
     enabled: true
 
 wxclaw:
+  career:
+    enabled: true
+    api-key: test-job-helper-key
   api:
     auth-enabled: true
     bootstrap-key: test-secret

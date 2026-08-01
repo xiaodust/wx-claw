@@ -17,4 +17,9 @@ public interface AiToolProvider {
     default int getOrder() {
         return 100;
     }
+
+    /** Whether this provider is exposed to the conversational model. */
+    default boolean isAvailableToChat() {
+        return true;
+    }
 }

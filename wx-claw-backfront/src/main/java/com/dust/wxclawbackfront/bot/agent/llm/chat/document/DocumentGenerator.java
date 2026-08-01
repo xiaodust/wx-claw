@@ -1,6 +1,7 @@
 package com.dust.wxclawbackfront.bot.agent.llm.chat.document;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -15,6 +16,12 @@ import java.util.regex.Pattern;
 @Slf4j
 @Component
 public class DocumentGenerator {
+
+    private final int configuredTextThreshold;
+
+    public DocumentGenerator(@Value("${wxclaw.ai.document.threshold:2000}") int textThreshold) {
+        this.configuredTextThreshold = Math.max(1, textThreshold);
+    }
 
     private static final int TEXT_THRESHOLD = 500; // 超过500字生成文档
 
@@ -38,7 +45,7 @@ public class DocumentGenerator {
      * 检查是否需要生成文档
      */
     public boolean shouldGenerateDocument(String text) {
-        return text != null && text.length() > TEXT_THRESHOLD;
+        return text != null && text.length() > configuredTextThreshold;
     }
 
     /**

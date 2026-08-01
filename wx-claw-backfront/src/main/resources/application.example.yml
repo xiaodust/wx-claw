@@ -12,6 +12,21 @@ spring:
 
   # AI 模型配置
   ai:
+    mcp:
+      client:
+        enabled: ${JOB_HELPER_MCP_ENABLED:true}
+        initialized: false
+        name: wx-claw
+        version: 1.0.0
+        type: SYNC
+        request-timeout: ${JOB_HELPER_MCP_TIMEOUT:260s}
+        toolcallback:
+          enabled: false
+        streamable-http:
+          connections:
+            job-helper:
+              url: ${JOB_HELPER_BASE_URL:http://127.0.0.1:8081}
+              endpoint: /mcp
     openai:
       api-key: ${AI_API_KEY:your-api-key-here}
       base-url: ${AI_BASE_URL:https://ark.cn-beijing.volces.com/api/v3}
@@ -60,6 +75,20 @@ spring:
       mail.smtp.timeout: 5000
 
 wxclaw:
+  # 独立职业服务（岗位搜索、简历评分、个性化推荐）
+  career:
+    enabled: ${JOB_HELPER_ENABLED:false}
+    api-key: ${JOB_HELPER_API_KEY:}
+    connect-timeout: 3s
+    resume-context-ttl: 365d
+    resume-context-cleanup-ms: 60000
+    max-resume-size: 10MB
+    max-results-per-message: 10
+    task:
+      core-size: 2
+      max-size: 4
+      queue-capacity: 20
+
   # API 安全配置
   api:
     auth-enabled: ${API_AUTH_ENABLED:true}
@@ -136,10 +165,11 @@ wxclaw:
 
     # 聊天配置
     chat:
-      max-rounds: 5
       max-tokens: 768
       timeout: PT25S
       hard-timeout: PT60S
+      max-tool-calls: 8
+      max-repeated-tool-calls: 2
     context:
       max-chars: 7000
       max-message-chars: 800
@@ -147,7 +177,7 @@ wxclaw:
     # 文档发送配置
     document:
       enabled: true
-      threshold: 1000
+      threshold: 2000
 
   # RAGFlow 知识库配置
   ragflow:
@@ -168,6 +198,10 @@ wxclaw:
   # 文件上传配置
   upload:
     max-file-size-mb: 50
+
+  knowledge:
+    # Original uploads retained for exact file retrieval, separate from RAG chunks.
+    file-storage-dir: ${KNOWLEDGE_FILE_STORAGE_DIR:.uploads/knowledge-files}
 
   # 邮件功能配置
   mail:

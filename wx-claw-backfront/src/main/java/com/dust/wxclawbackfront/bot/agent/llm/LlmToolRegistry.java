@@ -23,12 +23,13 @@ public class LlmToolRegistry {
      */
     public LlmToolRegistry(List<AiToolProvider> toolProviders) {
         this.toolProviders = toolProviders.stream()
+                .filter(AiToolProvider::isAvailableToChat)
                 .sorted(Comparator.comparingInt(AiToolProvider::getOrder))
                 .collect(Collectors.toList());
         
         log.info("已注册 {} 个工具提供者: {}", 
-                toolProviders.size(),
-                toolProviders.stream()
+                this.toolProviders.size(),
+                this.toolProviders.stream()
                         .map(p -> p.getClass().getSimpleName() + "(order=" + p.getOrder() + ")")
                         .collect(Collectors.joining(", ")));
     }

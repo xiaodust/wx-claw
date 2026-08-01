@@ -34,6 +34,16 @@ public class AgentResponseProcessor {
      */
     public String process(ILinkUserInput userInput, List<AiMessage> historyMessages,
                          String userId, String sessionId) {
+        return process(userInput, historyMessages, userId, sessionId, false);
+    }
+
+    public String processImmediateChat(ILinkUserInput userInput, List<AiMessage> historyMessages,
+                                       String userId, String sessionId) {
+        return process(userInput, historyMessages, userId, sessionId, true);
+    }
+
+    private String process(ILinkUserInput userInput, List<AiMessage> historyMessages,
+                           String userId, String sessionId, boolean immediateChat) {
         log.info("开始 Agent 处理: userId={}, sessionId={}", userId, sessionId);
 
         // 构建 Agent 上下文
@@ -47,7 +57,9 @@ public class AgentResponseProcessor {
                 .build();
 
         // 调用 Agent 编排器
-        AgentResult result = agentOrchestrator.orchestrate(userInput.getPromptText(), context);
+        AgentResult result = immediateChat
+                ? agentOrchestrator.orchestrateChat(context)
+                : agentOrchestrator.orchestrate(userInput.getPromptText(), context);
 
         // 处理 Agent 结果
         if (!result.isSuccess()) {
@@ -79,8 +91,7 @@ public class AgentResponseProcessor {
         } else if (mediaType != null && mediaType.startsWith("video/")) {
             return handleVideoResponse(userId, result);
         }
-
-        return result.getReplyText();
+        return handleFileResponse(userId, result);
     }
 
     private String handleImageResponse(String userId, AgentResult result) {
@@ -119,6 +130,17 @@ public class AgentResponseProcessor {
                 log.warn("发送视频文件也失败，降级为文本回复: {}", sendFileEx.getMessage());
                 return result.getReplyText();
             }
+        }
+    }
+
+    private String handleFileResponse(String userId, AgentResult result) {
+        try {
+            messageSender.sendFile(userId, result.getMediaBytes(), result.getMediaFileName(), result.getReplyText());
+            log.info("Agent 文件已发送: userId={}, mediaType={}", userId, result.getMediaType());
+            return null;
+        } catch (Exception ex) {
+            log.warn("发送文件失败，降级为文本回复: {}", ex.getMessage());
+            return result.getReplyText();
         }
     }
 }

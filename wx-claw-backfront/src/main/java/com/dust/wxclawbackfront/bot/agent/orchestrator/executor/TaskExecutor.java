@@ -34,6 +34,12 @@ public class TaskExecutor {
         Map<Integer, TaskResult> completedSteps = new HashMap<>();
 
         for (TaskStep step : plan.getSteps()) {
+            TaskResult blocked = dependencyFailure(step, completedSteps);
+            if (blocked != null) {
+                results.add(blocked);
+                completedSteps.put(step.getStepNumber(), blocked);
+                continue;
+            }
             // 注入依赖步骤的结果
             injectDependencyResult(step, completedSteps);
 
@@ -51,6 +57,18 @@ public class TaskExecutor {
         return results;
     }
 
+    private TaskResult dependencyFailure(TaskStep step, Map<Integer, TaskResult> completedSteps) {
+        if (step.getDependsOn() == null) return null;
+        TaskResult dependency = completedSteps.get(step.getDependsOn());
+        if (dependency == null) {
+            return TaskResult.failure("依赖步骤 " + step.getDependsOn() + " 未执行", 0);
+        }
+        if (!dependency.isSuccess()) {
+            return TaskResult.failure("依赖步骤 " + step.getDependsOn() + " 执行失败，已跳过", 0);
+        }
+        return null;
+    }
+
     /**
      * 注入依赖步骤的结果
      */
@@ -65,9 +83,7 @@ public class TaskExecutor {
             return;
         }
 
-        if (step.getParams() == null) {
-            step.setParams(new HashMap<>());
-        }
+        step.setParams(step.getParams() == null ? new HashMap<>() : new HashMap<>(step.getParams()));
 
         // 将前一步的文本结果作为当前步骤的输入
         if (dependencyResult.getTextResult() != null && !dependencyResult.getTextResult().isBlank()) {
@@ -118,6 +134,10 @@ public class TaskExecutor {
             }
         }
 
+        if (errors.size() == results.size()) {
+            return TaskResult.failure(String.join("; ", errors), totalExecutionTime(results));
+        }
+
         // 合并文本结果（只取成功步骤的文本）
         StringBuilder textResult = new StringBuilder();
         long totalTime = 0;
@@ -140,9 +160,10 @@ public class TaskExecutor {
             }
         }
 
+        String errorSuffix = errors.isEmpty() ? "" : "\n[部分步骤失败: " + String.join("; ", errors) + "]";
         if (lastMediaResult != null) {
             return TaskResult.successWithMedia(
-                    textResult.toString(),
+                    textResult + errorSuffix,
                     lastMediaResult.getMediaBytes(),
                     lastMediaResult.getMediaType(),
                     lastMediaResult.getMediaFileName(),
@@ -151,11 +172,13 @@ public class TaskExecutor {
 
         // 如果有失败步骤，在文本结果中追加错误信息
         String finalText = textResult.toString();
-        if (!errors.isEmpty()) {
-            finalText += "\n[部分步骤失败: " + String.join("; ", errors) + "]";
-        }
+        finalText += errorSuffix;
 
         return TaskResult.success(finalText, totalTime);
+    }
+
+    private long totalExecutionTime(List<TaskResult> results) {
+        return results.stream().mapToLong(TaskResult::getExecutionTimeMs).sum();
     }
 
     /**

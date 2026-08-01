@@ -14,6 +14,8 @@ import com.dust.wxclawbackfront.ilink.ILinkUserInputExtractor;
 import com.dust.wxclawbackfront.ilink.outbound.ILinkMessageSender;
 import com.dust.wxclawbackfront.ilink.runtime.ILinkRuntimeManager;
 import com.dust.wxclawbackfront.ilink.runtime.BotRuntimeKey;
+import com.dust.wxclawbackfront.bot.agent.career.context.CareerResumeContextStore;
+import com.dust.wxclawbackfront.bot.knowledge.KnowledgeFileStore;
 import com.dust.wxclawbackfront.observability.llm.InvocationTraceContext;
 import com.dust.wxclawbackfront.observability.llm.InvocationTraceContextHolder;
 import com.github.wechat.ilink.sdk.ILinkClient;
@@ -26,7 +28,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -65,6 +66,8 @@ public class ILinkMessageDispatcher {
     private final ErrorHandler errorHandler;
     private final FileUploadValidator fileUploadValidator;
     private final ILinkMessageReceiptStore messageReceiptStore;
+    private final CareerResumeContextStore careerResumeContextStore;
+    private final KnowledgeFileStore knowledgeFileStore;
 
     @Value("${wxclaw.ai.context.max-history-messages:12}")
     private int maxHistoryMessages;
@@ -203,7 +206,7 @@ public class ILinkMessageDispatcher {
         ScheduledFuture<?> waitNoticeFuture = waitNoticeService.schedule(userId);
 
         try {
-            String reply = processUserInput(userInput, userId, sessionId);
+            String reply = processUserInput(userInput, userId, sessionId, historyMessages);
 
             // 发送回复
             documentReplyHandler.sendReply(userId, reply, userInput.getDisplayText());
@@ -221,7 +224,8 @@ public class ILinkMessageDispatcher {
     /**
      * 处理用户输入，返回回复文本
      */
-    private String processUserInput(ILinkUserInput userInput, String userId, String sessionId) {
+    private String processUserInput(ILinkUserInput userInput, String userId, String sessionId,
+                                    List<AiMessage> historyMessages) {
         String messageType = userInput.getMessageItemType();
 
         // 处理图片消息
@@ -240,7 +244,7 @@ public class ILinkMessageDispatcher {
         }
 
         // 处理文本消息（可能包含待处理的媒体上下文）
-        return handleTextMessage(userInput, userId, sessionId);
+        return handleTextMessage(userInput, userId, sessionId, historyMessages);
     }
 
     private String handleImageMessage(ILinkUserInput userInput, String userId, String sessionId) {
@@ -275,10 +279,20 @@ public class ILinkMessageDispatcher {
     private String handleFileMessage(ILinkUserInput userInput, String userId) {
         mediaContextManager.storeFileContext(userId, userInput);
         String fileName = userInput.getFileName() != null ? userInput.getFileName() : "未知文件";
+        CareerResumeContextStore.StoreResult careerResult = careerResumeContextStore.storeCurrent(
+                userInput.getFileName(), userInput.getFileBytes());
+        if (careerResult.stored()) {
+            return "收到 PDF 文件：" + fileName + "。如果这是你的简历，可以直接说：\n"
+                    + "1. 给这份简历评分\n"
+                    + "2. 按下面的岗位 JD 给简历评分\n"
+                    + "3. 根据这份简历推荐杭州 Java 岗位\n"
+                    + "也可以继续让我上传到知识库、分析或总结文件。";
+        }
         return "收到文件：" + fileName + "，请告诉我你想让我做什么？\n例如：上传到知识库、分析文件内容、总结要点、优化内容、回答关于文件的问题等。";
     }
 
-    private String handleTextMessage(ILinkUserInput userInput, String userId, String sessionId) {
+    private String handleTextMessage(ILinkUserInput userInput, String userId, String sessionId,
+                                     List<AiMessage> historyMessages) {
         String userIntent = userInput.getDisplayText();
         if (mediaContextManager.isKnowledgeBaseUploadIntent(userIntent)) {
             MediaContextManager.PendingFileUpload pendingFile = mediaContextManager.getPendingFileUpload(userId);
@@ -295,32 +309,44 @@ public class ILinkMessageDispatcher {
         }
 
         // 检查是否有待处理的图片上下文
-        String pendingImageDesc = mediaContextManager.takeImageContext(userId);
+        String pendingImageDesc = mediaContextManager.getImageContext(userId);
         if (pendingImageDesc != null && !pendingImageDesc.isBlank()) {
-            String combinedText = "用户发送了一张图片，图片内容描述如下：\n" + pendingImageDesc
-                    + "\n\n用户的要求：" + userInput.getDisplayText();
-            return agentResponseProcessor.process(ILinkUserInput.text(combinedText), Collections.emptyList(), userId, sessionId);
+            String combinedText = buildPendingMediaTaskPrompt("图片", pendingImageDesc, userIntent);
+            String reply = agentResponseProcessor.processImmediateChat(
+                    ILinkUserInput.text(combinedText), historyMessages, userId, sessionId);
+            mediaContextManager.clearImageContext(userId);
+            return reply;
         }
 
         // 检查是否有待处理的视频上下文
-        String pendingVideoDesc = mediaContextManager.takeVideoContext(userId);
+        String pendingVideoDesc = mediaContextManager.getVideoContext(userId);
         if (pendingVideoDesc != null && !pendingVideoDesc.isBlank()) {
-            String combinedText = "用户发送了一个视频，视频内容描述如下：\n" + pendingVideoDesc
-                    + "\n\n用户的要求：" + userInput.getDisplayText();
-            return agentResponseProcessor.process(ILinkUserInput.text(combinedText), Collections.emptyList(), userId, sessionId);
+            String combinedText = buildPendingMediaTaskPrompt("视频", pendingVideoDesc, userIntent);
+            String reply = agentResponseProcessor.processImmediateChat(
+                    ILinkUserInput.text(combinedText), historyMessages, userId, sessionId);
+            mediaContextManager.clearVideoContext(userId);
+            return reply;
         }
 
         // 检查是否有待处理的文件上下文
-        String pendingFileInfo = mediaContextManager.takeFileContext(userId);
+        String pendingFileInfo = mediaContextManager.getFileContext(userId);
         if (pendingFileInfo != null && !pendingFileInfo.isBlank()) {
-            // 其他意图：组合文件信息 + 用户需求，交给 Agent 处理
-            String combinedText = pendingFileInfo + "\n\n用户的要求：" + userIntent;
-            return agentResponseProcessor.process(ILinkUserInput.text(combinedText), Collections.emptyList(), userId, sessionId);
+            String combinedText = buildPendingMediaTaskPrompt("文件", pendingFileInfo, userIntent);
+            String reply = agentResponseProcessor.process(
+                    ILinkUserInput.text(combinedText), historyMessages, userId, sessionId);
+            mediaContextManager.clearFileContext(userId);
+            return reply;
         }
 
         // 普通文本消息，交给 Agent 处理
-        List<AiMessage> historyMessages = crudService.listRecentMessages(sessionId, maxHistoryMessages);
         return agentResponseProcessor.process(userInput, historyMessages, userId, sessionId);
+    }
+
+    static String buildPendingMediaTaskPrompt(String mediaType, String mediaContext, String userIntent) {
+        return "这是用户发送" + mediaType + "后提出的第一条处理指令。请立即根据下方内容完成任务，"
+                + "不要再次询问用户要做什么，也不要只进行闲聊或复述要求。\n\n"
+                + "【" + mediaType + "内容】\n" + mediaContext
+                + "\n\n【用户要求】\n" + userIntent;
     }
 
     /**
@@ -345,6 +371,8 @@ public class ILinkMessageDispatcher {
             }
 
             log.info("上传文件到知识库: fileName={}, size={}, userId={}", fileName, fileBytes.length, userId);
+            String label = fileName.toLowerCase(java.util.Locale.ROOT).endsWith(".pdf") ? "resume" : fileName;
+            knowledgeFileStore.store(fileName, fileBytes, label);
             RagFlowClient.UploadResult result = ragFlowClient.uploadDocument(fileBytes, fileName);
 
             if (result.success()) {
