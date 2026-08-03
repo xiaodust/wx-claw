@@ -6,6 +6,7 @@ import com.dust.wxclawbackfront.ilink.runtime.BotRuntimeKey;
 import com.dust.wxclawbackfront.ilink.runtime.status.BotRuntimeStatusRegistry;
 import com.dust.wxclawbackfront.tenancy.repository.TenantBotRepository;
 import com.dust.wxclawbackfront.bot.scheduler.DynamicTaskSchedulerService;
+import com.dust.wxclawbackfront.config.KeyedPartitionExecutor;
 import com.github.wechat.ilink.sdk.ILinkClient;
 import com.github.wechat.ilink.sdk.core.exception.SessionExpiredException;
 import com.github.wechat.ilink.sdk.core.model.WeixinMessage;
@@ -37,8 +38,8 @@ public class ILinkBotService {
     private final DynamicTaskSchedulerService taskSchedulerService;
     private final TenantBotRepository tenantBotRepository;
     private final BotRuntimeStatusRegistry statusRegistry;
-    @Qualifier("messageProcessingExecutor")
-    private final ExecutorService messageProcessingExecutor;
+    @Qualifier("messagePartitionExecutor")
+    private final KeyedPartitionExecutor messagePartitionExecutor;
     @Qualifier("botRuntimeExecutor")
     private final ExecutorService botRuntimeExecutor;
 
@@ -101,14 +102,16 @@ public class ILinkBotService {
                                 if (!messageDispatcher.claim(key, msg)) {
                                     continue;
                                 }
-                                // 异步处理消息，避免阻塞消息拉取
-                                messageProcessingExecutor.submit(() -> {
-                                    try {
-                                        messageDispatcher.dispatchClaimed(key, msg);
-                                    } catch (Exception e) {
-                                        log.error("消息处理异常: {}", e.getMessage(), e);
-                                    }
-                                });
+                                // 按用户分区异步处理消息：同一用户串行保序，不同用户并行，避免阻塞消息拉取
+                                messagePartitionExecutor.execute(
+                                        new UserMessageKey(key.tenantId(), key.botId(), msg.getFrom_user_id()),
+                                        () -> {
+                                            try {
+                                                messageDispatcher.dispatchClaimed(key, msg);
+                                            } catch (Exception e) {
+                                                log.error("消息处理异常: {}", e.getMessage(), e);
+                                            }
+                                        });
                             }
                             if (!messages.isEmpty()) {
                                 runtimeManager.checkpointResumeContext(key, client);

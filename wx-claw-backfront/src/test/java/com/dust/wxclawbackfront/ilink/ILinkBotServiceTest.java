@@ -1,6 +1,7 @@
 package com.dust.wxclawbackfront.ilink;
 
 import com.dust.wxclawbackfront.bot.scheduler.DynamicTaskSchedulerService;
+import com.dust.wxclawbackfront.config.KeyedPartitionExecutor;
 import com.dust.wxclawbackfront.ilink.inbound.ILinkMessageDispatcher;
 import com.dust.wxclawbackfront.ilink.runtime.BotRuntimeKey;
 import com.dust.wxclawbackfront.ilink.runtime.ILinkRuntimeManager;
@@ -39,7 +40,7 @@ class ILinkBotServiceTest {
         ILinkMessageDispatcher messageDispatcher = mock(ILinkMessageDispatcher.class);
         DynamicTaskSchedulerService schedulerService = mock(DynamicTaskSchedulerService.class);
         TenantBotRepository tenantBotRepository = mock(TenantBotRepository.class);
-        ExecutorService messageExecutor = mock(ExecutorService.class);
+        KeyedPartitionExecutor messagePartitionExecutor = mock(KeyedPartitionExecutor.class);
         ExecutorService runtimeExecutor = mock(ExecutorService.class);
         BotRuntimeStatusRegistry statusRegistry = new BotRuntimeStatusRegistry();
         ILinkClient expiredClient = mock(ILinkClient.class);
@@ -49,7 +50,7 @@ class ILinkBotServiceTest {
         AtomicReference<ILinkBotService> serviceReference = new AtomicReference<>();
 
         ILinkBotService service = new ILinkBotService(runtimeManager, messageDispatcher, schedulerService,
-                tenantBotRepository, statusRegistry, messageExecutor, runtimeExecutor);
+                tenantBotRepository, statusRegistry, messagePartitionExecutor, runtimeExecutor);
         serviceReference.set(service);
         ReflectionTestUtils.setField(service, "maxReconnectAttempts", 2);
         ReflectionTestUtils.setField(service, "reconnectDelaySeconds", 0);

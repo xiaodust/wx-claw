@@ -89,6 +89,15 @@ wxclaw:
       max-size: 4
       queue-capacity: 20
 
+  # 业务线程池配置
+  thread-pool:
+    # 消息处理分区数：同一用户（租户+Bot+用户）的消息串行处理，不同用户并行
+    message-partitions: ${MESSAGE_PARTITIONS:8}
+    message-processing:
+      core-size: 4
+      max-size: 8
+      queue-capacity: 100
+
   # API 安全配置
   api:
     auth-enabled: ${API_AUTH_ENABLED:true}

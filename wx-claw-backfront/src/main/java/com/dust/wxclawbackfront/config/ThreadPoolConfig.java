@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -35,6 +36,8 @@ public class ThreadPoolConfig {
     private PoolConfig promptExecutor = new PoolConfig(2, 4, 50);
     private PoolConfig videoExecutor = new PoolConfig(1, 2, 10);
     private PoolConfig botRuntime = new PoolConfig(1, 32, 0);
+    /** 消息处理分区数：同一用户串行、不同用户并行 */
+    private int messagePartitions = 8;
 
     @Data
     public static class PoolConfig {
@@ -72,6 +75,16 @@ public class ThreadPoolConfig {
     @Bean("botRuntimeExecutor")
     public ExecutorService botRuntimeExecutor() {
         return createExecutor("ilink-runtime-", botRuntime, false);
+    }
+
+    /**
+     * 消息处理分区执行器：同一用户（租户 + Bot + 用户）的消息串行处理保证不乱序，
+     * 不同用户的消息进入不同分区并行处理。底层仍由 messageProcessingExecutor 执行。
+     */
+    @Bean
+    public KeyedPartitionExecutor messagePartitionExecutor(
+            @Qualifier("messageProcessingExecutor") ExecutorService messageProcessingExecutor) {
+        return new KeyedPartitionExecutor(messageProcessingExecutor, messagePartitions);
     }
 
     private ExecutorService createExecutor(String prefix, PoolConfig config, boolean callerRunsPolicy) {
