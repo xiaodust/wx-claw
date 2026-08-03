@@ -3,6 +3,9 @@ package com.dust.wxclawbackfront.bot.agent.model;
 import lombok.Builder;
 import lombok.Data;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * 单个任务步骤的执行结果
  */
@@ -15,11 +18,13 @@ public class TaskResult {
     private byte[] mediaBytes;
     private String mediaType;
     private String mediaFileName;
+    private List<MediaAttachment> mediaAttachments;
     private String errorMessage;
     private long executionTimeMs;
 
     public boolean hasMedia() {
-        return mediaBytes != null && mediaBytes.length > 0;
+        return mediaBytes != null && mediaBytes.length > 0
+                || mediaAttachments != null && mediaAttachments.stream().anyMatch(MediaAttachment::hasBytes);
     }
 
     public static TaskResult success(String textResult, long executionTimeMs) {
@@ -39,6 +44,19 @@ public class TaskResult {
                 .mediaBytes(mediaBytes)
                 .mediaType(mediaType)
                 .mediaFileName(mediaFileName)
+                .executionTimeMs(executionTimeMs)
+                .build();
+    }
+
+    /**
+     * 创建包含多条媒体附件的结果。
+     */
+    public static TaskResult successWithMedia(String textResult, List<MediaAttachment> mediaAttachments,
+                                              long executionTimeMs) {
+        return TaskResult.builder()
+                .success(true)
+                .textResult(textResult)
+                .mediaAttachments(mediaAttachments == null ? new ArrayList<>() : List.copyOf(mediaAttachments))
                 .executionTimeMs(executionTimeMs)
                 .build();
     }

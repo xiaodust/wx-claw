@@ -15,6 +15,20 @@ import static org.mockito.Mockito.when;
 
 class CareerResumeScoreToolHandlerTest {
     @Test
+    void returnsRejectedSubmissionAsUserMessage() {
+        CareerTools careerTools = mock(CareerTools.class);
+        CareerResumeScoreToolHandler handler = new CareerResumeScoreToolHandler(careerTools);
+        when(careerTools.scoreResume(null))
+                .thenReturn(new CareerTaskService.TaskSubmission(false, null, false,
+                        "请先发送 PDF 简历，再进行简历评分。"));
+
+        TaskResult result = handler.execute(TaskStep.builder().build(), null);
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.getTextResult()).contains("请先发送 PDF 简历");
+    }
+
+    @Test
     void delegatesResumeScoreToCareerTools() {
         CareerTools careerTools = mock(CareerTools.class);
         CareerResumeScoreToolHandler handler = new CareerResumeScoreToolHandler(careerTools);

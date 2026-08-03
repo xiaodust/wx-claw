@@ -3,6 +3,7 @@ package com.dust.wxclawbackfront.bot.agent.orchestrator;
 import com.dust.wxclawbackfront.bot.agent.model.*;
 import com.dust.wxclawbackfront.bot.agent.orchestrator.executor.TaskExecutor;
 import com.dust.wxclawbackfront.bot.agent.llm.chat.PlainTextLlmService;
+import com.dust.wxclawbackfront.bot.agent.prompt.PromptLoader;
 import com.dust.wxclawbackfront.exception.AgentPlanningException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -31,15 +32,16 @@ public class AgentOrchestrator {
     private final TaskExecutor taskExecutor;
     private final ObjectMapper objectMapper;
     private final PlanValidator planValidator;
+    private final PromptLoader promptLoader;
 
     @Value("${wxclaw.agent.plan.max-retries:3}")
-    private int maxRetries;
+    private int maxRetries = 3;
 
     @Value("${wxclaw.agent.plan.max-history-messages:10}")
-    private int maxPlanningHistoryMessages;
+    private int maxPlanningHistoryMessages = 10;
 
     @Value("${wxclaw.agent.plan.max-history-chars:6000}")
-    private int maxPlanningHistoryChars;
+    private int maxPlanningHistoryChars = 6000;
 
     /**
      * Agent 执行入口
@@ -49,11 +51,8 @@ public class AgentOrchestrator {
                 userMessage.length() > 50 ? userMessage.substring(0, 50) + "..." : userMessage);
 
         try {
-            if (!requiresHighLevelPlanning(userMessage)) {
-                return orchestrateChat(context);
-            }
-            // Phase 1: 让 LLM 规划高层任务执行计划
-            TaskPlan plan = normalizeCareerPlan(planWithLlm(userMessage, context), userMessage);
+            // Phase 1: 让 LLM 规划高层任务执行计划（所有消息统一走规划模型，意图判断交由模型完成）
+            TaskPlan plan = planWithLlm(userMessage, context);
             log.info("任务规划完成: steps={}", plan.getStepCount());
 
             // Phase 2: 执行任务
@@ -72,21 +71,6 @@ public class AgentOrchestrator {
             log.error("Agent 处理异常: {}", e.getMessage(), e);
             return AgentResult.failure("处理失败: " + e.getMessage());
         }
-    }
-
-    boolean requiresHighLevelPlanning(String userMessage) {
-        if (userMessage == null || userMessage.isBlank()) return false;
-        String text = userMessage.toLowerCase();
-        boolean voice = text.contains("语音回复") || text.contains("用语音") || text.contains("读给我听")
-                || text.contains("朗读");
-        boolean image = text.contains("生成图片") || text.contains("生成一张图") || text.contains("画一张")
-                || text.contains("画个");
-        boolean video = text.contains("生成视频") || text.contains("做个视频") || text.contains("制作视频");
-        boolean career = text.contains("简历") || text.contains("岗位") || text.contains("职位")
-                || text.contains("招聘") || text.contains("校招") || text.contains("社招") || text.contains("实习");
-        boolean storedFile = (text.contains("知识库") || text.contains("原始文件"))
-                && (text.contains("取回") || text.contains("发给我") || text.contains("发送给我"));
-        return voice || image || video || career || storedFile;
     }
 
     /**
@@ -142,125 +126,43 @@ public class AgentOrchestrator {
     }
 
     private TaskPlan fallbackPlan(String userMessage) {
-        if (userMessage == null) return TaskPlan.chat();
-        String text = userMessage.toLowerCase();
-        String tool = null;
-        if (text.contains("简历") && (text.contains("删除") || text.contains("清除") || text.contains("忘记"))) {
-            tool = "career_resume_clear";
-        } else if (text.contains("简历") && (text.contains("发给我") || text.contains("发送给我") || text.contains("取回"))) {
-            tool = "career_resume_retrieve";
-        } else if (text.contains("简历") && (text.contains("评分") || text.contains("打分") || text.contains("评估"))) {
-            tool = "career_resume_score";
-        } else if ((text.contains("简历") || text.contains("经历") || text.contains("技能"))
-                && (text.contains("岗位") || text.contains("职位"))
-                && (text.contains("推荐") || text.contains("匹配"))) {
-            tool = "career_job_recommendation";
-        } else if (text.contains("岗位") || text.contains("职位") || text.contains("招聘")
-                || text.contains("校招") || text.contains("社招") || text.contains("实习")) {
-            tool = "career_job_search";
-        } else if (text.contains("简历")) {
-            tool = "career_resume_analyze";
-        }
-        if (tool == null) return TaskPlan.chat();
-        return TaskPlan.builder().steps(List.of(TaskStep.builder()
-                .stepNumber(1).toolName(tool).params(new HashMap<>()).description("规划失败后的安全兜底").build())).build();
-    }
-
-    private TaskPlan normalizeCareerPlan(TaskPlan plan, String userMessage) {
-        if (plan == null || userMessage == null || !isGeneralJobSearch(userMessage)) {
-            return plan;
-        }
-        plan.getSteps().stream()
-                .filter(step -> "career_job_recommendation".equals(step.getToolName()))
-                .forEach(step -> step.setToolName("career_job_search"));
-        return plan;
-    }
-
-    private boolean isGeneralJobSearch(String userMessage) {
-        String text = userMessage.toLowerCase();
-        boolean jobQuery = text.contains("岗位") || text.contains("职位") || text.contains("招聘")
-                || text.contains("开发岗") || text.contains("工程师");
-        boolean personalized = text.contains("简历") || text.contains("履历") || text.contains("经历")
-                || text.contains("技能匹配") || text.contains("根据我") || text.contains("适合我");
-        return jobQuery && !personalized;
+        // 规划失败后的安全兜底：一律按普通对话处理，不再依赖关键词猜测意图
+        return TaskPlan.chat();
     }
 
     /**
      * 构建任务规划 prompt
      * 只描述高层动作，底层工具由 chat 模型自行调用
      */
-    private String buildPlanningPrompt(String userMessage, AgentContext context) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("你是一个任务编排器。根据用户输入，规划高层任务执行步骤。\n\n");
-        sb.append("## 可用动作\n\n");
-        sb.append("- chat: 普通对话、问答、信息查询。chat 模型内置了天气查询、网页搜索、邮件、提醒等工具，会自主决定调用哪些工具。\n");
-        sb.append("  参数: 无需额外参数，模型会根据用户消息自动处理\n\n");
-        sb.append("- voice_synthesize: 将文本转为语音回复。\n");
-        sb.append("  参数: text（可选，要朗读的文本；不传则自动生成）\n\n");
-        sb.append("- image_generate: 生成图片。\n");
-        sb.append("  参数: prompt（图片描述）\n\n");
-        sb.append("- video_generate: 生成视频。\n");
-        sb.append("  参数: prompt（视频描述）, ratio（可选，默认16:9）, duration（可选，秒数，默认5）\n\n");
-        sb.append("- career_resume_score: 对用户最近上传的 PDF 简历进行评分。\n");
-        sb.append("  参数: job_description（可选；用户提供岗位 JD 时传入）\n\n");
-        sb.append("- career_job_recommendation: 根据用户最近上传的 PDF 简历推荐匹配岗位。\n");
-        sb.append("  参数: locations、include_keywords、exclude_keywords、employment_types、published_within_days、min_match_score、top_n\n");
-        sb.append("  employment_types 只能使用 INTERNSHIP、CAMPUS、SOCIAL\n\n");
-        sb.append("- career_resume_retrieve: 用户明确索要自己已保存的简历 PDF 时使用。\n\n");
-        sb.append("- career_resume_analyze: 基于已保存简历完成写作、总结、分析、整理等非评分/岗位推荐任务。\n\n");
-        sb.append("- career_resume_clear: 用户要求删除、清除或忘记已保存简历时使用。\n\n");
-        sb.append("- knowledge_file_retrieve: 用户明确要求取回或发送已存知识库原始文件时使用；简历的 label 使用 resume。\n\n");
-        sb.append("- career_job_search: 搜索真实在招岗位，不需要简历。\n");
-        sb.append("  参数: locations、include_keywords、exclude_keywords、employment_types、published_within_days、page、page_size\n\n");
-        sb.append("## 规则\n\n");
-        sb.append("1. 分析用户意图，规划最少步骤完成任务\n");
-        sb.append("2. 普通对话、闲聊、问答、信息查询、图片相关问题 → 只需 1 步 chat，绝对不要多加步骤\n");
-        sb.append("3. 只有用户明确要求\"语音回复\"\"用语音说\"\"读给我听\"等 → 1 步 chat + 1 步 voice_synthesize\n");
-        sb.append("4. 用户要求生成图片 → 1 步 image_generate\n");
-        sb.append("5. 用户要求生成视频 → 1 步 video_generate\n");
-        sb.append("6. 后续步骤可以使用前一步的结果（用 {step_N_result} 引用）\n");
-        sb.append("7. 不要规划底层工具调用（如 weather_now、web_search 等），chat 模型会自行处理\n");
-        sb.append("8. 【重要】chat 步骤最多出现 1 次，不要重复规划 chat 步骤\n");
-        sb.append("9. 【重要】用户发送图片问问题（如\"这是什么\"\"帮我看看\"）→ 只需 1 步 chat，不要加 voice_synthesize\n");
-        sb.append("10. 【重要】用户发送视频问问题（如\"这个视频说了什么\"）→ 只需 1 步 chat，不要加 voice_synthesize\n\n");
-        sb.append("11. 【职业任务】用户要求给简历评分、打分或评估 → 只使用 career_resume_score，不要使用 chat\n");
-        sb.append("12. 【职业任务】用户要求根据简历、履历、经历或技能推荐/匹配岗位 → 只使用 career_job_recommendation，绝对不要使用 career_resume_score 或 chat\n");
-        sb.append("12.1 用户要求根据简历写作、总结、分析或整理，但不是评分或岗位推荐 → 只使用 career_resume_analyze\n");
-        sb.append("13. career_job_recommendation 必须从用户原话提取城市、关键词和实习/校招/社招类型；未明确的参数使用空数组或省略\n\n");
-        sb.append("16. 用户只询问某公司、城市、岗位名称或关键词的在招岗位（如“推荐一些腾讯开发岗”），即使使用“推荐”二字，也必须使用 career_job_search，不得调用 career_job_recommendation。只有用户明确说“根据我的简历/经历/技能匹配”时，才使用 career_job_recommendation。\n\n");
-        sb.append("14. 必须结合历史对话理解省略主语和追问，例如“扩大到全国”“换个城市”“再多找几个”“只要社招”。这些表达是对最近一次职业任务的参数更新，不是新的普通问答。\n");
-        sb.append("15. 追问参数合并：本轮明确条件覆盖历史条件；本轮未提到的条件继承最近一次职业任务；“扩大到全国/全国范围”将 locations 设为 [\"全国\"]。若历史没有职业任务，再仅依据本轮内容判断。\n\n");
-        sb.append("## 用户消息\n\n");
-        sb.append(userMessage).append("\n\n");
+    String buildPlanningPrompt(String userMessage, AgentContext context) {
+        String historyText = buildPlanningHistory(context);
 
-        appendPlanningHistory(sb, context);
+        Map<String, String> variables = new HashMap<>();
+        variables.put("user_message", userMessage);
+        variables.put("history", historyText);
 
-        if (context.getUserProfiles() != null && !context.getUserProfiles().isEmpty()) {
-            sb.append("## 用户信息\n\n");
+        StringBuilder profilesText = new StringBuilder();
+        if (context.getUserProfiles() != null) {
             context.getUserProfiles().forEach(p ->
-                    sb.append(p.getKeyName()).append(": ").append(p.getKeyValue()).append("\n"));
-            sb.append("\n");
+                    profilesText.append(p.getKeyName()).append(": ").append(p.getKeyValue()).append("\n"));
         }
+        String profiles = profilesText.toString();
+        variables.put("user_profiles", profiles);
 
-        sb.append("## 输出格式\n\n");
-        sb.append("请输出 JSON 格式的执行计划：\n");
-        sb.append("```json\n");
-        sb.append("{\n");
-        sb.append("  \"steps\": [\n");
-        sb.append("    {\"step\": 1, \"tool\": \"chat\", \"params\": {}, \"description\": \"处理用户请求\"},\n");
-        sb.append("    {\"step\": 2, \"tool\": \"voice_synthesize\", \"params\": {\"text\": \"{step_1_result}\"}, \"depends_on\": 1, \"description\": \"语音播报\"}\n");
-        sb.append("  ]\n");
-        sb.append("}\n");
-        sb.append("```\n\n");
-        sb.append("只输出 JSON，不要输出其他内容。");
+        Map<String, Boolean> sections = new HashMap<>();
+        sections.put("history", historyText.length() > 0);
+        sections.put("user_profiles", profiles.length() > 0);
 
-        return sb.toString();
+        return promptLoader.render("agent-planner", variables, sections);
     }
 
-    private void appendPlanningHistory(StringBuilder prompt, AgentContext context) {
+    /**
+     * 拼接规划用历史对话（每条一行、结尾带换行；无历史时返回空串）。
+     */
+    private String buildPlanningHistory(AgentContext context) {
         List<com.dust.wxclawbackfront.bot.dao.entity.AiMessage> history = context.getHistoryMessages();
         if (history == null || history.isEmpty()) {
-            return;
+            return "";
         }
         List<com.dust.wxclawbackfront.bot.dao.entity.AiMessage> sorted = history.stream()
                 .filter(message -> message != null && message.getContent() != null && !message.getContent().isBlank())
@@ -280,10 +182,7 @@ public class AgentOrchestrator {
             historyText.append(role).append(": ").append(content).append("\n");
             remaining -= content.length() + role.length() + 3;
         }
-        if (historyText.length() > 0) {
-            prompt.append("## 历史对话（仅用于解析当前追问）\n\n")
-                    .append(historyText).append("\n");
-        }
+        return historyText.toString();
     }
 
     /**
@@ -364,6 +263,10 @@ public class AgentOrchestrator {
 
         if (!taskResult.isSuccess()) {
             return AgentResult.failure(taskResult.getErrorMessage());
+        }
+
+        if (taskResult.getMediaAttachments() != null && !taskResult.getMediaAttachments().isEmpty()) {
+            return AgentResult.successWithMedia(taskResult.getTextResult(), taskResult.getMediaAttachments());
         }
 
         if (taskResult.hasMedia()) {

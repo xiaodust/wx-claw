@@ -38,7 +38,7 @@ public class CareerResumeAnalyzeToolHandler implements ToolHandler {
             return reply == null || reply.isBlank()
                     ? TaskResult.failure("基于简历生成的结果为空", elapsed(started))
                     : TaskResult.success(reply, elapsed(started));
-        }).orElseGet(() -> TaskResult.failure("当前没有保存的简历，请先发送 PDF 简历。", elapsed(started)));
+        }).orElseGet(() -> TaskResult.success("当前没有保存的简历，请先发送 PDF 简历。", elapsed(started)));
     }
 
     private long elapsed(long started) { return Instant.now().toEpochMilli() - started; }

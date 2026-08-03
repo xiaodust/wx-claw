@@ -40,8 +40,11 @@ public class CareerJobSearchToolHandler implements ToolHandler {
     public TaskResult execute(TaskStep step, AgentContext context) {
         long started = Instant.now().toEpochMilli();
         Map<String, Object> params = step.getParams() == null ? Map.of() : step.getParams();
+        // 复合请求中规划模型可通过 params.input 传入该步骤负责的分句，避免整条消息干扰解析
+        Object inputParam = params.get("input");
+        String userText = inputParam instanceof String s && !s.isBlank() ? s : context.getUserText();
         CareerSearchContextStore.SearchState previous = searchContextStore.get(context.getUserId());
-        boolean continuation = isContinuation(context.getUserText());
+        boolean continuation = isContinuation(userText);
         CareerQueryNormalizer.NormalizedQuery previousQuery = previous == null ? null : previous.query();
         CareerQueryNormalizer.NormalizedQuery fallback = new CareerQueryNormalizer.NormalizedQuery(
                 continuation && previousQuery != null ? previousQuery.locations() : listParam(params, "locations"),
@@ -51,7 +54,7 @@ public class CareerJobSearchToolHandler implements ToolHandler {
                 continuation && previousQuery != null ? previousQuery.publishedWithinDays() : integerParam(params, "published_within_days", "publishedWithinDays"));
         CareerQueryNormalizer.NormalizedQuery query = continuation && previousQuery != null
                 ? previousQuery
-                : (queryNormalizer == null ? fallback : queryNormalizer.normalize(context.getUserText(), fallback));
+                : (queryNormalizer == null ? fallback : queryNormalizer.normalize(userText, fallback));
         int requestedPage = integerParam(params, "page") == null ? 1 : integerParam(params, "page");
         int page = continuation && previous != null ? Math.max(requestedPage, previous.page() + 1) : requestedPage;
         CareerReplyFormatter.SearchToolResult result = careerTools.searchJobs(

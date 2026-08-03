@@ -3,6 +3,7 @@ package com.dust.wxclawbackfront.bot.agent.model;
 import lombok.Builder;
 import lombok.Data;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -31,6 +32,7 @@ public class AgentResult {
      * 媒体文件名
      */
     private String mediaFileName;
+    private List<MediaAttachment> mediaAttachments;
 
     /**
      * 是否执行成功
@@ -51,7 +53,8 @@ public class AgentResult {
      * 是否包含媒体数据
      */
     public boolean hasMedia() {
-        return mediaBytes != null && mediaBytes.length > 0;
+        return mediaBytes != null && mediaBytes.length > 0
+                || mediaAttachments != null && mediaAttachments.stream().anyMatch(MediaAttachment::hasBytes);
     }
 
     /**
@@ -74,6 +77,17 @@ public class AgentResult {
                 .mediaBytes(mediaBytes)
                 .mediaType(mediaType)
                 .mediaFileName(mediaFileName)
+                .success(true)
+                .build();
+    }
+
+    /**
+     * 创建包含多条媒体附件的结果。
+     */
+    public static AgentResult successWithMedia(String replyText, List<MediaAttachment> mediaAttachments) {
+        return AgentResult.builder()
+                .replyText(replyText)
+                .mediaAttachments(mediaAttachments == null ? new ArrayList<>() : List.copyOf(mediaAttachments))
                 .success(true)
                 .build();
     }

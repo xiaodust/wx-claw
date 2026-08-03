@@ -18,6 +18,19 @@ import static org.mockito.Mockito.when;
 
 class CareerResumeAnalyzeToolHandlerTest {
     @Test
+    void returnsUserPromptWhenResumeIsMissing() {
+        CareerResumeContextStore store = mock(CareerResumeContextStore.class);
+        when(store.getCurrent()).thenReturn(Optional.empty());
+        CareerResumeAnalyzeToolHandler handler = new CareerResumeAnalyzeToolHandler(
+                store, mock(FileContentExtractor.class), mock(ChatHandler.class));
+
+        TaskResult result = handler.execute(TaskStep.builder().build(), AgentContext.builder().build());
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.getTextResult()).contains("请先发送 PDF 简历");
+    }
+
+    @Test
     void readsStoredResumeBeforeCallingChatModel() {
         CareerResumeContextStore store = mock(CareerResumeContextStore.class);
         FileContentExtractor extractor = mock(FileContentExtractor.class);

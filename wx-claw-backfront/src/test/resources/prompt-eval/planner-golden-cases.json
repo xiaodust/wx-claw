@@ -1,0 +1,118 @@
+[
+  {
+    "name": "纯闲聊走chat",
+    "message": "你好呀",
+    "expectedTools": [
+      "chat"
+    ]
+  },
+  {
+    "name": "天气查询走chat",
+    "message": "杭州今天天气怎么样",
+    "expectedTools": [
+      "chat"
+    ]
+  },
+  {
+    "name": "纯语音问候走voice",
+    "message": "给我发个早上问候语音",
+    "expectedTools": [
+      "voice_synthesize"
+    ]
+  },
+  {
+    "name": "创作后朗读拆两步",
+    "message": "讲个故事然后读给我听",
+    "expectedTools": [
+      "chat",
+      "voice_synthesize"
+    ]
+  },
+  {
+    "name": "生成图片走image",
+    "message": "画一张小猫图片",
+    "expectedTools": [
+      "image_generate"
+    ]
+  },
+  {
+    "name": "生成视频走video",
+    "message": "帮我做个生日视频",
+    "expectedTools": [
+      "video_generate"
+    ]
+  },
+  {
+    "name": "简历评分走score",
+    "message": "给我的简历打个分",
+    "expectedTools": [
+      "career_resume_score"
+    ]
+  },
+  {
+    "name": "简历分析走analyze",
+    "message": "帮我分析一下我的简历",
+    "expectedTools": [
+      "career_resume_analyze"
+    ]
+  },
+  {
+    "name": "简历取回走retrieve",
+    "message": "把我的简历发给我",
+    "expectedTools": [
+      "career_resume_retrieve"
+    ]
+  },
+  {
+    "name": "简历清除走clear",
+    "message": "忘记我的简历吧",
+    "expectedTools": [
+      "career_resume_clear"
+    ]
+  },
+  {
+    "name": "根据简历推荐岗位",
+    "message": "根据我的简历推荐杭州后端实习岗位",
+    "expectedTools": [
+      "career_job_recommendation"
+    ]
+  },
+  {
+    "name": "普通岗位搜索走search",
+    "message": "推荐一些杭州后端实习岗位",
+    "expectedTools": [
+      "career_job_search"
+    ]
+  },
+  {
+    "name": "复合请求拆四步",
+    "message": "给我讲个故事然后画个小猫图片再给我语音发一条早上问候消息 最后再帮我推荐一些杭州后端实习岗位",
+    "expectedTools": [
+      "chat",
+      "image_generate",
+      "voice_synthesize",
+      "career_job_search"
+    ]
+  },
+  {
+    "name": "岗位追问扩大范围",
+    "message": "扩大到全国",
+    "expectedTools": [
+      "career_job_search"
+    ]
+  },
+  {
+    "name": "岗位追问只要社招",
+    "message": "只要社招",
+    "expectedTools": [
+      "career_job_search"
+    ]
+  },
+  {
+    "name": "知识库取回文件",
+    "message": "把我的知识库原始文件发给我",
+    "expectedTools": [
+      "knowledge_file_retrieve"
+    ]
+  }
+]

@@ -3,6 +3,7 @@ package com.dust.wxclawbackfront.bot.agent.orchestrator;
 import com.dust.wxclawbackfront.bot.agent.llm.chat.PlainTextLlmService;
 import com.dust.wxclawbackfront.bot.agent.model.AgentContext;
 import com.dust.wxclawbackfront.bot.agent.orchestrator.executor.TaskExecutor;
+import com.dust.wxclawbackfront.bot.agent.prompt.PromptLoader;
 import com.dust.wxclawbackfront.bot.dao.entity.AiMessage;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -20,7 +21,7 @@ class AgentOrchestratorPlanningContextTest {
         PlainTextLlmService planningModel = mock(PlainTextLlmService.class);
         TaskExecutor taskExecutor = mock(TaskExecutor.class);
         PlanValidator validator = mock(PlanValidator.class);
-        AgentOrchestrator orchestrator = new AgentOrchestrator(planningModel, taskExecutor, new ObjectMapper(), validator);
+        AgentOrchestrator orchestrator = new AgentOrchestrator(planningModel, taskExecutor, new ObjectMapper(), validator, new PromptLoader(true));
         AgentContext context = AgentContext.builder().userText("推荐一些腾讯开发岗").build();
         when(planningModel.chat(org.mockito.ArgumentMatchers.anyString(), eq("PLAN")))
                 .thenReturn("{\"steps\":[{\"step\":1,\"tool\":\"career_job_search\",\"params\":{\"include_keywords\":[\"腾讯\",\"开发\"]}}]}");
@@ -37,7 +38,7 @@ class AgentOrchestratorPlanningContextTest {
         TaskExecutor taskExecutor = mock(TaskExecutor.class);
         PlanValidator validator = mock(PlanValidator.class);
         AgentOrchestrator orchestrator = new AgentOrchestrator(
-                planningModel, taskExecutor, new ObjectMapper(), validator);
+                planningModel, taskExecutor, new ObjectMapper(), validator, new PromptLoader(true));
 
         AiMessage previousRequest = new AiMessage();
         previousRequest.setMessageSeq(1);

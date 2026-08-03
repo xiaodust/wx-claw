@@ -31,9 +31,7 @@ public class CareerResumeScoreToolHandler implements ToolHandler {
         String jobDescription = stringParam(params, "job_description", "jobDescription", "jd");
         CareerTaskService.TaskSubmission submission = careerTools.scoreResume(jobDescription);
         long duration = Instant.now().toEpochMilli() - started;
-        return submission.accepted()
-                ? TaskResult.success(submission.message(), duration)
-                : TaskResult.failure(submission.message(), duration);
+        return TaskResult.success(submission.message(), duration);
     }
 
     private String stringParam(Map<String, Object> params, String... names) {

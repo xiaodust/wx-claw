@@ -137,9 +137,10 @@ public class CareerReplyFormatter {
     }
 
     private CompactJob compactJob(JobHelperDtos.JobView job) {
+        // 压缩结果只保留摘要字段，丢弃完整岗位描述与任职要求，避免回复超长
         return new CompactJob(job.jobId(), job.title(), job.companyName(), job.locations(), job.employmentType(),
                 job.publishTime() == null ? null : DATE_FORMATTER.format(job.publishTime()), job.detailUrl(),
-                job.description(), job.requirements());
+                null, null);
     }
 
     private JsonNode sanitize(JsonNode node) {

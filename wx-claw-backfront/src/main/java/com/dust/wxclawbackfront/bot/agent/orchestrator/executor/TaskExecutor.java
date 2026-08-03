@@ -151,23 +151,23 @@ public class TaskExecutor {
             }
         }
 
-        // 优先返回最后一个有媒体的结果
-        TaskResult lastMediaResult = null;
-        for (int i = results.size() - 1; i >= 0; i--) {
-            if (results.get(i).hasMedia()) {
-                lastMediaResult = results.get(i);
-                break;
+        // 收集所有步骤的媒体附件（保持顺序）
+        List<com.dust.wxclawbackfront.bot.agent.model.MediaAttachment> mediaAttachments = new ArrayList<>();
+        for (TaskResult result : results) {
+            if (!result.isSuccess()) continue;
+            if (result.getMediaAttachments() != null) {
+                for (com.dust.wxclawbackfront.bot.agent.model.MediaAttachment attachment : result.getMediaAttachments()) {
+                    if (attachment.hasBytes()) mediaAttachments.add(attachment);
+                }
+            } else if (result.hasMedia()) {
+                mediaAttachments.add(new com.dust.wxclawbackfront.bot.agent.model.MediaAttachment(
+                        result.getMediaType(), result.getMediaFileName(), result.getMediaBytes()));
             }
         }
 
         String errorSuffix = errors.isEmpty() ? "" : "\n[部分步骤失败: " + String.join("; ", errors) + "]";
-        if (lastMediaResult != null) {
-            return TaskResult.successWithMedia(
-                    textResult + errorSuffix,
-                    lastMediaResult.getMediaBytes(),
-                    lastMediaResult.getMediaType(),
-                    lastMediaResult.getMediaFileName(),
-                    totalTime);
+        if (!mediaAttachments.isEmpty()) {
+            return TaskResult.successWithMedia(textResult + errorSuffix, mediaAttachments, totalTime);
         }
 
         // 如果有失败步骤，在文本结果中追加错误信息

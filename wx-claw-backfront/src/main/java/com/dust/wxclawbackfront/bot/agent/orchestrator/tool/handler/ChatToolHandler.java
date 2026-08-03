@@ -36,6 +36,13 @@ public class ChatToolHandler implements ToolHandler {
 
         try {
             String userMessage = context.getUserText();
+            // 复合请求中编排器可传入收窄后的 input，避免 chat 步骤重复处理岗位等已拆分任务
+            if (step.getParams() != null) {
+                Object inputOverride = step.getParams().get("input");
+                if (inputOverride instanceof String text && !text.isBlank()) {
+                    userMessage = text;
+                }
+            }
             List<AiMessage> historyMessages = context.getHistoryMessages() != null
                     ? context.getHistoryMessages() : Collections.emptyList();
 

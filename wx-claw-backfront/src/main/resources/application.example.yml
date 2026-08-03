@@ -136,6 +136,8 @@ wxclaw:
       speech-rate: 0
       loudness-rate: 0
       max-voice-ms: 60000
+      timeout: PT90S
+      max-attempts: 2
 
     # 时间配置
     time:

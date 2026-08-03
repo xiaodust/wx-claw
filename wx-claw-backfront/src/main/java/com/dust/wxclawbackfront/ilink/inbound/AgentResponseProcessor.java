@@ -2,6 +2,7 @@ package com.dust.wxclawbackfront.ilink.inbound;
 
 import com.dust.wxclawbackfront.bot.agent.model.AgentContext;
 import com.dust.wxclawbackfront.bot.agent.model.AgentResult;
+import com.dust.wxclawbackfront.bot.agent.model.MediaAttachment;
 import com.dust.wxclawbackfront.bot.agent.orchestrator.AgentOrchestrator;
 import com.dust.wxclawbackfront.bot.dao.entity.AiMessage;
 import com.dust.wxclawbackfront.bot.dao.entity.UserProfile;
@@ -69,7 +70,16 @@ public class AgentResponseProcessor {
 
         log.info("Agent 处理完成: userId={}, hasMedia={}, mediaType={}", userId, result.hasMedia(), result.getMediaType());
 
-        // 如果有媒体数据（图片/音频/视频），发送媒体后返回 null
+        // 多媒体：逐条发送附件，文本回复由调用方继续发送
+        if (result.getMediaAttachments() != null && !result.getMediaAttachments().isEmpty()) {
+            for (MediaAttachment attachment : result.getMediaAttachments()) {
+                sendAttachment(userId, attachment, null);
+            }
+            log.info("Agent 多媒体已发送: userId={}, count={}", userId, result.getMediaAttachments().size());
+            return result.getReplyText();
+        }
+
+        // 单个媒体：保留原有 caption 行为
         if (result.hasMedia()) {
             return handleMediaResponse(userId, result);
         }
@@ -77,6 +87,25 @@ public class AgentResponseProcessor {
         return result.getReplyText();
     }
 
+
+    /**
+     * 按媒体类型发送单条附件，发送失败时记录日志并继续其他附件。
+     */
+    private void sendAttachment(String userId, MediaAttachment attachment, String caption) {
+        try {
+            String mediaType = attachment.mediaType();
+            if (mediaType != null && mediaType.startsWith("image/")) {
+                messageSender.sendImage(userId, attachment.mediaBytes(), attachment.mediaFileName(), caption);
+            } else if (mediaType != null && mediaType.startsWith("video/")) {
+                messageSender.sendVideo(userId, attachment.mediaBytes(), attachment.mediaFileName(), null, caption);
+            } else {
+                messageSender.sendFile(userId, attachment.mediaBytes(), attachment.mediaFileName(), caption);
+            }
+        } catch (Exception ex) {
+            log.warn("发送媒体失败，跳过: type={}, fileName={}, error={}",
+                    attachment.mediaType(), attachment.mediaFileName(), ex.getMessage());
+        }
+    }
     /**
      * 处理媒体响应
      * @return null 如果媒体发送成功，否则返回降级的文本回复
@@ -104,6 +133,7 @@ public class AgentResponseProcessor {
             return result.getReplyText();
         }
     }
+
 
     private String handleAudioResponse(String userId, AgentResult result) {
         try {

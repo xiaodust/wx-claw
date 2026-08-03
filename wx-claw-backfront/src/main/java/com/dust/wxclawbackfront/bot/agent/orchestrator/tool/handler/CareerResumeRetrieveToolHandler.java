@@ -25,6 +25,7 @@ public class CareerResumeRetrieveToolHandler implements ToolHandler {
         return resumeStore.getCurrent()
                 .map(resume -> TaskResult.successWithMedia("这是你当前保存的简历：", resume.fileBytes(),
                         "application/pdf", resume.fileName(), Instant.now().toEpochMilli() - started))
-                .orElseGet(() -> TaskResult.failure("当前没有保存的简历。", Instant.now().toEpochMilli() - started));
+                .orElseGet(() -> TaskResult.success("当前没有保存的简历，请先发送 PDF 简历。",
+                        Instant.now().toEpochMilli() - started));
     }
 }

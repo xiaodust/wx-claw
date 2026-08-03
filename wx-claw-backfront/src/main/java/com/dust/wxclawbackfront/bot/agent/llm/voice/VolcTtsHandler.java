@@ -7,10 +7,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
@@ -27,6 +29,7 @@ public class VolcTtsHandler {
 
     private final String url;
     private final Duration timeout;
+    private final int maxAttempts;
 
     private final String apiKey;
     private final String model;
@@ -44,7 +47,8 @@ public class VolcTtsHandler {
     public VolcTtsHandler(ObjectMapper objectMapper,
                           LlmInvocationRecorder invocationRecorder,
                           @Value("${wxclaw.ai.tts.url:https://openspeech.bytedance.com/api/v3/tts/create}") String url,
-                          @Value("${wxclaw.ai.tts.timeout:PT30S}") Duration timeout,
+                          @Value("${wxclaw.ai.tts.timeout:PT90S}") Duration timeout,
+                          @Value("${wxclaw.ai.tts.max-attempts:2}") int maxAttempts,
                           @Value("${wxclaw.ai.tts.api-key:}") String apiKey,
                           @Value("${wxclaw.ai.tts.model:seed-audio-1.0}") String model,
                           @Value("${wxclaw.ai.tts.output-format:mp3}") String outputFormat,
@@ -61,7 +65,8 @@ public class VolcTtsHandler {
                 .connectTimeout(Duration.ofSeconds(8))
                 .build();
         this.url = url;
-        this.timeout = timeout == null ? Duration.ofSeconds(30) : timeout;
+        this.timeout = timeout == null ? Duration.ofSeconds(90) : timeout;
+        this.maxAttempts = maxAttempts <= 0 ? 2 : maxAttempts;
         this.apiKey = apiKey;
         this.model = model;
         this.outputFormat = outputFormat;
@@ -99,16 +104,30 @@ public class VolcTtsHandler {
 
         long start = System.currentTimeMillis();
         try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(actualUrl))
-                    .timeout(timeout)
-                    .header("X-Api-Key", key)
-                    .header("X-Api-Request-Id", UUID.randomUUID().toString())
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload)))
-                    .build();
-
-            HttpResponse<String> resp = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            String payloadJson = objectMapper.writeValueAsString(payload);
+            HttpResponse<String> resp = null;
+            for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(actualUrl))
+                        .timeout(timeout)
+                        .header("X-Api-Key", key)
+                        .header("X-Api-Request-Id", UUID.randomUUID().toString())
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(payloadJson))
+                        .build();
+                try {
+                    resp = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                    break;
+                } catch (IOException | InterruptedException ex) {
+                    if (Thread.currentThread().isInterrupted()) {
+                        Thread.currentThread().interrupt();
+                    }
+                    log.warn("TTS 请求失败（第 {}/{} 次），将重试: {}", attempt, maxAttempts, ex.getMessage());
+                    if (attempt == maxAttempts) {
+                        throw ex;
+                    }
+                }
+            }
             long elapsed = System.currentTimeMillis() - start;
             log.info("TTS语音合成完成, 耗时={}ms, model={}", elapsed, actualModel);
             String responseText = resp.body();
@@ -162,7 +181,10 @@ public class VolcTtsHandler {
 
             return complete(handle, new VolcTtsResult(requestJson, responseJson, null, audioBytes, playTimeMs, actualSampleRate, bitsPerSample, encodeType, fileName));
         } catch (Exception ex) {
-            return complete(handle, new VolcTtsResult(requestJson, null, ex.getMessage(), null, null, null, null, null, null));
+            String errorMsg = ex instanceof HttpTimeoutException
+                    ? "语音合成服务响应超时，请稍后重试"
+                    : ex.getMessage();
+            return complete(handle, new VolcTtsResult(requestJson, null, errorMsg, null, null, null, null, null, null));
         }
     }
 
