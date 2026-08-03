@@ -23,22 +23,26 @@ public class MessageDebouncer {
     private static final Duration CLEANUP_THRESHOLD = DEBOUNCE_DURATION.multipliedBy(10);
 
     /**
-     * 检查消息是否应该被处理
+     * 检查消息是否应该被处理。
+     *
+     * <p>去重维度为 租户 + Bot + 用户 + 内容哈希：不同租户或不同 Bot 下的用户
+     * （微信 openId 可能相同）互不影响，与消息分区键 {@code UserMessageKey} 维度一致。
+     *
      * @return true 如果消息应该被处理，false 如果应该被跳过
      */
-    public boolean shouldProcess(String userId, String userText) {
+    public boolean shouldProcess(String tenantId, String botId, String userId, String userText) {
         if (userText == null || userText.isBlank()) {
             return true;
         }
 
         // 使用SHA-256哈希而不是简单的hashCode，避免哈希冲突
         String textHash = sha256Hash(userText.trim());
-        String messageKey = userId + "::" + textHash;
+        String messageKey = tenantId + "::" + botId + "::" + userId + "::" + textHash;
         Instant now = Instant.now();
         Instant lastProcessed = recentMessageCache.get(messageKey);
 
         if (lastProcessed != null && Duration.between(lastProcessed, now).compareTo(DEBOUNCE_DURATION) < 0) {
-            log.debug("消息防抖：跳过重复消息 userId={}, text={}", userId,
+            log.debug("消息防抖：跳过重复消息 tenantId={}, botId={}, userId={}, text={}", tenantId, botId, userId,
                     userText.trim().length() > 20 ? userText.trim().substring(0, 20) + "..." : userText.trim());
             return false;
         }
