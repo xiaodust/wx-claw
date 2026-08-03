@@ -4,10 +4,16 @@
 
 ## 版本信息
 
-当前版本：**v2.0**
+当前版本：**v2.1**
 
 ### 主要更新内容
 
+- **编排提示词文件化** - 规划提示词移出 Java 代码，统一为 `ai/prompts/agent-planner.md` 模板，支持变量与条件段渲染
+- **意图识别交还模型** - 移除硬编码关键词意图判断，所有消息统一由规划模型自主拆解与选工具
+- **职业助手** - 简历存储/分析/评分与岗位搜索、推荐，对接 JobHelper MCP 服务
+- **多媒体结果** - 多步骤任务的多条媒体附件（图片/语音/视频）逐条发送给用户
+- **简历容错** - 未保存简历时返回友好提示而非报错
+- **语音可靠性** - TTS 增加超时重试与最大尝试次数配置
 - **安全增强** - 实现 API 密钥认证和限制 CORS 来源
 - **数据库优化** - 改善 SQLite 并发处理和重试机制
 - **用户验证** - 添加用户验证白名单机制
@@ -25,12 +31,14 @@
 
 ### 核心功能
 
-- **Agent 编排系统** - LLM 驱动的高层任务规划，自动拆解复杂请求为多步骤执行
+- **Agent 编排系统** - LLM 驱动的高层任务规划，提示词模板化，自动拆解复杂请求为多步骤执行
 - **Spring AI Function Calling** - chat 模型自主决定调用哪些工具，工具是"大模型的手"
 - **智能对话** - 基于大模型的自然语言对话
 - **上下文记忆** - 支持多轮对话，记住上下文
 - **用户画像** - 记住用户偏好和习惯，提供个性化服务
 - **知识库管理** - 集成 RAGFlow 知识库，支持文档检索和问答
+- **职业助手** - 简历存取与岗位搜索/推荐，支持本地文档与 JobHelper MCP 联动
+- **多媒体回复** - 单次任务可同时返回文本、图片、语音、视频等多种附件
 - **智能文档发送** - 长文本自动转换为文件发送，优化阅读体验
 - **消息防抖** - 防止短时间内重复调用 AI
 - **安全认证** - API 密钥认证，限制 CORS 来源，保护接口安全
@@ -62,10 +70,19 @@
 
 Agent 编排器只规划高层任务，底层工具调用由 chat 模型自行处理：
 
-| 功能          | 说明                           |
-| ----------- | ---------------------------- |
-| 图片生成        | 根据描述生成图片（SiliconFlow Kolors） |
-| 语音回复        | TTS 语音合成，含文本口语化润色          |
+| 功能              | 说明                                        |
+| ---------------- | ----------------------------------------- |
+| 智能对话           | 普通对话，支持调用底层工具（chat）                    |
+| 图片生成           | 根据描述生成图片（SiliconFlow Kolors）             |
+| 语音回复           | TTS 语音合成，含文本口语化润色与超时重试                 |
+| 视频生成           | 根据描述生成视频                                |
+| 简历管理           | 保存/取回/清除简历（PDF，JobHelper MCP 持久化）      |
+| 简历分析/评分       | 基于已保存简历做分析与评分                          |
+| 岗位搜索           | 按城市/关键词搜索实习、校招、社招岗位                   |
+| 岗位推荐           | 结合简历推荐匹配岗位                              |
+| 知识文件取回         | 从知识库取回用户存储的文件并发送给用户                    |
+
+> 说明：编排模型负责意图判断与任务拆解（读取 `ai/prompts/agent-planner.md` 提示词），各步骤由对应 `ToolHandler` 执行；底层工具的自主调用仍由 chat 模型通过 function calling 完成。
 
 ### 快捷命令
 
@@ -100,6 +117,41 @@ AI：[调用 knowledge_list_documents] 知识库中共有 5 个文档...
 
 用户：删除文档 xxx
 AI：[调用 knowledge_delete_document] 文档删除成功。
+```
+
+### 职业助手（简历与岗位）
+
+对接 JobHelper MCP 服务，提供简历全生命周期与岗位能力：
+
+- **简历保存** - 用户发送 PDF 简历后自动保存，原始文件持久化在 JobHelper 服务端，本地仅保留短期上下文缓存（过期自动清理，可回源加载）
+- **简历管理** - 取回 / 清除已保存的简历
+- **简历分析 / 评分** - 基于已保存简历生成分析与评分
+- **岗位搜索** - 按城市、关键词搜索实习 / 校招 / 社招岗位
+- **岗位推荐** - 结合简历自动推荐匹配岗位，并支持多城市、多关键词的复合请求
+
+注意事项：
+
+- 简历格式仅支持 PDF，大小不超过 10MB
+- 未保存简历时调用分析、评分、推荐会返回友好提示，不会报错
+- 岗位搜索时如缺少城市或关键词，工具会主动追问补齐
+
+**使用示例：**
+
+```
+用户：[发送文件] 我的简历.pdf
+AI：收到简历，已保存。之后可以直接让我分析简历或推荐岗位。
+
+用户：根据我的简历给我推荐一下实习岗位
+AI：[调用 career_job_recommendation] 根据你的简历推荐如下岗位...
+
+用户：帮我搜索上海后端实习岗位
+AI：[调用 career_job_search] 为你找到以下上海后端实习岗位...
+
+用户：把我的简历发给我
+AI：[调用 career_resume_retrieve] 附件：我的简历.pdf
+
+用户：分析一下我的简历
+AI：[调用 career_resume_analyze] 简历分析结果...
 ```
 
 ### 智能文档发送
@@ -142,13 +194,19 @@ AI：[生成 Markdown] → 自动转换为 .md 文件发送
 
 Agent 编排层
   └─ AgentOrchestrator
-       ├─ LLM 任务规划（高层任务拆解：chat / voice_synthesize / image_generate）
-       ├─ TaskExecutor（按步骤执行，处理步骤间依赖）
+       ├─ PromptLoader（读取 ai/prompts/agent-planner.md 规划提示词模板）
+       ├─ LLM 任务规划（所有消息统一交规划模型拆解：chat / voice / image / video / career / file）
+       ├─ PlanValidator（校验并重试非法规划结果）
+       ├─ TaskExecutor（按步骤执行，合并多步媒体附件）
        └─ ToolRegistry（自动发现 ToolHandler 实现）
+
+职业服务层
+  ├─ JobHelperMcpClient（MCP 客户端，简历持久化与岗位服务）
+  └─ CareerTaskService（异步职业任务，如岗位推荐）
 
 模型层
   ├─ ChatHandler（Spring AI function calling，模型自主调用底层工具）
-  ├─ PlainTextLlmService（纯文本 LLM 调用，用于任务规划）
+  ├─ PlainTextLlmService（纯文本 LLM 调用，用于任务规划与聊天）
   └─ LlmToolRegistry（@Tool 注解自动注册）
 
 工具层（由 chat 模型通过 function calling 自主调用）
@@ -162,9 +220,13 @@ Agent 编排层
   └─ SummaryTools          对话总结
 
 高层工具（由 Agent 编排器直接调度）
-  ├─ ChatToolHandler       对话处理（模型内部自主调用底层工具）
-  ├─ VoiceSynthesizeToolHandler  语音合成（含文本口语化润色）
-  └─ ImageGenerateToolHandler    图片生成
+  ├─ ChatToolHandler        对话处理（模型内部自主调用底层工具）
+  ├─ VoiceSynthesizeToolHandler  语音合成（含口语化润色与超时重试）
+  ├─ ImageGenerateToolHandler    图片生成
+  ├─ VideoGenerateToolHandler    视频生成
+  ├─ CareerResume*ToolHandler    简历保存 / 取回 / 清除 / 分析 / 评分
+  ├─ CareerJob*ToolHandler       岗位搜索 / 推荐
+  └─ KnowledgeFileRetrieveToolHandler  知识库文件取回
 
 外部服务层
   ├─ 火山引擎 / OpenAI 兼容模型    AI 推理
@@ -172,10 +234,12 @@ Agent 编排层
   ├─ 博查搜索                       网络搜索
   ├─ 心知天气                       天气查询
   ├─ RAGFlow（Docker）              知识库检索 / 文档管理 / 向量存储
+  ├─ JobHelper（MCP）               简历持久化 / 岗位数据 / 推荐服务
   └─ SMTP 邮件服务                  邮件发送
 
 存储层
-  └─ SQLite                会话、消息、提醒、记忆等本地持久化
+  ├─ SQLite                会话、消息、提醒、记忆等本地持久化
+  └─ JobHelper 服务端存储    简历原始文件（PDF）与岗位数据
 ```
 
 ### 架构设计原则
@@ -401,38 +465,43 @@ wxclaw:
 
 ```
 wx-claw/
-├── wx-claw-backfront/
+├── wx-claw-backfront/                 # Spring Boot 后端
 │   └── src/main/java/com/dust/wxclawbackfront/
-├── wx-claw-admin/                  # Vue 3 只读管理端
-│       ├── ai/
-│       │   ├── agent/             # Agent 编排系统
-│       │   │   ├── model/         # 数据模型（AgentContext, AgentResult, TaskPlan, TaskStep, TaskResult）
-│       │   │   └── orchestrator/  # 编排器
-│       │   │       ├── executor/  # 任务执行器
-│       │   │       └── tool/      # 工具注册与处理器
-│       │   │           └── handler/  # 具体工具实现（Chat, Voice, Image）
-│       │   ├── chat/              # 对话处理（ChatHandler, LlmToolRegistry, PlainTextLlmService）
-│       │   ├── image/             # 图片生成
-│       │   ├── voice/             # 语音合成
-│       │   ├── ragflow/           # RAGFlow 知识库客户端
-│       │   ├── document/          # 文档生成
-│       │   ├── service/           # 业务服务
-│       │   ├── dao/               # 数据访问层（Entity, Repository）
-│       │   ├── api/               # REST API
-│       │   └── tools/             # AI 底层工具
-│       │       ├── time/          # 时间工具
-│       │       ├── weather/       # 天气工具
-│       │       ├── search/        # 搜索工具
-│       │       ├── reminder/      # 提醒工具
-│       │       ├── summary/       # 总结工具
-│       │       ├── memory/        # 记忆工具
-│       │       ├── mail/          # 邮件工具
-│       │       ├── ragflow/       # 知识库工具
-│       │       └── shared/        # 共享组件
-│       ├── ilnk/                  # ILink 接入
-│       ├── scheduler/             # 定时任务
-│       └── config/                # 配置类
-└── docs/                          # 文档
+│       ├── bot/                       # Bot 业务
+│       │   ├── agent/                 # Agent 编排系统
+│       │   │   ├── model/             # 数据模型（AgentContext, AgentResult, TaskPlan, TaskStep, TaskResult, MediaAttachment）
+│       │   │   ├── orchestrator/      # 编排器（AgentOrchestrator, PlanValidator）
+│       │   │   │   ├── executor/      # 任务执行器（TaskExecutor，多步媒体合并）
+│       │   │   │   └── tool/          # 工具注册与处理器
+│       │   │   │       └── handler/   # 具体工具实现（Chat, Voice, Image, Video, Career, KnowledgeFile）
+│       │   │   ├── prompt/            # 提示词加载器（模板变量与条件段渲染）
+│       │   │   ├── career/            # 职业助手（简历上下文、查询规范化、任务服务）
+│       │   │   ├── mcp/               # MCP 客户端（jobhelper 简历与岗位服务）
+│       │   │   ├── llm/               # 对话处理（ChatHandler, PlainTextLlmService）+ 图片/语音/视频
+│       │   │   └── tools/             # AI 底层工具
+│       │   │       ├── time/          # 时间工具
+│       │   │       ├── weather/       # 天气工具
+│       │   │       ├── search/        # 搜索工具
+│       │   │       ├── reminder/      # 提醒工具
+│       │   │       ├── summary/       # 总结工具
+│       │   │       ├── memory/        # 记忆工具
+│       │   │       ├── mail/          # 邮件工具
+│       │   │       ├── ragflow/       # 知识库工具
+│       │   │       └── shared/        # 共享组件
+│       │   ├── api/                   # REST API
+│       │   ├── dao/                   # 数据访问层
+│       │   ├── knowledge/             # 知识库业务
+│       │   ├── ragflow/               # RAGFlow 客户端
+│       │   ├── service/               # 业务服务
+│       │   └── scheduler/             # 定时任务
+│       ├── ilink/                     # ILink 接入
+│       ├── tenancy/                   # 多租户
+│       └── config/                    # 配置类
+│   └── src/main/resources/
+│       ├── ai/prompts/                # Agent 编排提示词模板（agent-planner.md）
+│       └── ai/skills/                 # Spring AI 技能定义
+├── wx-claw-admin/                     # Vue 3 只读管理端
+└── docs/                              # 文档
 ```
 
 ## 工具开发
@@ -484,6 +553,23 @@ public class MyToolHandler implements ToolHandler {
     }
 }
 ```
+
+### 编排提示词维护
+
+Agent 规划提示词统一存放在 `wx-claw-backfront/src/main/resources/ai/prompts/`，由 `PromptLoader` 每次调用实时加载：修改提示词无需改代码、无需重启即可生效（生产环境建议配合 CI 校验）：
+
+```text
+ai/prompts/
+  └── agent-planner.md    # 编排模型提示词模板
+```
+
+模板支持：
+
+- **变量替换** - `{{user_message}}`、`{{#history}}` 等占位符注入用户消息与对话历史
+- **条件段** - `{{#career_enabled}}...{{/career_enabled}}` 按功能开关渲染职业工具与规则
+- **快速失败** - 文件缺失、变量缺失、条件段未闭合都会直接抛异常，避免静默生成错误提示词
+
+硬编码意图识别已移除：所有消息统一交给规划模型，由模型根据提示词自行判断是否调用工具、拆解步骤并提取岗位参数；规划失败时降级为普通对话。
 
 ### 工具执行顺序
 
@@ -551,7 +637,18 @@ logging:
 
 ## 更新日志
 
-### v2.0 (当前版本)
+### v2.1 (当前版本)
+
+- **编排提示词文件化** - 规划提示词从 Java 代码迁移至 `ai/prompts/agent-planner.md`，支持变量替换与 career 条件段，缺失即快速失败
+- **意图识别交还模型** - 删除 `requiresHighLevelPlanning` 等硬编码关键词判断，所有消息统一交规划模型，规划失败统一降级 chat
+- **岗位参数模型化** - 规划模型按 `steps.params.input` 分句并提取岗位参数，职业工具处理器据此回填缺失参数或追问
+- **职业助手完善** - 简历保存/取回/清除/分析/评分、岗位搜索与推荐接入 JobHelper MCP，无简历时返回友好提示
+- **多媒体附件** - 多步骤任务的多条媒体附件合并后逐条发送（图片/语音/视频）
+- **语音可靠性** - TTS 增加超时重试与最大尝试次数配置（`wxclaw.tts.*`）
+- **评测与回归** - 新增编排黄金调度用例与提示词离线评测 runner（默认排除于常规 CI）
+- **岗位结果修复** - 岗位压缩结果不再携带完整描述与任职要求
+
+### v2.0
 
 - **Agent 编排系统** - 引入 LLM 驱动的任务编排，支持多步骤任务自动拆解和执行
 - **Spring AI Function Calling** - 底层工具由 chat 模型通过 function calling 自主调用，工具真正成为"大模型的手"
