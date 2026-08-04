@@ -138,6 +138,8 @@ wxclaw:
     # 游标推进：批量消息处理完成等待上限；超时不推进游标，依赖重新投递恢复
     checkpoint:
       drain-timeout-seconds: 300
+    # ResumeContext 存储后端：db（MySQL，多实例共享，默认）/ file（本地文件，单机兼容）
+    resume-context-store: db
     # 孤儿 ResumeContext 文件清理（不再属于 ACTIVE Bot）
     resume-context-cleanup:
       cron: 0 45 3 * * ?
@@ -227,6 +229,8 @@ wxclaw:
     retry-failed: true
     max-retry-count: 3
     retry-backoff-seconds: 30
+    # 周期任务连续失败达到阈值后暂停（FAILED）并告警
+    max-consecutive-failures: 5
     # 终态/孤儿任务定时清理
     cleanup:
       enabled: true
@@ -262,6 +266,9 @@ wxclaw:
       enabled: true
       cron: 0 15 3 * * ?
       retention-days: 30
+      # 滞留未完成回执的死信告警
+      deadletter-alert-enabled: true
+      deadletter-cron: 0 30 4 * * ?
     # LLM 调用观测记录，默认保留 90 天
     llm-invocations:
       enabled: true

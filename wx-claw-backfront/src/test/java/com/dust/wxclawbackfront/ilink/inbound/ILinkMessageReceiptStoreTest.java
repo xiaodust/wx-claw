@@ -5,6 +5,7 @@ import com.github.wechat.ilink.sdk.core.model.WeixinMessage;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.PreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 
@@ -120,5 +121,20 @@ class ILinkMessageReceiptStoreTest {
                 argThat(sql -> sql.contains("DELETE FROM ilink_message_receipt")
                         && sql.contains("status = 'DONE'") && sql.contains("LIMIT")),
                 any(PreparedStatementSetter.class));
+    }
+
+    @Test
+    void alertsOnStuckReceipts() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ILinkMessageReceiptStore store = new ILinkMessageReceiptStore(jdbcTemplate);
+        ReflectionTestUtils.setField(store, "deadletterAlertEnabled", true);
+        when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), any()))
+                .thenReturn(3);
+
+        store.alertStuckReceipts();
+
+        verify(jdbcTemplate).queryForObject(
+                argThat(sql -> sql.contains("SELECT COUNT(*)") && sql.contains("status <> 'DONE'")),
+                eq(Integer.class), any());
     }
 }

@@ -106,6 +106,12 @@ public class ReminderTask extends TenantOwnedEntity {
     @Column(nullable = false)
     private Integer retryCount = 0;
 
+    /**
+     * 连续失败次数（周期任务用，达到阈值后暂停并告警）
+     */
+    @Column(name = "consecutive_failures", nullable = false)
+    private Integer consecutiveFailures = 0;
+
     @PrePersist
     protected void onCreate() {
         TenantContext context = TenantContextHolder.require();
@@ -121,6 +127,9 @@ public class ReminderTask extends TenantOwnedEntity {
         }
         if (retryCount == null) {
             retryCount = 0;
+        }
+        if (consecutiveFailures == null) {
+            consecutiveFailures = 0;
         }
     }
 }

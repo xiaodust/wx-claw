@@ -66,6 +66,9 @@ public class DynamicTaskSchedulerService {
     @Value("${wxclaw.reminder.retry-backoff-seconds:30}")
     private long retryBackoffSeconds;
 
+    @Value("${wxclaw.reminder.max-consecutive-failures:5}")
+    private int maxConsecutiveFailures;
+
     // 任务ID -> 调度句柄
     private final Map<TenantTaskKey, ScheduledFuture<?>> scheduledTasks = new ConcurrentHashMap<>();
 
@@ -207,12 +210,14 @@ public class DynamicTaskSchedulerService {
                     // 一次性任务，标记为已执行
                     task.setStatus("EXECUTED");
                     task.setExecutedAt(now);
+                    task.setConsecutiveFailures(0);
                     repository.save(task);
                     scheduledTasks.remove(new TenantTaskKey(taskContext.tenantId(), taskId));
                     log.info("一次性任务执行成功: taskId={}", taskId);
                 } else {
                     // 周期任务，更新执行时间（但保持 PENDING 状态，继续等待下次触发）
                     task.setExecutedAt(now);
+                    task.setConsecutiveFailures(0);
                     repository.save(task);
                     log.info("周期任务执行成功: taskId={}, nextTrigger will be determined by cron", taskId);
                 }
@@ -231,7 +236,7 @@ public class DynamicTaskSchedulerService {
     /**
      * 处理任务执行失败：一次性任务按 {@code retry-failed}/{@code max-retry-count}
      * 以指数退避重新入队，超过次数或不可重试错误才置为 FAILED；
-     * 周期任务保持 PENDING，等待下次触发时重试。
+     * 周期任务保持 PENDING 等待下次触发，连续失败达到阈值后暂停（FAILED）并告警。
      */
     private void handleFailure(ReminderTask task, Throwable error) {
         String errorMessage = error == null ? "执行失败"
@@ -262,8 +267,21 @@ public class DynamicTaskSchedulerService {
                 log.warn("一次性任务执行失败: taskId={}, error={}", task.getId(), errorMessage);
             }
         } else {
-            repository.save(task);
-            log.warn("周期任务执行失败，将在下次触发时重试: taskId={}, error={}", task.getId(), errorMessage);
+            int consecutive = task.getConsecutiveFailures() == null
+                    ? 0 : task.getConsecutiveFailures();
+            task.setConsecutiveFailures(consecutive + 1);
+            if (task.getConsecutiveFailures() >= maxConsecutiveFailures) {
+                task.setStatus("FAILED");
+                task.setExecutedAt(LocalDateTime.now(ZoneId.of(timeZone)));
+                scheduledTasks.remove(key(task));
+                repository.save(task);
+                log.error("周期任务连续失败 {} 次，已暂停: taskId={}, error={}",
+                        task.getConsecutiveFailures(), task.getId(), errorMessage);
+            } else {
+                repository.save(task);
+                log.warn("周期任务执行失败（连续 {} 次），将在下次触发时重试: taskId={}, error={}",
+                        task.getConsecutiveFailures(), task.getId(), errorMessage);
+            }
         }
     }
 

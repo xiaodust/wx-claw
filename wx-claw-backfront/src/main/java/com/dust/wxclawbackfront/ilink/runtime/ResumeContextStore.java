@@ -5,10 +5,12 @@ import com.github.wechat.ilink.sdk.core.context.ConversationContext;
 import com.github.wechat.ilink.sdk.core.context.ContextKey;
 import com.github.wechat.ilink.sdk.core.context.ResumeContext;
 import com.github.wechat.ilink.sdk.core.login.LoginContext;
+import com.dust.wxclawbackfront.tenancy.entity.TenantBot;
 import com.dust.wxclawbackfront.tenancy.repository.TenantBotRepository;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -28,14 +30,23 @@ import java.util.stream.Collectors;
 public class ResumeContextStore {
 
     private static final String CONTEXT_FILE_PREFIX = ".ilink-resume-context-";
+    private static final String MODE_DB = "db";
     private final ObjectMapper objectMapper;
     private final TenantBotRepository tenantBotRepository;
+    private final JdbcTemplate jdbcTemplate;
 
     @Value("${wxclaw.ilink.resume-context-cleanup.enabled:true}")
     private boolean orphanCleanupEnabled;
 
-    public ResumeContextStore(TenantBotRepository tenantBotRepository) {
+    /**
+     * 存储后端：db（MySQL，多实例共享，默认）/ file（本地文件，单机兼容）。
+     */
+    @Value("${wxclaw.ilink.resume-context-store:db}")
+    private String storageMode;
+
+    public ResumeContextStore(TenantBotRepository tenantBotRepository, JdbcTemplate jdbcTemplate) {
         this.tenantBotRepository = tenantBotRepository;
+        this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = new ObjectMapper();
         // 忽略 JSON 中未知的字段，避免格式升级时报错
         this.objectMapper.configure(
@@ -45,7 +56,7 @@ public class ResumeContextStore {
     }
 
     /**
-     * 保存 ResumeContext 到本地文件
+     * 保存 ResumeContext（DB upsert 或本地文件）。
      */
     public void save(BotRuntimeKey key, ResumeContext context) {
         if (context == null) {
@@ -56,20 +67,65 @@ public class ResumeContextStore {
         try {
             // 转换为可序列化的 DTO
             ResumeContextDTO dto = toDTO(context);
-            
-            File file = contextFile(key);
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(file, dto);
-            log.info("ResumeContext 已保存到文件: {}，包含 {} 个用户的 context token", 
-                    file.getAbsolutePath(), dto.getConversationContexts().size());
+            if (useDb()) {
+                String json = objectMapper.writeValueAsString(dto);
+                jdbcTemplate.update("""
+                                INSERT INTO ilink_resume_context (tenant_id, bot_id, payload, updated_at)
+                                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                                ON DUPLICATE KEY UPDATE payload = VALUES(payload), updated_at = CURRENT_TIMESTAMP
+                                """,
+                        key.tenantId(), key.botId(), json);
+                log.info("ResumeContext 已保存到 DB: tenantId={}, botId={}，包含 {} 个用户的 context token",
+                        key.tenantId(), key.botId(), dto.getConversationContexts().size());
+            } else {
+                File file = contextFile(key);
+                objectMapper.writerWithDefaultPrettyPrinter().writeValue(file, dto);
+                log.info("ResumeContext 已保存到文件: {}，包含 {} 个用户的 context token",
+                        file.getAbsolutePath(), dto.getConversationContexts().size());
+            }
         } catch (Exception e) {
             log.error("保存 ResumeContext 失败: {}", e.getMessage(), e);
         }
     }
 
     /**
-     * 从本地文件加载 ResumeContext
+     * 加载 ResumeContext（DB 优先，DB 无记录时兼容迁移本地文件）。
      */
     public ResumeContext load(BotRuntimeKey key) {
+        if (useDb()) {
+            try {
+                List<String> payloads = jdbcTemplate.queryForList("""
+                                SELECT payload FROM ilink_resume_context
+                                WHERE tenant_id = ? AND bot_id = ?
+                                """, String.class, key.tenantId(), key.botId());
+                if (!payloads.isEmpty()) {
+                    ResumeContextDTO dto = objectMapper.readValue(payloads.get(0), ResumeContextDTO.class);
+                    ResumeContext context = fromDTO(dto);
+                    log.info("ResumeContext 已从 DB 加载: tenantId={}, botId={}，包含 {} 个用户的 context token",
+                            key.tenantId(), key.botId(), dto.getConversationContexts().size());
+                    return context;
+                }
+                // 兼容迁移：本地旧文件存在则读取并写入 DB
+                File file = contextFile(key);
+                if (file.exists()) {
+                    ResumeContext legacy = loadFromFile(key);
+                    if (legacy != null) {
+                        save(key, legacy);
+                    }
+                    return legacy;
+                }
+                log.info("ResumeContext 不存在（DB），将从空状态启动: tenantId={}, botId={}",
+                        key.tenantId(), key.botId());
+                return null;
+            } catch (Exception e) {
+                log.error("从 DB 加载 ResumeContext 失败，将从空状态启动: {}", e.getMessage(), e);
+                return null;
+            }
+        }
+        return loadFromFile(key);
+    }
+
+    private ResumeContext loadFromFile(BotRuntimeKey key) {
         File file = contextFile(key);
         if (!file.exists()) {
             log.info("ResumeContext 文件不存在，将从空状态启动: {}", file.getAbsolutePath());
@@ -89,13 +145,30 @@ public class ResumeContextStore {
     }
 
     public boolean exists(BotRuntimeKey key) {
+        if (useDb()) {
+            Integer count = jdbcTemplate.queryForObject("""
+                            SELECT COUNT(*) FROM ilink_resume_context
+                            WHERE tenant_id = ? AND bot_id = ?
+                            """, Integer.class, key.tenantId(), key.botId());
+            return count != null && count > 0;
+        }
         return contextFile(key).exists();
     }
 
     /**
-     * 删除持久化文件
+     * 删除持久化记录（DB 行或本地文件）。
      */
     public void delete(BotRuntimeKey key) {
+        if (useDb()) {
+            int deleted = jdbcTemplate.update("""
+                            DELETE FROM ilink_resume_context
+                            WHERE tenant_id = ? AND bot_id = ?
+                            """, key.tenantId(), key.botId());
+            if (deleted > 0) {
+                log.info("ResumeContext 记录已删除（DB）: tenantId={}, botId={}", key.tenantId(), key.botId());
+            }
+            return;
+        }
         File file = contextFile(key);
         if (file.exists() && file.delete()) {
             log.info("ResumeContext 文件已删除: {}", file.getAbsolutePath());
@@ -103,15 +176,34 @@ public class ResumeContextStore {
     }
 
     /**
-     * 定时清理不再属于任何 ACTIVE Bot 的 ResumeContext 文件，
-     * 防止 Bot 被删除或停用后登录上下文文件永久残留。
+     * 定时清理不再属于任何 ACTIVE Bot 的 ResumeContext 记录/文件，
+     * 防止 Bot 被删除或停用后登录上下文永久残留。
      */
     @Scheduled(cron = "${wxclaw.ilink.resume-context-cleanup.cron:0 45 3 * * ?}")
     public void cleanupOrphanedFiles() {
         if (!orphanCleanupEnabled) {
             return;
         }
-        Set<String> expectedFileNames = tenantBotRepository.findByChannelAndStatus("ILINK", "ACTIVE").stream()
+        List<TenantBot> activeBots =
+                tenantBotRepository.findByChannelAndStatus("ILINK", "ACTIVE");
+        if (activeBots.isEmpty()) {
+            log.warn("没有 ACTIVE ILink Bot，跳过 ResumeContext 孤儿清理，避免误删");
+            return;
+        }
+        if (useDb()) {
+            int deleted = jdbcTemplate.update("""
+                            DELETE c FROM ilink_resume_context c
+                            LEFT JOIN tenant_bot b
+                              ON b.channel = 'ILINK' AND b.status = 'ACTIVE'
+                             AND b.tenant_id = c.tenant_id AND b.bot_id = c.bot_id
+                            WHERE b.id IS NULL
+                            """);
+            if (deleted > 0) {
+                log.info("已清理 {} 条孤儿 ResumeContext 记录（DB）", deleted);
+            }
+            return;
+        }
+        Set<String> expectedFileNames = activeBots.stream()
                 .map(bot -> contextFileName(bot.getTenantId(), bot.getBotId()))
                 .collect(Collectors.toSet());
         File dir = new File(".");
@@ -129,6 +221,10 @@ public class ResumeContextStore {
 
     private File contextFile(BotRuntimeKey key) {
         return new File(contextFileName(key.tenantId(), key.botId()));
+    }
+
+    private boolean useDb() {
+        return MODE_DB.equalsIgnoreCase(storageMode);
     }
 
     private String contextFileName(String tenantId, String botId) {

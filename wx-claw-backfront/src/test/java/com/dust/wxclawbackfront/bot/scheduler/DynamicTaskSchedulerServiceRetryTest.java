@@ -42,6 +42,7 @@ class DynamicTaskSchedulerServiceRetryTest {
         ReflectionTestUtils.setField(service, "retryFailed", true);
         ReflectionTestUtils.setField(service, "maxRetryCount", 3);
         ReflectionTestUtils.setField(service, "retryBackoffSeconds", 30L);
+        ReflectionTestUtils.setField(service, "maxConsecutiveFailures", 5);
     }
 
     @Test
@@ -106,6 +107,39 @@ class DynamicTaskSchedulerServiceRetryTest {
         assertThat(task.getStatus()).isEqualTo("PENDING");
         assertThat(task.getRetryCount()).isEqualTo(1);
         verify(repository, times(1)).save(task);
+    }
+
+    @Test
+    void pausesCronTaskAfterConsecutiveFailureThreshold() {
+        ReminderTask task = oneTimeTask(0);
+        task.setTaskType("DAILY");
+        task.setConsecutiveFailures(4);
+        TaskActionExecutor executor = mock(TaskActionExecutor.class);
+        when(executor.execute(task)).thenReturn(false);
+        when(repository.findByTenantIdAndId("tenant-a", 1L)).thenReturn(Optional.of(task));
+        when(executorRegistry.getExecutor("REMINDER")).thenReturn(executor);
+
+        service.executeTask(task);
+
+        assertThat(task.getStatus()).isEqualTo("FAILED");
+        assertThat(task.getConsecutiveFailures()).isEqualTo(5);
+        verify(repository, times(1)).save(task);
+    }
+
+    @Test
+    void resetsConsecutiveFailuresOnSuccess() {
+        ReminderTask task = oneTimeTask(0);
+        task.setTaskType("DAILY");
+        task.setConsecutiveFailures(4);
+        TaskActionExecutor executor = mock(TaskActionExecutor.class);
+        when(executor.execute(task)).thenReturn(true);
+        when(repository.findByTenantIdAndId("tenant-a", 1L)).thenReturn(Optional.of(task));
+        when(executorRegistry.getExecutor("REMINDER")).thenReturn(executor);
+
+        service.executeTask(task);
+
+        assertThat(task.getStatus()).isEqualTo("PENDING");
+        assertThat(task.getConsecutiveFailures()).isZero();
     }
 
     private ReminderTask oneTimeTask(int retryCount) {

@@ -43,6 +43,9 @@ public class ILinkMessageReceiptStore {
     @Value("${wxclaw.ilink.receipt.reclaim-lease-seconds:240}")
     private long reclaimLeaseSeconds;
 
+    @Value("${wxclaw.cleanup.receipts.deadletter-alert-enabled:true}")
+    private boolean deadletterAlertEnabled;
+
     public boolean claim(BotRuntimeKey runtimeKey, WeixinMessage message) {
         if (message.getMessage_id() == null) {
             return true;
@@ -165,5 +168,27 @@ public class ILinkMessageReceiptStore {
             total += batch;
         } while (batch >= DELETE_BATCH_SIZE);
         return total;
+    }
+
+    /**
+     * 死信告警：扫描长期停留在 RECEIVED/PROCESSING 的滞留回执（超过 3 倍租约），
+     * 提示可能存在 worker 挂起或崩溃残留，避免静默堆积。
+     */
+    @Scheduled(cron = "${wxclaw.cleanup.receipts.deadletter-cron:0 30 4 * * ?}")
+    public void alertStuckReceipts() {
+        if (!deadletterAlertEnabled) {
+            return;
+        }
+        LocalDateTime cutoff = LocalDateTime.now()
+                .minusSeconds(Math.max(1, reclaimLeaseSeconds) * 3);
+        Integer count = jdbcTemplate.queryForObject("""
+                        SELECT COUNT(*) FROM ilink_message_receipt
+                        WHERE status <> 'DONE' AND received_at < ?
+                        """, Integer.class, cutoff);
+        if (count != null && count > 0) {
+            log.error("检测到 {} 条滞留未完成的消息回执（RECEIVED/PROCESSING 超过 {} 秒），"
+                            + "疑似 worker 挂起或崩溃残留，请检查处理链路",
+                    count, Math.max(1, reclaimLeaseSeconds) * 3);
+        }
     }
 }
