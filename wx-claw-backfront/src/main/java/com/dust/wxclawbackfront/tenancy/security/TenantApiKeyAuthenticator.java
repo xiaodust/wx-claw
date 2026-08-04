@@ -7,6 +7,7 @@ import com.dust.wxclawbackfront.tenancy.repository.TenantApiCredentialRepository
 import com.dust.wxclawbackfront.tenancy.repository.TenantRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -127,6 +128,18 @@ public class TenantApiKeyAuthenticator {
                 return true;
             }
         }
+    }
+
+    /**
+     * 定时清理认证缓存与 last_used 写入标记，防止停用/删除的凭证条目永久驻留。
+     */
+    @Scheduled(fixedDelayString = "${wxclaw.api.authentication-cache-cleanup-ms:600000}")
+    public void cleanupCaches() {
+        Instant now = Instant.now();
+        authenticationCache.entrySet().removeIf(entry -> !entry.getValue().validUntil().isAfter(now));
+        long maxAgeSeconds = Math.max(60, lastUsedWriteIntervalSeconds * 2);
+        Instant lastUsedCutoff = now.minusSeconds(maxAgeSeconds);
+        lastUsedWrites.entrySet().removeIf(entry -> entry.getValue().isBefore(lastUsedCutoff));
     }
 
     private record CachedAuthentication(String fingerprint, String tenantId, Set<String> scopes, Instant validUntil) {

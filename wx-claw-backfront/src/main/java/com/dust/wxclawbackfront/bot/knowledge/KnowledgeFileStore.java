@@ -2,22 +2,34 @@ package com.dust.wxclawbackfront.bot.knowledge;
 
 import com.dust.wxclawbackfront.tenancy.TenantContext;
 import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
+import java.time.Duration;
+import java.time.Instant;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
-import java.time.Instant;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 /** Durable raw-file store used when a knowledge-base file must be returned verbatim. */
+@Slf4j
 @Component
 public class KnowledgeFileStore {
     private final Path root;
+
+    @Value("${wxclaw.knowledge.cleanup-enabled:true}")
+    private boolean cleanupEnabled;
+
+    @Value("${wxclaw.knowledge.file-retention-days:90}")
+    private int fileRetentionDays;
 
     public KnowledgeFileStore(@Value("${wxclaw.knowledge.file-storage-dir:.uploads/knowledge-files}") String storageDir) {
         this.root = Path.of(storageDir).toAbsolutePath().normalize();
@@ -56,6 +68,69 @@ public class KnowledgeFileStore {
         } catch (Exception ex) {
             return Optional.empty();
         }
+    }
+
+    /**
+     * 删除指定标签对应的原始文件与元数据。
+     */
+    public void delete(String label) {
+        String safeLabel = normalizeLabel(label);
+        String key = digest(identity() + "|" + safeLabel);
+        try {
+            boolean deleted = Files.deleteIfExists(root.resolve(key + ".bin"));
+            deleted |= Files.deleteIfExists(root.resolve(key + ".meta"));
+            if (deleted) {
+                log.info("已删除知识库原始文件: label={}", safeLabel);
+            }
+        } catch (IOException ex) {
+            throw new IllegalStateException("无法删除知识库文件", ex);
+        }
+    }
+
+    /**
+     * 定时删除超过保留期（按文件修改时间）的原始文件，防止磁盘无限增长。
+     */
+    @Scheduled(cron = "${wxclaw.knowledge.cleanup-cron:0 15 4 * * ?}")
+    public void cleanupExpiredScheduled() {
+        if (!cleanupEnabled) {
+            return;
+        }
+        long deleted = cleanupOlderThan(Duration.ofDays(Math.max(1, fileRetentionDays)));
+        if (deleted > 0) {
+            log.info("已清理 {} 个超过保留期的知识库文件（保留 {} 天）", deleted, fileRetentionDays);
+        }
+    }
+
+    /**
+     * 删除修改时间早于 {@code maxAge} 的 {@code .bin}/{@code .meta} 文件。
+     */
+    public long cleanupOlderThan(Duration maxAge) {
+        if (maxAge == null || maxAge.isNegative() || !Files.isDirectory(root)) {
+            return 0;
+        }
+        Instant cutoff = Instant.now().minus(maxAge);
+        long deleted = 0;
+        try (Stream<Path> paths = Files.list(root)) {
+            for (Path path : paths.toList()) {
+                String name = path.getFileName().toString();
+                if (!name.endsWith(".bin") && !name.endsWith(".meta")) {
+                    continue;
+                }
+                if (path.toFile().lastModified() > cutoff.toEpochMilli()) {
+                    continue;
+                }
+                try {
+                    if (Files.deleteIfExists(path)) {
+                        deleted++;
+                    }
+                } catch (IOException ex) {
+                    log.warn("清理知识库文件失败: {}", path, ex);
+                }
+            }
+        } catch (IOException ex) {
+            log.warn("扫描知识库目录失败: {}", root, ex);
+        }
+        return deleted;
     }
 
     private String identity() {

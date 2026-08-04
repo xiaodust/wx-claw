@@ -3,8 +3,12 @@ package com.dust.wxclawbackfront.ilink.inbound;
 import com.dust.wxclawbackfront.ilink.runtime.BotRuntimeKey;
 import com.github.wechat.ilink.sdk.core.model.WeixinMessage;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.PreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.time.LocalDateTime;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -42,5 +46,20 @@ class ILinkMessageReceiptStoreTest {
         assertTrue(store.claim(new BotRuntimeKey("tenant-a", "bot-1"), new WeixinMessage()));
 
         verify(jdbcTemplate, times(0)).update(anyString(), any(Object[].class));
+    }
+
+    @Test
+    void deletesReceiptsOlderThanCutoff() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        ILinkMessageReceiptStore store = new ILinkMessageReceiptStore(jdbcTemplate);
+        when(jdbcTemplate.update(anyString(), any(PreparedStatementSetter.class))).thenReturn(1000, 5);
+
+        LocalDateTime cutoff = LocalDateTime.now().minusDays(30);
+        long deleted = store.deleteOlderThan(cutoff);
+
+        assertEquals(1005, deleted);
+        verify(jdbcTemplate, times(2)).update(
+                argThat(sql -> sql.startsWith("DELETE FROM ilink_message_receipt") && sql.contains("LIMIT")),
+                any(PreparedStatementSetter.class));
     }
 }

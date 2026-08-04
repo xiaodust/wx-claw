@@ -2,8 +2,12 @@ package com.dust.wxclawbackfront.ilink.inbound;
 
 import com.dust.wxclawbackfront.ilink.ILinkUserInput;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -20,12 +24,21 @@ public class MediaContextManager {
     private final ConcurrentHashMap<String, String> pendingFileContexts = new ConcurrentHashMap<>();
     // 待上传的文件：存储文件字节，用于用户确认后上传到知识库
     private final ConcurrentHashMap<String, PendingFileUpload> pendingFileUploads = new ConcurrentHashMap<>();
+    // 各待处理上下文的最后更新时间，用于定期清理用户不再续接的媒体上下文
+    private final ConcurrentHashMap<String, Instant> pendingImageTimes = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Instant> pendingVideoTimes = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Instant> pendingFileTimes = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Instant> pendingUploadTimes = new ConcurrentHashMap<>();
+
+    @Value("${wxclaw.ilink.media-context-max-idle:PT24H}")
+    private Duration maxIdle = Duration.ofHours(24);
 
     /**
      * 存储图片上下文
      */
     public void storeImageContext(String userId, String imageDescription) {
         pendingImageContexts.put(userId, imageDescription);
+        pendingImageTimes.put(userId, Instant.now());
     }
 
     /**
@@ -33,6 +46,7 @@ public class MediaContextManager {
      */
     public void storeVideoContext(String userId, String videoDescription) {
         pendingVideoContexts.put(userId, videoDescription);
+        pendingVideoTimes.put(userId, Instant.now());
     }
 
     /**
@@ -41,6 +55,7 @@ public class MediaContextManager {
     public void storeFileContext(String userId, ILinkUserInput userInput) {
         String fileInfo = buildFileInfo(userInput);
         pendingFileContexts.put(userId, fileInfo);
+        pendingFileTimes.put(userId, Instant.now());
 
         storePendingFileUpload(userId, userInput);
     }
@@ -52,6 +67,7 @@ public class MediaContextManager {
         if (userInput.getFileBytes() != null && userInput.getFileBytes().length > 0) {
             pendingFileUploads.put(userId, new PendingFileUpload(
                     userInput.getFileName(), userInput.getFileBytes()));
+            pendingUploadTimes.put(userId, Instant.now());
         }
     }
 
@@ -59,6 +75,7 @@ public class MediaContextManager {
      * 获取并移除图片上下文
      */
     public String takeImageContext(String userId) {
+        pendingImageTimes.remove(userId);
         return pendingImageContexts.remove(userId);
     }
 
@@ -67,6 +84,7 @@ public class MediaContextManager {
     }
 
     public void clearImageContext(String userId) {
+        pendingImageTimes.remove(userId);
         pendingImageContexts.remove(userId);
     }
 
@@ -74,6 +92,7 @@ public class MediaContextManager {
      * 获取并移除视频上下文
      */
     public String takeVideoContext(String userId) {
+        pendingVideoTimes.remove(userId);
         return pendingVideoContexts.remove(userId);
     }
 
@@ -82,6 +101,7 @@ public class MediaContextManager {
     }
 
     public void clearVideoContext(String userId) {
+        pendingVideoTimes.remove(userId);
         pendingVideoContexts.remove(userId);
     }
 
@@ -89,6 +109,7 @@ public class MediaContextManager {
      * 获取并移除文件上下文
      */
     public String takeFileContext(String userId) {
+        pendingFileTimes.remove(userId);
         return pendingFileContexts.remove(userId);
     }
 
@@ -97,6 +118,7 @@ public class MediaContextManager {
     }
 
     public void clearFileContext(String userId) {
+        pendingFileTimes.remove(userId);
         pendingFileContexts.remove(userId);
     }
 
@@ -104,6 +126,7 @@ public class MediaContextManager {
      * 获取并移除待上传文件
      */
     public PendingFileUpload takePendingFileUpload(String userId) {
+        pendingUploadTimes.remove(userId);
         return pendingFileUploads.remove(userId);
     }
 
@@ -115,6 +138,7 @@ public class MediaContextManager {
     }
 
     public void clearPendingFileUpload(String userId) {
+        pendingUploadTimes.remove(userId);
         pendingFileUploads.remove(userId);
     }
 
@@ -133,6 +157,47 @@ public class MediaContextManager {
             sb.append("。未能解析文件内容。");
         }
         return sb.toString();
+    }
+
+    /**
+     * 清理超过 {@code maxIdle} 未更新的待处理媒体上下文（含待上传文件字节），
+     * 防止用户发送媒体后不再续接指令导致的内存驻留。
+     */
+    public void cleanupExpired(Duration maxIdle) {
+        cleanupExpired(maxIdle, Instant.now());
+    }
+
+    /**
+     * 供测试指定当前时间；正常调度走 {@link #cleanupExpired(Duration)}。
+     */
+    void cleanupExpired(Duration maxIdle, Instant now) {
+        Instant cutoff = now.minus(maxIdle);
+        removeExpired(pendingImageContexts, pendingImageTimes, cutoff);
+        removeExpired(pendingVideoContexts, pendingVideoTimes, cutoff);
+        removeExpired(pendingFileContexts, pendingFileTimes, cutoff);
+        removeExpired(pendingFileUploads, pendingUploadTimes, cutoff);
+    }
+
+    /**
+     * 定时清理用户不再续接的媒体上下文，防止内存驻留。
+     */
+    @Scheduled(fixedDelayString = "${wxclaw.ilink.media-context-cleanup-ms:3600000}")
+    public void cleanupExpiredScheduled() {
+        if (maxIdle == null || maxIdle.isZero() || maxIdle.isNegative()) {
+            return;
+        }
+        cleanupExpired(maxIdle);
+    }
+
+    private <V> void removeExpired(ConcurrentHashMap<String, V> contents,
+                                   ConcurrentHashMap<String, Instant> times, Instant cutoff) {
+        times.entrySet().removeIf(entry -> {
+            if (entry.getValue().isBefore(cutoff)) {
+                contents.remove(entry.getKey());
+                return true;
+            }
+            return false;
+        });
     }
 
     /**

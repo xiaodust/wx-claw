@@ -42,4 +42,9 @@ public interface ReminderTaskRepository extends JpaRepository<ReminderTask, Long
      * 删除指定状态且创建时间早于指定时间的任务
      */
     long deleteByStatusAndCreatedAtBefore(String status, LocalDateTime createdAt);
+
+    /**
+     * 删除指定任务类型、状态且触发时间早于指定时间的任务（用于清理孤儿 PENDING 一次性任务）
+     */
+    long deleteByTaskTypeAndStatusAndTriggerTimeBefore(String taskType, String status, LocalDateTime triggerTime);
 }

@@ -54,6 +54,9 @@ public class DynamicTaskSchedulerService {
     @Value("${wxclaw.reminder.cleanup.retention-days:7}")
     private int cleanupRetentionDays;
 
+    @Value("${wxclaw.reminder.cleanup.stale-pending-enabled:true}")
+    private boolean cleanupStalePendingEnabled;
+
     // 任务ID -> 调度句柄
     private final Map<TenantTaskKey, ScheduledFuture<?>> scheduledTasks = new ConcurrentHashMap<>();
 
@@ -245,8 +248,8 @@ public class DynamicTaskSchedulerService {
     }
 
     /**
-     * 定时清理已取消、已失败和已执行的任务
-     * 每天凌晨2点执行，清理7天前已取消、已失败和已执行的任务
+     * 定时清理已取消、已失败、已执行以及超期未执行的孤儿任务
+     * 每天凌晨2点执行，清理超过保留期的终态任务与孤儿一次性任务
      */
     @Scheduled(cron = "${wxclaw.reminder.cleanup.cron:0 0 2 * * ?}")
     @Transactional
@@ -275,8 +278,16 @@ public class DynamicTaskSchedulerService {
             if (executedCount > 0) {
                 log.info("已清理 {} 个已执行的任务（创建时间早于 {}）", executedCount, cutoffTime);
             }
+
+            if (cleanupStalePendingEnabled) {
+                long stalePendingCount = repository.deleteByTaskTypeAndStatusAndTriggerTimeBefore(
+                        "ONE_TIME", "PENDING", cutoffTime);
+                if (stalePendingCount > 0) {
+                    log.info("已清理 {} 个超期未执行的孤儿一次性任务（触发时间早于 {}）", stalePendingCount, cutoffTime);
+                }
+            }
         } catch (Exception e) {
-            log.error("清理已取消任务失败: {}", e.getMessage(), e);
+            log.error("定时清理提醒任务失败: {}", e.getMessage(), e);
         }
     }
 

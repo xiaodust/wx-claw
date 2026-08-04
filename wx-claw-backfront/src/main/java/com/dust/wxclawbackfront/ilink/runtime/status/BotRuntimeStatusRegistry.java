@@ -1,16 +1,24 @@
 package com.dust.wxclawbackfront.ilink.runtime.status;
 
 import com.dust.wxclawbackfront.ilink.runtime.BotRuntimeKey;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+@Slf4j
 @Component
 public class BotRuntimeStatusRegistry {
     private final ConcurrentHashMap<BotRuntimeKey, MutableState> states = new ConcurrentHashMap<>();
+
+    @Value("${wxclaw.ilink.status-cleanup.retention-days:7}")
+    private int stoppedRetentionDays;
 
     public void starting(BotRuntimeKey key, boolean resumeContextAvailable) {
         state(key).updateStatus(BotRuntimeStatus.STARTING, 0, null, resumeContextAvailable);
@@ -60,6 +68,22 @@ public class BotRuntimeStatusRegistry {
 
     public List<BotRuntimeSnapshot> snapshots() {
         return states.values().stream().map(MutableState::snapshot).toList();
+    }
+
+    /**
+     * 清理停止时间超过保留期的已停止机器人状态，防止配置中已删除的 Bot 永久残留。
+     */
+    @Scheduled(cron = "${wxclaw.ilink.status-cleanup.cron:0 30 3 * * ?}")
+    public void cleanupStoppedStates() {
+        Instant cutoff = Instant.now().minus(Duration.ofDays(Math.max(1, stoppedRetentionDays)));
+        int before = states.size();
+        states.entrySet().removeIf(entry ->
+                entry.getValue().status == BotRuntimeStatus.STOPPED
+                        && entry.getValue().statusChangedAt.isBefore(cutoff));
+        int removed = before - states.size();
+        if (removed > 0) {
+            log.info("已清理 {} 个超过保留期的已停止 Bot 状态", removed);
+        }
     }
 
     private MutableState state(BotRuntimeKey key) {

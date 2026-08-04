@@ -5,14 +5,19 @@ import com.github.wechat.ilink.sdk.core.context.ConversationContext;
 import com.github.wechat.ilink.sdk.core.context.ContextKey;
 import com.github.wechat.ilink.sdk.core.context.ResumeContext;
 import com.github.wechat.ilink.sdk.core.login.LoginContext;
+import com.dust.wxclawbackfront.tenancy.repository.TenantBotRepository;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * ResumeContext 持久化存储
@@ -24,8 +29,13 @@ public class ResumeContextStore {
 
     private static final String CONTEXT_FILE_PREFIX = ".ilink-resume-context-";
     private final ObjectMapper objectMapper;
+    private final TenantBotRepository tenantBotRepository;
 
-    public ResumeContextStore() {
+    @Value("${wxclaw.ilink.resume-context-cleanup.enabled:true}")
+    private boolean orphanCleanupEnabled;
+
+    public ResumeContextStore(TenantBotRepository tenantBotRepository) {
+        this.tenantBotRepository = tenantBotRepository;
         this.objectMapper = new ObjectMapper();
         // 忽略 JSON 中未知的字段，避免格式升级时报错
         this.objectMapper.configure(
@@ -92,10 +102,44 @@ public class ResumeContextStore {
         }
     }
 
+    /**
+     * 定时清理不再属于任何 ACTIVE Bot 的 ResumeContext 文件，
+     * 防止 Bot 被删除或停用后登录上下文文件永久残留。
+     */
+    @Scheduled(cron = "${wxclaw.ilink.resume-context-cleanup.cron:0 45 3 * * ?}")
+    public void cleanupOrphanedFiles() {
+        if (!orphanCleanupEnabled) {
+            return;
+        }
+        Set<String> expectedFileNames = tenantBotRepository.findByChannelAndStatus("ILINK", "ACTIVE").stream()
+                .map(bot -> contextFileName(bot.getTenantId(), bot.getBotId()))
+                .collect(Collectors.toSet());
+        File dir = new File(".");
+        File[] files = dir.listFiles((d, name) ->
+                name.startsWith(CONTEXT_FILE_PREFIX) && name.endsWith(".json"));
+        if (files == null) {
+            return;
+        }
+        for (File file : files) {
+            if (!expectedFileNames.contains(file.getName()) && file.delete()) {
+                log.info("已清理孤儿 ResumeContext 文件: {}", file.getName());
+            }
+        }
+    }
+
     private File contextFile(BotRuntimeKey key) {
-        String safeTenantId = key.tenantId().replaceAll("[^a-zA-Z0-9._-]", "_");
-        String safeBotId = key.botId().replaceAll("[^a-zA-Z0-9._-]", "_");
-        return new File(CONTEXT_FILE_PREFIX + safeTenantId + "-" + safeBotId + ".json");
+        return new File(contextFileName(key.tenantId(), key.botId()));
+    }
+
+    private String contextFileName(String tenantId, String botId) {
+        return CONTEXT_FILE_PREFIX + sanitize(tenantId) + "-" + sanitize(botId) + ".json";
+    }
+
+    private static String sanitize(String value) {
+        if (value == null) {
+            return "unknown";
+        }
+        return value.replaceAll("[^a-zA-Z0-9._-]", "_");
     }
 
     private ResumeContextDTO toDTO(ResumeContext context) {

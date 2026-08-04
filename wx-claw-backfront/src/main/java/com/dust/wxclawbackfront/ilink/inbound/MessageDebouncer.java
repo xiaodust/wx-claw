@@ -1,6 +1,7 @@
 package com.dust.wxclawbackfront.ilink.inbound;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.math.BigInteger;
@@ -84,5 +85,15 @@ public class MessageDebouncer {
                     Duration.between(entry.getValue(), now).compareTo(CLEANUP_THRESHOLD) > 0
             );
         }
+    }
+
+    /**
+     * 定时兜底清理，避免只在有新消息时才惰性清理。
+     */
+    @Scheduled(fixedDelayString = "${wxclaw.ilink.message-debouncer-cleanup-ms:3600000}")
+    public void cleanupScheduled() {
+        Instant now = Instant.now();
+        recentMessageCache.entrySet().removeIf(entry ->
+                Duration.between(entry.getValue(), now).compareTo(CLEANUP_THRESHOLD) > 0);
     }
 }

@@ -105,6 +105,8 @@ wxclaw:
     bootstrap-key: ${API_BOOTSTRAP_KEY:}
     last-used-write-interval-seconds: 60
     authentication-cache-ttl-seconds: 30
+    # 认证缓存/写入标记的定时清理间隔
+    authentication-cache-cleanup-ms: 600000
     cors:
       allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
 
@@ -121,6 +123,19 @@ wxclaw:
     reconnect:
       max-attempts: 5
       delay-seconds: 30
+    # 待处理媒体上下文（图片/视频/文件字节）定时清理
+    media-context-max-idle: PT24H
+    media-context-cleanup-ms: 3600000
+    # 消息防抖缓存定时兜底清理
+    message-debouncer-cleanup-ms: 3600000
+    # 已停止 Bot 运行时状态清理
+    status-cleanup:
+      cron: 0 30 3 * * ?
+      retention-days: 7
+    # 孤儿 ResumeContext 文件清理（不再属于 ACTIVE Bot）
+    resume-context-cleanup:
+      cron: 0 45 3 * * ?
+      enabled: true
 
   ai:
     # 图片生成配置（SiliconFlow API - Kolors 模型）
@@ -205,6 +220,12 @@ wxclaw:
     max-delay-days: 30
     retry-failed: true
     max-retry-count: 3
+    # 终态/孤儿任务定时清理
+    cleanup:
+      enabled: true
+      cron: 0 0 2 * * ?
+      retention-days: 7
+      stale-pending-enabled: true
 
   # 文件上传配置
   upload:
@@ -213,6 +234,10 @@ wxclaw:
   knowledge:
     # Original uploads retained for exact file retrieval, separate from RAG chunks.
     file-storage-dir: ${KNOWLEDGE_FILE_STORAGE_DIR:.uploads/knowledge-files}
+    # 超过保留期的原始文件定时清理
+    cleanup-enabled: true
+    cleanup-cron: 0 15 4 * * ?
+    file-retention-days: 90
 
   # 邮件功能配置
   mail:
@@ -220,7 +245,30 @@ wxclaw:
     whitelist:
       - "*"
     rate-limit: 5
+    # 限流计数定时清空
+    cleanup-cron: 0 20 3 * * ?
 
+  # 定时数据保留期清理
+  cleanup:
+    # iLink 消息回执（去重表），默认保留 30 天
+    receipts:
+      enabled: true
+      cron: 0 15 3 * * ?
+      retention-days: 30
+    # LLM 调用观测记录，默认保留 90 天
+    llm-invocations:
+      enabled: true
+      cron: 0 15 3 * * ?
+      retention-days: 90
+    # 过期 API 凭证
+    credentials:
+      enabled: true
+      cron: 0 15 3 * * ?
+    # 非活跃会话清理（会删除会话历史，默认关闭，需显式开启）
+    conversations:
+      enabled: false
+      cron: 0 15 3 * * ?
+      retention-days: 180
   # 日志配置
   log:
     level: info
