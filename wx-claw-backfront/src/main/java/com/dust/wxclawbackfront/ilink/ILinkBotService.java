@@ -20,6 +20,7 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -32,6 +33,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class ILinkBotService {
     private final Map<BotRuntimeKey, AtomicBoolean> stopFlags = new ConcurrentHashMap<>();
+    private final Map<BotRuntimeKey, AtomicInteger> inFlightMessages = new ConcurrentHashMap<>();
 
     private final ILinkRuntimeManager runtimeManager;
     private final ILinkMessageDispatcher messageDispatcher;
@@ -51,6 +53,9 @@ public class ILinkBotService {
 
     @Value("${wxclaw.ilink.reconnect.delay-seconds:30}")
     private int reconnectDelaySeconds;
+
+    @Value("${wxclaw.ilink.checkpoint.drain-timeout-seconds:300}")
+    private long checkpointDrainTimeoutSeconds;
 
     /**
      * 运行 ILink 监听服务
@@ -98,10 +103,13 @@ public class ILinkBotService {
                             reconnectAttempts = 0;
                         }
                         if (messages != null) {
+                            boolean enqueuedAny = false;
                             for (WeixinMessage msg : messages) {
                                 if (!messageDispatcher.claim(key, msg)) {
                                     continue;
                                 }
+                                inFlightMessages.computeIfAbsent(key, k -> new AtomicInteger()).incrementAndGet();
+                                enqueuedAny = true;
                                 // 按用户分区异步处理消息：同一用户串行保序，不同用户并行，避免阻塞消息拉取
                                 messagePartitionExecutor.execute(
                                         new UserMessageKey(key.tenantId(), key.botId(), msg.getFrom_user_id()),
@@ -110,11 +118,21 @@ public class ILinkBotService {
                                                 messageDispatcher.dispatchClaimed(key, msg);
                                             } catch (Exception e) {
                                                 log.error("消息处理异常: {}", e.getMessage(), e);
+                                            } finally {
+                                                AtomicInteger counter = inFlightMessages.get(key);
+                                                if (counter != null) {
+                                                    counter.decrementAndGet();
+                                                }
                                             }
                                         });
                             }
-                            if (!messages.isEmpty()) {
+                            // 游标必须等本批消息全部处理完成后再推进；
+                            // 否则异步处理期间崩溃会导致已 claim 但未处理的消息在重启后丢失。
+                            if (enqueuedAny && awaitBatchDrain(key, stopFlag)) {
                                 runtimeManager.checkpointResumeContext(key, client);
+                            } else if (enqueuedAny) {
+                                log.warn("批量消息处理未在 {}s 内完成，本次不推进游标，未完成消息将在重新投递时按租约恢复",
+                                        checkpointDrainTimeoutSeconds);
                             }
                         }
                     } catch (SessionExpiredException ex) {
@@ -184,6 +202,28 @@ public class ILinkBotService {
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    /**
+     * 等待本批异步处理全部结束。返回 false 表示超时或收到停止信号。
+     */
+    private boolean awaitBatchDrain(BotRuntimeKey key, AtomicBoolean stopFlag) {
+        AtomicInteger counter = inFlightMessages.get(key);
+        if (counter == null) {
+            return true;
+        }
+        long deadline = System.currentTimeMillis() + Math.max(1, checkpointDrainTimeoutSeconds) * 1000L;
+        while (counter.get() > 0 && !stopFlag.get()) {
+            if (System.currentTimeMillis() >= deadline) {
+                return false;
+            }
+            sleepQuietly(50L);
+        }
+        if (stopFlag.get()) {
+            return false;
+        }
+        inFlightMessages.remove(key);
+        return true;
     }
 
     static boolean isQrCodeExpired(Throwable throwable) {

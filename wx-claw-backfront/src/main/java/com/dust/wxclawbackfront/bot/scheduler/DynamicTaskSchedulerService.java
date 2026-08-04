@@ -57,6 +57,15 @@ public class DynamicTaskSchedulerService {
     @Value("${wxclaw.reminder.cleanup.stale-pending-enabled:true}")
     private boolean cleanupStalePendingEnabled;
 
+    @Value("${wxclaw.reminder.retry-failed:true}")
+    private boolean retryFailed;
+
+    @Value("${wxclaw.reminder.max-retry-count:3}")
+    private int maxRetryCount;
+
+    @Value("${wxclaw.reminder.retry-backoff-seconds:30}")
+    private long retryBackoffSeconds;
+
     // 任务ID -> 调度句柄
     private final Map<TenantTaskKey, ScheduledFuture<?>> scheduledTasks = new ConcurrentHashMap<>();
 
@@ -183,7 +192,7 @@ public class DynamicTaskSchedulerService {
             TaskActionExecutor executor = executorRegistry.getExecutor(actionType);
             if (executor == null) {
                 log.error("未找到执行器: taskId={}, actionType={}", taskId, actionType);
-                handleFailure(task, "未找到执行器：" + actionType);
+                handleFailure(task, new IllegalStateException("未找到执行器：" + actionType));
                 return;
             }
 
@@ -208,36 +217,54 @@ public class DynamicTaskSchedulerService {
                     log.info("周期任务执行成功: taskId={}, nextTrigger will be determined by cron", taskId);
                 }
             } else {
-                handleFailure(task, "执行失败");
+                handleFailure(task, new RuntimeException("执行失败"));
             }
 
         } catch (Exception e) {
             log.error("任务执行异常: taskId={}, error={}", taskId, e.getMessage(), e);
-            handleFailure(task, e.getMessage());
+            handleFailure(task, e);
         } finally {
             TenantContextHolder.clear();
         }
     }
 
     /**
-     * 处理任务执行失败
+     * 处理任务执行失败：一次性任务按 {@code retry-failed}/{@code max-retry-count}
+     * 以指数退避重新入队，超过次数或不可重试错误才置为 FAILED；
+     * 周期任务保持 PENDING，等待下次触发时重试。
      */
-    private void handleFailure(ReminderTask task, String errorMessage) {
+    private void handleFailure(ReminderTask task, Throwable error) {
+        String errorMessage = error == null ? "执行失败"
+                : (error.getMessage() == null || error.getMessage().isBlank()
+                ? error.getClass().getSimpleName() : error.getMessage());
         task.setRetryCount(task.getRetryCount() + 1);
         task.setFailureReason(errorMessage);
 
-        // 一次性任务失败后标记为 FAILED
         if ("ONE_TIME".equals(task.getTaskType())) {
-            task.setStatus("FAILED");
-            task.setExecutedAt(LocalDateTime.now(ZoneId.of(timeZone)));
-            scheduledTasks.remove(key(task));
-            log.warn("一次性任务执行失败: taskId={}, error={}", task.getId(), errorMessage);
+            if (retryFailed && task.getRetryCount() < maxRetryCount
+                    && RetryableErrorClassifier.isRetryable(error)) {
+                long backoffSeconds = retryBackoffSeconds
+                        * (1L << Math.min(task.getRetryCount() - 1, 4));
+                LocalDateTime retryAt = LocalDateTime.now(ZoneId.of(timeZone))
+                        .plusSeconds(Math.max(1, backoffSeconds));
+                task.setStatus("PENDING");
+                task.setTriggerTime(retryAt);
+                repository.save(task);
+                scheduledTasks.remove(key(task));
+                scheduleOnceTask(task);
+                log.warn("一次性任务执行失败，将在 {} 秒后重试 {}/{}: taskId={}, error={}",
+                        backoffSeconds, task.getRetryCount(), maxRetryCount, task.getId(), errorMessage);
+            } else {
+                task.setStatus("FAILED");
+                task.setExecutedAt(LocalDateTime.now(ZoneId.of(timeZone)));
+                scheduledTasks.remove(key(task));
+                repository.save(task);
+                log.warn("一次性任务执行失败: taskId={}, error={}", task.getId(), errorMessage);
+            }
         } else {
-            // 周期任务失败，记录错误但保持 PENDING，等待下次重试
+            repository.save(task);
             log.warn("周期任务执行失败，将在下次触发时重试: taskId={}, error={}", task.getId(), errorMessage);
         }
-
-        repository.save(task);
     }
 
     /**

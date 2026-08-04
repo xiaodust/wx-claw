@@ -132,6 +132,12 @@ wxclaw:
     status-cleanup:
       cron: 0 30 3 * * ?
       retention-days: 7
+    # 消息回执：进程内活跃处理租约，超过该时长视为 worker 挂起，允许重新认领
+    receipt:
+      reclaim-lease-seconds: 240
+    # 游标推进：批量消息处理完成等待上限；超时不推进游标，依赖重新投递恢复
+    checkpoint:
+      drain-timeout-seconds: 300
     # 孤儿 ResumeContext 文件清理（不再属于 ACTIVE Bot）
     resume-context-cleanup:
       cron: 0 45 3 * * ?
@@ -220,6 +226,7 @@ wxclaw:
     max-delay-days: 30
     retry-failed: true
     max-retry-count: 3
+    retry-backoff-seconds: 30
     # 终态/孤儿任务定时清理
     cleanup:
       enabled: true
@@ -250,7 +257,7 @@ wxclaw:
 
   # 定时数据保留期清理
   cleanup:
-    # iLink 消息回执（去重表），默认保留 30 天
+    # iLink 消息回执（去重表），只清理已完成（DONE）且超过保留期的记录，默认 30 天
     receipts:
       enabled: true
       cron: 0 15 3 * * ?

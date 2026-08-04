@@ -101,9 +101,11 @@ public class ILinkMessageDispatcher {
     public void dispatchClaimed(BotRuntimeKey runtimeKey, WeixinMessage msg) {
         String userId = msg.getFrom_user_id();
         String contextToken = msg.getContext_token();
+        messageReceiptStore.markProcessing(runtimeKey, msg);
         // 消息防抖（按 租户+Bot+用户+内容哈希 去重）
         String userText = userInputExtractor.extractText(msg);
         if (!messageDebouncer.shouldProcess(runtimeKey.tenantId(), runtimeKey.botId(), userId, userText)) {
+            messageReceiptStore.markDone(runtimeKey, msg);
             return;
         }
 
@@ -133,6 +135,7 @@ public class ILinkMessageDispatcher {
 
             processMessage(runtimeKey, msg, userId, contextToken, sessionId);
         } finally {
+            messageReceiptStore.markDone(runtimeKey, msg);
             InvocationTraceContextHolder.clear();
             TenantContextHolder.clear();
         }
