@@ -114,6 +114,23 @@ wxclaw:
     audit:
       max-payload-chars: ${ADMIN_AUDIT_MAX_PAYLOAD_CHARS:2097152}
 
+  # Agent 编排配置
+  agent:
+    # 跨请求工具熔断（双维度）：
+    # 用户级先隔离个别用户（防恶意/异常输入拖垮服务），全局级兜底服务端依赖故障
+    tool-circuit-breaker:
+      enabled: true
+      # 返回结果按项目约定识别失败（success=false 或 errorMsg 非空）
+      count-error-msg-failures: true
+      global:
+        # 全局阈值更高：单个用户被隔离后不再向全局累计，需多个用户同时失败才触发
+        failure-threshold: 20
+        cooldown-seconds: 60
+      user:
+        enabled: true
+        failure-threshold: 3
+        cooldown-seconds: 120
+
   # ILink 配置
   ilink:
     default-bot-id: ${ILINK_BOT_ID:default}
