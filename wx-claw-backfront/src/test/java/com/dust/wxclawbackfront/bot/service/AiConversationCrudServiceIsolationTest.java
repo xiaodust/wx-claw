@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
 
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -25,7 +26,9 @@ class AiConversationCrudServiceIsolationTest {
     @BeforeEach
     void setUp() {
         conversationRepository = mock(AiConversationRepository.class);
-        service = new AiConversationCrudService(conversationRepository, mock(AiMessageRepository.class));
+        service = new AiConversationCrudService(conversationRepository, mock(AiMessageRepository.class),
+                mock(ConversationSummaryService.class), mock(MemoryExtractionService.class),
+                mock(ExecutorService.class));
         TenantContextHolder.set(new TenantContext("tenant-a", "REST", null, "user-a", null,
                 Set.of(), Set.of("conversation:read"), "request-a"));
     }

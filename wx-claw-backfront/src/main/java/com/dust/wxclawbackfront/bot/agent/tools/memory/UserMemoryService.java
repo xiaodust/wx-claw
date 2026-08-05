@@ -10,6 +10,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.util.Comparator;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -29,16 +32,35 @@ public class UserMemoryService {
 
     @Transactional
     public void saveProfile(String userId, String category, String keyName, String keyValue, String source) {
+        saveProfileWithConfidence(userId, category, keyName, keyValue, source, new BigDecimal("0.50"), null);
+    }
+
+    /**
+     * 保存用户画像（带置信度与过期时间），供自动记忆抽取使用。
+     * 高置信度覆盖低置信度；不存在则新建。
+     */
+    @Transactional
+    public void saveProfileWithConfidence(String userId, String category, String keyName, String keyValue,
+                                          String source, BigDecimal confidence, LocalDateTime expiresAt) {
         if (userId == null || userId.isBlank()) return;
 
         Optional<UserProfile> existing = profileRepository.findByTenantIdAndUserIdAndCategoryAndKeyName(
                 tenantId(), userId, category, keyName);
         if (existing.isPresent()) {
             UserProfile profile = existing.get();
-            profile.setKeyValue(keyValue);
-            profile.setSource(source);
-            profileRepository.save(profile);
-            log.info("更新用户画像: userId={}, {}={}", userId, keyName, keyValue);
+            BigDecimal incoming = confidence == null ? new BigDecimal("0.50") : confidence;
+            BigDecimal current = profile.getConfidence() == null ? BigDecimal.ZERO : profile.getConfidence();
+            if (incoming.compareTo(current) >= 0) {
+                profile.setKeyValue(keyValue);
+                profile.setSource(source);
+                profile.setConfidence(incoming);
+                profile.setExpiresAt(expiresAt);
+                profileRepository.save(profile);
+                log.info("更新用户画像: userId={}, {}={}, confidence={}", userId, keyName, keyValue, incoming);
+            } else {
+                log.debug("忽略低置信度画像覆盖: userId={}, key={}, incoming={}, current={}",
+                        userId, keyName, incoming, current);
+            }
         } else {
             UserProfile profile = new UserProfile();
             profile.setUserId(userId);
@@ -46,8 +68,11 @@ public class UserMemoryService {
             profile.setKeyName(keyName);
             profile.setKeyValue(keyValue);
             profile.setSource(source);
+            profile.setConfidence(confidence == null ? new BigDecimal("0.50") : confidence);
+            profile.setExpiresAt(expiresAt);
             profileRepository.save(profile);
-            log.info("新增用户画像: userId={}, {}={}", userId, keyName, keyValue);
+            log.info("新增用户画像: userId={}, {}={}, confidence={}",
+                    userId, keyName, keyValue, confidence);
         }
     }
 
@@ -160,6 +185,12 @@ public class UserMemoryService {
         // 过滤掉角色提示词，避免在"用户画像"中重复
         List<UserProfile> profiles = allProfiles.stream()
                 .filter(p -> !ROLE_PROMPT_CATEGORY.equals(p.getCategory()))
+                .filter(p -> p.getExpiresAt() == null || p.getExpiresAt().isAfter(LocalDateTime.now()))
+                .sorted(Comparator
+                        .comparing((UserProfile p) -> p.getConfidence() == null ? BigDecimal.ZERO : p.getConfidence(),
+                                Comparator.reverseOrder())
+                        .thenComparing(p -> p.getUpdatedAt() == null ? LocalDateTime.MIN : p.getUpdatedAt(),
+                                Comparator.reverseOrder()))
                 .toList();
 
         log.info("buildMemoryPrompt: userId={}, profiles={}, learnings={}, hasRole={}",

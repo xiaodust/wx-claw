@@ -155,6 +155,20 @@ public class UniversalChatHandler implements ChatHandler {
         }
         String systemPrompt = systemPromptBuilder.toString();
 
+        // 早期上下文：向量记忆召回 + 更早对话摘要，放在 system prompt 之前
+        StringBuilder earlyContext = new StringBuilder();
+        String recall = MemoryRecallContext.get();
+        if (recall != null && !recall.isBlank()) {
+            earlyContext.append("【相关历史对话】\n").append(recall).append("\n\n");
+        }
+        String conversationSummary = ConversationSummaryContext.get();
+        if (conversationSummary != null && !conversationSummary.isBlank()) {
+            earlyContext.append("【更早对话摘要】\n").append(conversationSummary).append("\n\n");
+        }
+        if (earlyContext.length() > 0) {
+            systemPrompt = earlyContext + systemPrompt;
+        }
+
         // 5. 使用 Spring AI 原生 function calling（模型自主决定调用工具）
         String content = callWithTools(requestText, systemPrompt);
 

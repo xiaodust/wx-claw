@@ -38,6 +38,12 @@ public class DataRetentionCleanup {
     @Value("${wxclaw.cleanup.conversations.retention-days:180}")
     private int conversationsRetentionDays;
 
+    @Value("${wxclaw.cleanup.memory-chunks.enabled:true}")
+    private boolean memoryChunksEnabled;
+
+    @Value("${wxclaw.cleanup.user-profiles.enabled:true}")
+    private boolean userProfilesEnabled;
+
     public DataRetentionCleanup(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
@@ -90,11 +96,45 @@ public class DataRetentionCleanup {
         }
     }
 
+    /**
+     * 清理过期的向量记忆分块（M3 记忆 TTL）。
+     */
+    @Scheduled(cron = "${wxclaw.cleanup.memory-chunks.cron:0 15 3 * * ?}")
+    public void cleanupExpiredMemoryChunks() {
+        if (!memoryChunksEnabled) {
+            return;
+        }
+        long total = deleteInBatches(
+                "DELETE FROM conversation_memory_chunk WHERE expires_at < ?", LocalDateTime.now());
+        if (total > 0) {
+            log.info("已清理 {} 条过期向量记忆分块", total);
+        }
+    }
+
+    /**
+     * 清理过期的用户画像记忆（M4：低置信度/过期记忆淘汰）。
+     */
+    @Scheduled(cron = "${wxclaw.cleanup.user-profiles.cron:0 15 3 * * ?}")
+    public void cleanupExpiredUserProfiles() {
+        if (!userProfilesEnabled) {
+            return;
+        }
+        long total = deleteInBatches(
+                "DELETE FROM user_profile WHERE expires_at IS NOT NULL AND expires_at < ?", LocalDateTime.now());
+        if (total > 0) {
+            log.info("已清理 {} 条过期用户记忆", total);
+        }
+    }
+
     private long deleteInBatches(String sql, Object... args) {
+        if (args == null || args.length != 1) {
+            throw new IllegalArgumentException("deleteInBatches 当前仅支持单个参数: " + sql);
+        }
         int total = 0;
         int batch;
         do {
-            batch = jdbcTemplate.update(sql + " LIMIT " + DELETE_BATCH_SIZE, args);
+            batch = jdbcTemplate.update(sql + " LIMIT " + DELETE_BATCH_SIZE,
+                    ps -> ps.setObject(1, args[0]));
             total += batch;
         } while (batch >= DELETE_BATCH_SIZE);
         return total;

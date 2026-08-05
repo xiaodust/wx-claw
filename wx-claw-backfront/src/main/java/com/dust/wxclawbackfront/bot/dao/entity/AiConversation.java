@@ -62,6 +62,12 @@ public class AiConversation extends TenantOwnedEntity {
     @Column(name = "updated_time")
     private LocalDateTime updatedTime;
 
+    /**
+     * 长期记忆抽取水位线：已抽取到哪条消息
+     */
+    @Column(name = "last_memory_extract_seq")
+    private Integer lastMemoryExtractSeq;
+
     @PrePersist
     protected void onCreate() {
         LocalDateTime now = LocalDateTime.now();

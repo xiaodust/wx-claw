@@ -3,14 +3,19 @@ package com.dust.wxclawbackfront.ilink.inbound;
 import com.dust.wxclawbackfront.bot.agent.model.AgentContext;
 import com.dust.wxclawbackfront.bot.agent.model.AgentResult;
 import com.dust.wxclawbackfront.bot.agent.model.MediaAttachment;
+import com.dust.wxclawbackfront.bot.agent.llm.chat.ConversationSummaryContext;
+import com.dust.wxclawbackfront.bot.agent.llm.chat.MemoryRecallContext;
 import com.dust.wxclawbackfront.bot.agent.orchestrator.AgentOrchestrator;
 import com.dust.wxclawbackfront.bot.dao.entity.AiMessage;
 import com.dust.wxclawbackfront.bot.dao.entity.UserProfile;
+import com.dust.wxclawbackfront.bot.service.ConversationSummaryService;
+import com.dust.wxclawbackfront.bot.service.MemoryChunkService;
 import com.dust.wxclawbackfront.bot.agent.tools.memory.UserMemoryService;
 import com.dust.wxclawbackfront.ilink.ILinkUserInput;
 import com.dust.wxclawbackfront.ilink.outbound.ILinkMessageSender;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;
@@ -28,6 +33,14 @@ public class AgentResponseProcessor {
     private final AgentOrchestrator agentOrchestrator;
     private final UserMemoryService userMemoryService;
     private final ILinkMessageSender messageSender;
+    private final ConversationSummaryService conversationSummaryService;
+    private final MemoryChunkService memoryChunkService;
+
+    private static final List<String> RECALL_SIGNALS = List.of(
+            "之前", "上次", "以前", "还记得", "记得吗", "你记得", "我们说过", "聊过", "说过");
+
+    @Value("${wxclaw.memory.vector.recall-signal-only:true}")
+    private boolean recallSignalOnly;
 
     /**
      * 使用 Agent 编排器处理消息
@@ -57,10 +70,21 @@ public class AgentResponseProcessor {
                 .userText(userInput.getDisplayText())
                 .build();
 
-        // 调用 Agent 编排器
-        AgentResult result = immediateChat
-                ? agentOrchestrator.orchestrateChat(context)
-                : agentOrchestrator.orchestrate(userInput.getPromptText(), context);
+        // 会话摘要（窗口外早期对话）与向量记忆召回：设置上下文，编排完成后清理
+        ConversationSummaryContext.set(conversationSummaryService.findSummaryBySessionId(sessionId));
+        boolean shouldRecall = !recallSignalOnly || hasRecallSignal(userInput.getDisplayText());
+        MemoryRecallContext.set(shouldRecall
+                ? memoryChunkService.recall(userId, userInput.getDisplayText(), 5)
+                : null);
+        AgentResult result;
+        try {
+            result = immediateChat
+                    ? agentOrchestrator.orchestrateChat(context)
+                    : agentOrchestrator.orchestrate(userInput.getPromptText(), context);
+        } finally {
+            ConversationSummaryContext.clear();
+            MemoryRecallContext.clear();
+        }
 
         // 处理 Agent 结果
         if (!result.isSuccess()) {
@@ -121,6 +145,14 @@ public class AgentResponseProcessor {
             return handleVideoResponse(userId, result);
         }
         return handleFileResponse(userId, result);
+    }
+
+    private boolean hasRecallSignal(String text) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        String lower = text.toLowerCase();
+        return RECALL_SIGNALS.stream().anyMatch(lower::contains);
     }
 
     private String handleImageResponse(String userId, AgentResult result) {

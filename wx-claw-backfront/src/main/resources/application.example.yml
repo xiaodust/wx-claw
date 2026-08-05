@@ -131,6 +131,34 @@ wxclaw:
         failure-threshold: 3
         cooldown-seconds: 120
 
+  # 上下文记忆配置（会话摘要 + 长期记忆抽取）
+  memory:
+    summary:
+      enabled: true
+      # 消息数达到该值且距上次摘要超过间隔时，异步增量生成会话摘要
+      trigger-message-threshold: 30
+      min-interval-minutes: 30
+      max-summary-chars: 1500
+      max-messages-per-run: 100
+    extraction:
+      enabled: true
+      # 低于该置信度的抽取结果不落库
+      min-confidence: 0.6
+      max-messages-per-run: 100
+      # 自动记忆过期时间
+      ttl-days: 90
+    # 向量记忆（M3，默认关闭；需配置 embedding 模型后开启）
+    vector:
+      enabled: ${MEMORY_VECTOR_ENABLED:false}
+      chunk-chars: 200
+      top-k: 5
+      ttl-days: 90
+      # 仅"还记得/之前/上次"等信号触发召回，默认不每轮检索
+      recall-signal-only: true
+    # 每日兜底扫描：超长会话补摘要、已关闭会话补抽取
+    sweep-enabled: true
+    sweep-cron: 0 0 5 * * ?
+
   # ILink 配置
   ilink:
     default-bot-id: ${ILINK_BOT_ID:default}
@@ -283,9 +311,16 @@ wxclaw:
       enabled: true
       cron: 0 15 3 * * ?
       retention-days: 30
-      # 滞留未完成回执的死信告警
-      deadletter-alert-enabled: true
-      deadletter-cron: 0 30 4 * * ?
+    # 滞留未完成回执的死信告警
+    deadletter-alert-enabled: true
+    deadletter-cron: 0 30 4 * * ?
+    # 过期向量记忆分块 / 过期用户画像记忆清理
+    memory-chunks:
+      enabled: true
+      cron: 0 15 3 * * ?
+    user-profiles:
+      enabled: true
+      cron: 0 15 3 * * ?
     # LLM 调用观测记录，默认保留 90 天
     llm-invocations:
       enabled: true

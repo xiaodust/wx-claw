@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
@@ -47,6 +48,18 @@ public class UserProfile extends TenantOwnedEntity {
      */
     @Column(length = 20)
     private String source;
+
+    /**
+     * 置信度：自动抽取的记忆带置信度，低置信度条目可被清理/覆盖
+     */
+    @Column(nullable = false, precision = 3, scale = 2)
+    private BigDecimal confidence = new BigDecimal("0.50");
+
+    /**
+     * 过期时间：自动记忆可设置 TTL，过期后由清理任务淘汰
+     */
+    @Column(name = "expires_at")
+    private LocalDateTime expiresAt;
 
     @Column
     private LocalDateTime createdAt;

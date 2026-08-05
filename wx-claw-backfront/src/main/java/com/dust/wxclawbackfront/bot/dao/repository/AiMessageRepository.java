@@ -27,6 +27,12 @@ public interface AiMessageRepository extends JpaRepository<AiMessage, String> {
                                @Param("conversationId") String conversationId,
                                Pageable pageable);
 
+    /**
+     * 查询指定会话中序号大于水位线的消息（用于增量摘要与长期记忆抽取）。
+     */
+    List<AiMessage> findByTenantIdAndConversationIdAndMessageSeqGreaterThanOrderByMessageSeqAsc(
+            String tenantId, String conversationId, Integer messageSeq, Pageable pageable);
+
     Optional<AiMessage> findTopByTenantIdAndConversationIdOrderByMessageSeqDesc(String tenantId, String conversationId);
 
     long countByTenantIdAndConversationId(String tenantId, String conversationId);

@@ -4,6 +4,8 @@ import com.dust.wxclawbackfront.bot.agent.model.AgentResult;
 import com.dust.wxclawbackfront.bot.agent.model.MediaAttachment;
 import com.dust.wxclawbackfront.bot.agent.orchestrator.AgentOrchestrator;
 import com.dust.wxclawbackfront.bot.agent.tools.memory.UserMemoryService;
+import com.dust.wxclawbackfront.bot.service.ConversationSummaryService;
+import com.dust.wxclawbackfront.bot.service.MemoryChunkService;
 import com.dust.wxclawbackfront.ilink.ILinkUserInput;
 import com.dust.wxclawbackfront.ilink.outbound.ILinkMessageSender;
 import org.junit.jupiter.api.Test;
@@ -22,7 +24,8 @@ class AgentResponseProcessorTest {
         AgentOrchestrator orchestrator = mock(AgentOrchestrator.class);
         UserMemoryService memory = mock(UserMemoryService.class);
         ILinkMessageSender sender = mock(ILinkMessageSender.class);
-        AgentResponseProcessor processor = new AgentResponseProcessor(orchestrator, memory, sender);
+        AgentResponseProcessor processor = new AgentResponseProcessor(orchestrator, memory, sender,
+                mock(ConversationSummaryService.class), mock(MemoryChunkService.class));
         byte[] imageBytes = {1, 2};
         byte[] audioBytes = {3, 4};
         when(memory.getProfiles("user")).thenReturn(List.of());
@@ -42,7 +45,8 @@ class AgentResponseProcessorTest {
         AgentOrchestrator orchestrator = mock(AgentOrchestrator.class);
         UserMemoryService memory = mock(UserMemoryService.class);
         ILinkMessageSender sender = mock(ILinkMessageSender.class);
-        AgentResponseProcessor processor = new AgentResponseProcessor(orchestrator, memory, sender);
+        AgentResponseProcessor processor = new AgentResponseProcessor(orchestrator, memory, sender,
+                mock(ConversationSummaryService.class), mock(MemoryChunkService.class));
         byte[] bytes = {1, 2, 3};
         when(memory.getProfiles("user")).thenReturn(List.of());
         when(orchestrator.orchestrate(any(), any())).thenReturn(

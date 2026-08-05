@@ -6,11 +6,15 @@ import com.dust.wxclawbackfront.bot.dao.repository.AiConversationRepository;
 import com.dust.wxclawbackfront.bot.dao.repository.AiMessageRepository;
 import com.dust.wxclawbackfront.tenancy.TenantContext;
 import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -18,16 +22,28 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
 
+@Slf4j
 @Service
 public class AiConversationCrudService {
 
     private final AiConversationRepository conversationRepository;
     private final AiMessageRepository messageRepository;
+    private final ConversationSummaryService conversationSummaryService;
+    private final MemoryExtractionService memoryExtractionService;
+    private final ExecutorService asyncSaveExecutor;
 
-    public AiConversationCrudService(AiConversationRepository conversationRepository, AiMessageRepository messageRepository) {
+    public AiConversationCrudService(AiConversationRepository conversationRepository,
+                                     AiMessageRepository messageRepository,
+                                     ConversationSummaryService conversationSummaryService,
+                                     MemoryExtractionService memoryExtractionService,
+                                     @Qualifier("asyncSaveExecutor") ExecutorService asyncSaveExecutor) {
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
+        this.conversationSummaryService = conversationSummaryService;
+        this.memoryExtractionService = memoryExtractionService;
+        this.asyncSaveExecutor = asyncSaveExecutor;
     }
 
     @Transactional
@@ -74,6 +90,8 @@ public class AiConversationCrudService {
                 if (Boolean.TRUE.equals(conversation.getActive())) {
                     conversation.setActive(Boolean.FALSE);
                     conversationRepository.save(conversation);
+                    // 会话关闭：异步生成摘要并抽取长期记忆
+                    submitAfterCommit(() -> summarizeAndExtract(conversation));
                 }
             }
         }
@@ -147,6 +165,9 @@ public class AiConversationCrudService {
                 }
                 conversationRepository.save(conversation);
 
+                // 会话消息数达到阈值时异步触发增量摘要（窗口外早期对话不丢）
+                submitAfterCommit(() -> safeRun(() -> conversationSummaryService.summarizeIfDue(conversation)));
+
                 return saved;
             } catch (DataIntegrityViolationException e) {
                 if (attempt == maxRetries - 1) {
@@ -156,6 +177,35 @@ public class AiConversationCrudService {
         }
 
         throw new IllegalStateException("Failed to append message after " + maxRetries + " attempts");
+    }
+
+    private void summarizeAndExtract(AiConversation conversation) {
+        safeRun(() -> conversationSummaryService.summarizeIfDue(conversation));
+        safeRun(() -> memoryExtractionService.extractIfDue(conversation));
+    }
+
+    private void safeRun(Runnable task) {
+        try {
+            task.run();
+        } catch (Exception e) {
+            log.warn("后台记忆任务执行失败: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 事务提交后再执行异步任务，避免读到未提交数据；无事务时直接提交。
+     */
+    private void submitAfterCommit(Runnable task) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    asyncSaveExecutor.execute(task);
+                }
+            });
+        } else {
+            asyncSaveExecutor.execute(task);
+        }
     }
 
     @Transactional(readOnly = true)

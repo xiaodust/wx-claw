@@ -17,6 +17,11 @@ public interface AiConversationRepository extends JpaRepository<AiConversation, 
 
     List<AiConversation> findAllByTenantIdAndInternalUserId(String tenantId, String internalUserId, Sort sort);
 
+    List<AiConversation> findByTenantIdAndActiveTrueAndMessageCountGreaterThanEqual(
+            String tenantId, int messageCount);
+
+    List<AiConversation> findByTenantIdAndActiveFalse(String tenantId);
+
     long countByTenantIdAndCreatedTimeGreaterThanEqual(String tenantId, java.time.LocalDateTime createdTime);
 
     long countByCreatedTimeGreaterThanEqual(java.time.LocalDateTime createdTime);

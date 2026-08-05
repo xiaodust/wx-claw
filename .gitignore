@@ -95,3 +95,6 @@ coverage/
 tmp/
 temp/
 hs_err_pid*.log
+
+# 内部方案文档，不纳入仓库
+docs/memory-improvement-plan.md
