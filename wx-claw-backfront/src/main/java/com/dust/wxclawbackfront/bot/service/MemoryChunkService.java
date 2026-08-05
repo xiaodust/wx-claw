@@ -6,7 +6,6 @@ import com.dust.wxclawbackfront.tenancy.TenantContext;
 import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -31,7 +30,7 @@ public class MemoryChunkService {
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
-    private final ObjectProvider<EmbeddingModel> embeddingModelProvider;
+    private final ObjectProvider<VolcArkEmbeddingClient> embeddingClientProvider;
 
     @Value("${wxclaw.memory.vector.enabled:false}")
     private boolean enabled;
@@ -46,10 +45,10 @@ public class MemoryChunkService {
     private long ttlDays;
 
     public MemoryChunkService(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper,
-                              ObjectProvider<EmbeddingModel> embeddingModelProvider) {
+                              ObjectProvider<VolcArkEmbeddingClient> embeddingClientProvider) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
-        this.embeddingModelProvider = embeddingModelProvider;
+        this.embeddingClientProvider = embeddingClientProvider;
     }
 
     /**
@@ -59,9 +58,9 @@ public class MemoryChunkService {
         if (!enabled || conversation == null) {
             return;
         }
-        EmbeddingModel model = embeddingModelProvider.getIfAvailable();
-        if (model == null) {
-            log.warn("未配置 EmbeddingModel，向量记忆跳过（wxclaw.memory.vector.enabled 已开启但无模型）");
+        VolcArkEmbeddingClient embeddingClient = embeddingClientProvider.getIfAvailable();
+        if (embeddingClient == null) {
+            log.warn("未配置向量模型，向量记忆跳过（wxclaw.memory.vector.enabled 已开启但无模型）");
             return;
         }
         TenantContext context = TenantContextHolder.require();
@@ -74,7 +73,7 @@ public class MemoryChunkService {
                     context.tenantId(), conversation.getId());
             LocalDateTime expiresAt = LocalDateTime.now().plusDays(Math.max(1, ttlDays));
             for (String chunk : chunks) {
-                float[] embedding = model.embed(chunk);
+                float[] embedding = embeddingClient.embed(chunk);
                 jdbcTemplate.update("""
                                 INSERT INTO conversation_memory_chunk
                                     (id, tenant_id, user_id, conversation_id, chunk_text, embedding, created_at, expires_at)
@@ -96,13 +95,13 @@ public class MemoryChunkService {
         if (!enabled || userId == null || query == null || query.isBlank()) {
             return null;
         }
-        EmbeddingModel model = embeddingModelProvider.getIfAvailable();
-        if (model == null) {
+        VolcArkEmbeddingClient embeddingClient = embeddingClientProvider.getIfAvailable();
+        if (embeddingClient == null) {
             return null;
         }
         TenantContext context = TenantContextHolder.require();
         try {
-            float[] queryVector = model.embed(query);
+            float[] queryVector = embeddingClient.embed(query);
             List<StoredChunk> rows = jdbcTemplate.query("""
                             SELECT chunk_text, embedding FROM conversation_memory_chunk
                             WHERE tenant_id = ? AND user_id = ? AND expires_at > CURRENT_TIMESTAMP

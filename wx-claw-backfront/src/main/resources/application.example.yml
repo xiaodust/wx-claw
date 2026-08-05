@@ -2,6 +2,12 @@
 # 复制此文件为 application.yml 并填入实际配置值
 
 spring:
+  # 多模态向量模型（doubao-embedding-vision）必须走 /embeddings/multimodal，
+  # 向量记忆改用 VolcArkEmbeddingClient 纯 HTTP 调用，禁用 OpenAI embedding 自动配置
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration
+
   servlet:
     multipart:
       max-file-size: 10MB
@@ -149,9 +155,13 @@ wxclaw:
       ttl-days: 90
     # 向量记忆（M3，默认关闭；需配置 embedding 模型后开启）
     vector:
-      enabled: ${MEMORY_VECTOR_ENABLED:false}
+      enabled: ${MEMORY_VECTOR_ENABLED:true}
+      model: ${EMBEDDING_MODEL:doubao-embedding-vision-251215}
+      dimensions: ${EMBEDDING_DIMENSIONS:1024}
       chunk-chars: 200
       top-k: 5
+      embedding-timeout: PT30S
+      embedding-max-attempts: 3
       ttl-days: 90
       # 仅"还记得/之前/上次"等信号触发召回，默认不每轮检索
       recall-signal-only: true

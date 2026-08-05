@@ -8,7 +8,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -28,8 +27,8 @@ import static org.mockito.Mockito.when;
 class MemoryChunkServiceTest {
 
     private JdbcTemplate jdbcTemplate;
-    private ObjectProvider<EmbeddingModel> provider;
-    private EmbeddingModel embeddingModel;
+    private ObjectProvider<VolcArkEmbeddingClient> provider;
+    private VolcArkEmbeddingClient embeddingClient;
     private MemoryChunkService service;
 
     @BeforeEach
@@ -37,14 +36,14 @@ class MemoryChunkServiceTest {
     void setUp() {
         jdbcTemplate = mock(JdbcTemplate.class);
         provider = mock(ObjectProvider.class);
-        embeddingModel = mock(EmbeddingModel.class);
+        embeddingClient = mock(VolcArkEmbeddingClient.class);
         service = new MemoryChunkService(jdbcTemplate, new ObjectMapper(), provider);
         ReflectionTestUtils.setField(service, "enabled", true);
         ReflectionTestUtils.setField(service, "chunkChars", 200);
         ReflectionTestUtils.setField(service, "topK", 5);
         ReflectionTestUtils.setField(service, "ttlDays", 90L);
-        when(provider.getIfAvailable()).thenReturn(embeddingModel);
-        when(embeddingModel.embed(anyString())).thenReturn(new float[]{0.1f, 0.2f});
+        when(provider.getIfAvailable()).thenReturn(embeddingClient);
+        when(embeddingClient.embed(anyString())).thenReturn(new float[]{0.1f, 0.2f});
         TenantContextHolder.set(TenantContext.ilink("tenant-a", "bot-a", "user-a", "req"));
     }
 
@@ -74,7 +73,7 @@ class MemoryChunkServiceTest {
 
     @Test
     void recallsTopKByCosineSimilarity() {
-        when(embeddingModel.embed("还记得我们聊过的城市吗")).thenReturn(new float[]{1f, 0f});
+        when(embeddingClient.embed("还记得我们聊过的城市吗")).thenReturn(new float[]{1f, 0f});
         MemoryChunkService.StoredChunk hz = new MemoryChunkService.StoredChunk("杭州", new float[]{1f, 0f});
         MemoryChunkService.StoredChunk bj = new MemoryChunkService.StoredChunk("北京", new float[]{0f, 1f});
         when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class)))
@@ -90,7 +89,7 @@ class MemoryChunkServiceTest {
         ReflectionTestUtils.setField(service, "enabled", false);
 
         assertThat(service.recall("user-a", "之前聊了什么", 5)).isNull();
-        verify(embeddingModel, never()).embed(anyString());
+        verify(embeddingClient, never()).embed(anyString());
     }
 
     @Test
