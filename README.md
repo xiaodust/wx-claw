@@ -1,33 +1,34 @@
-# WX-Claw AI 助手
+# WX-Claw 微信智能体平台
 
-一个基于 Spring AI 的智能对话助手，支持微信 ILink 接入，通过 Agent 编排系统实现多工具协同调度。
+一个多租户的微信 ILink 智能体平台：基于 Spring AI 的 Agent 编排系统实现多工具协同调度与多模态回复，并配套官网、用户控制台与管理端三个 Web 端。
 
 ## 版本信息
 
-当前版本：**v2.1**
+当前版本：**v3.0**
 
-### 主要更新内容
+### v3.0 主要更新（平台化）
 
-- **编排提示词文件化** - 规划提示词移出 Java 代码，统一为 `ai/prompts/agent-planner.md` 模板，支持变量与条件段渲染
-- **意图识别交还模型** - 移除硬编码关键词意图判断，所有消息统一由规划模型自主拆解与选工具
-- **职业助手** - 简历存储/分析/评分与岗位搜索、推荐，对接 JobHelper MCP 服务
-- **多媒体结果** - 多步骤任务的多条媒体附件（图片/语音/视频）逐条发送给用户
-- **简历容错** - 未保存简历时返回友好提示而非报错
-- **语音可靠性** - TTS 增加超时重试与最大尝试次数配置
-- **安全增强** - 实现 API 密钥认证和限制 CORS 来源
-- **数据库优化** - 改善 SQLite 并发处理和重试机制
-- **用户验证** - 添加用户验证白名单机制
-- **架构改进** - 统一构造器注入模式和条件注解使用
-- **工具优化** - 移除冗余依赖，提升性能
-- **消息处理** - 实现异步消息处理，防止阻塞
-- **连接增强** - 改进 ILink 重连机制，提高稳定性
-- **上下文传播** - 确保异步线程中用户上下文的一致性
-- **防抖改进** - 使用 SHA-256 哈希改进消息去重
-- **AI 规划** - 增强 Agent 规划验证和重试机制
-- **媒体处理** - 实现图像理解失败时的优雅降级
-- **异常处理** - 创建自定义异常层次结构，提供更好错误反馈
+- **官网主页 + 租户自助注册** - 介绍页 + 注册页，注册从"后端配置"变为自助流程
+- **邀请码注册制** - 注册需要邀请码（内测阶段保留），管理端可生成/停用邀请码，杜绝无限注册
+- **邮箱必填 + 验证码校验** - 注册时向邮箱发送 6 位验证码，验证通过才创建租户
+- **账号密码登录** - 控制台改用用户名 + 密码登录，会话 token 7 天有效；API Key 仅用于接口调用与一次性激活账号
+- **密码找回/重置/修改** - 忘记密码走邮箱重置链接（30 分钟单次有效）；登录后支持修改密码并吊销全部会话
+- **用户控制台** - 自助创建 Bot、扫码连接、查看聊天记录、配置各能力 API Key 与模型
+- **管理端** - 运行总览、Bot 状态、对话与调用审计、注册邀请码管理
+- **多服务商模型** - 对话/图片/视频支持 DeepSeek、火山方舟、OpenAI、SiliconFlow、阿里云 DashScope 自由切换
+- **多租户隔离与安全加固** - 租户级数据隔离、PBKDF2 密码哈希、登录/注册/验证码限流、防用户枚举
+- **工业暗色主题 UI** - 官网、注册、登录、控制台统一视觉风格
 
 ## 功能特性
+
+### 平台能力
+
+- **官网主页** - 产品介绍、功能展示、使用流程与 FAQ，注册入口直达
+- **租户自助注册** - 邀请码 + 邮箱验证码双重校验，注册成功即签发会话
+- **账号体系** - 用户名密码登录、忘记密码（邮箱重置）、登录后修改密码、无账号租户一次性激活
+- **用户控制台** - 创建/删除 Bot、扫码连接微信、实时状态、聊天记录、AI 能力与模型配置
+- **管理端** - Bot 运行状态、对话与 LLM 调用审计、注册邀请码管理
+- **多租户隔离** - 所有业务数据按租户隔离，API Key 按 Scope 收敛权限
 
 ### 核心功能
 
@@ -73,7 +74,7 @@ Agent 编排器只规划高层任务，底层工具调用由 chat 模型自行�
 | 功能              | 说明                                        |
 | ---------------- | ----------------------------------------- |
 | 智能对话           | 普通对话，支持调用底层工具（chat）                    |
-| 图片生成           | 根据描述生成图片（SiliconFlow Kolors）             |
+| 图片生成           | 根据描述生成图片（SiliconFlow / 火山方舟 / OpenAI） |
 | 语音回复           | TTS 语音合成，含文本口语化润色与超时重试                 |
 | 视频生成           | 根据描述生成视频                                |
 | 简历管理           | 保存/取回/清除简历（PDF，JobHelper MCP 持久化）      |
@@ -182,6 +183,22 @@ AI：[生成 Markdown] → 自动转换为 .md 文件发送
 ## 技术架构
 
 ```
+平台层
+  ├─ 官网 + 用户控制台（Vue 3，端口 3001）
+  ├─ 管理端（Vue 3，端口 3000）
+  └─ REST API（后端 8080）
+       ├─ /api/public/*    注册 / 登录 / 找回 / 邮箱验证码
+       ├─ /api/user/*      用户控制台（Bot / 会话 / AI 配置 / 账号）
+       └─ /api/admin/*     管理端（Bot 状态 / 对话审计 / 邀请码）
+
+租户与账号层
+  ├─ tenant                    租户主数据（tenantId / tenantCode）
+  ├─ tenant_account            控制台账号（用户名 / PBKDF2 密码哈希 / 邮箱）
+  ├─ tenant_session            登录会话（token 仅存 SHA-256，7 天过期）
+  ├─ tenant_api_credential     接口 API Key（PBKDF2，Scope 收敛）
+  ├─ tenant_invite_code        注册邀请码（配额 / 有效期 / 原子扣减）
+  └─ tenant_email_verification 邮箱验证码（6 位，10 分钟单次有效）
+
 接入层
   └─ 微信 ILink SDK
 
@@ -229,8 +246,10 @@ Agent 编排层
   └─ KnowledgeFileRetrieveToolHandler  知识库文件取回
 
 外部服务层
-  ├─ 火山引擎 / OpenAI 兼容模型    AI 推理
-  ├─ SiliconFlow Kolors             图片生成
+  ├─ DeepSeek / 火山方舟 / OpenAI   AI 对话与推理
+  ├─ SiliconFlow / 火山方舟 / OpenAI 图片生成
+  ├─ 火山方舟 Seedance / OpenAI Sora / 阿里云 DashScope 视频生成
+  ├─ 豆包语音 seed-audio-1.0       语音合成
   ├─ 博查搜索                       网络搜索
   ├─ 心知天气                       天气查询
   ├─ RAGFlow（Docker）              知识库检索 / 文档管理 / 向量存储
@@ -238,7 +257,7 @@ Agent 编排层
   └─ SMTP 邮件服务                  邮件发送
 
 存储层
-  ├─ SQLite                会话、消息、提醒、记忆等本地持久化
+  ├─ MySQL（Flyway 迁移）   租户、账号、会话、Bot、消息、记忆等持久化
   └─ JobHelper 服务端存储    简历原始文件（PDF）与岗位数据
 ```
 
@@ -258,6 +277,8 @@ Agent 编排层
 
 - JDK 21+
 - Maven 3.8+
+- Node.js 18+
+- MySQL 8+（Flyway 自动迁移建表）
 - Docker（用于运行 RAGFlow 知识库服务，可选）
 - 微信 ILink SDK 账号
 - 至少 4GB 可用内存（推荐 8GB+）
@@ -309,27 +330,21 @@ cp wx-claw-backfront/src/main/resources/application.example.yml \
 
 ### 4. 填写配置
 
-编辑 `application.yml`，配置以下必要参数：
+编辑 `application.yml`，配置数据库与 AI 服务密钥：
 
 ```yaml
+DB_URL: jdbc:mysql://127.0.0.1:3306/wx_claw_bot?...   # MySQL 连接
+DB_USERNAME: wxclaw
+DB_PASSWORD: your-password
+
 spring:
   ai:
     openai:
-      api-key: your-api-key        # AI 模型 API 密钥
+      api-key: your-api-key        # 对话模型 API 密钥（可按租户覆盖）
 
 wxclaw:
-  ai:
-    image:
-      generate:
-        api-key: your-key           # SiliconFlow 图片生成密钥
-    tts:
-      api-key: your-key             # TTS 语音合成密钥
-    web-search:
-      bocha:
-        api-key: your-key           # 博查搜索密钥
-    weather:
-      seniverse:
-        key: your-key               # 心知天气密钥
+  api:
+    bootstrap-key: your-bootstrap-key   # 首个管理凭据（* 权限）
   ragflow:
     enabled: true                   # 启用知识库功能
     base-url: http://localhost:9380 # RAGFlow API 地址
@@ -338,14 +353,26 @@ wxclaw:
     chat-id: your-chat-id           # 聊天助手 ID
 ```
 
-### 5. 运行项目
+### 5. 运行后端
 
 ```bash
 cd wx-claw-backfront
 mvn spring-boot:run
 ```
 
-### 6. 运行管理端
+后端启动时 Flyway 自动执行数据库迁移（`db/migration/V*.sql`），监听 `http://localhost:8080`。
+
+### 6. 运行用户端（官网 + 控制台）
+
+```bash
+cd wx-claw-user
+npm install
+npm run dev
+```
+
+浏览器访问 `http://localhost:3001`：`/` 为官网主页，注册后进入用户控制台。
+
+### 7. 运行管理端
 
 管理端用于查看 Bot 实时状态、对话历史和模型原始调用记录：
 
@@ -356,6 +383,14 @@ npm run dev
 ```
 
 浏览器访问 `http://localhost:3000`，使用 `<credentialId>.<secret>` 格式的管理 API Key 登录。当前 Bootstrap 凭据的 `*` scope 可以访问管理端；正式创建凭据时建议只授予 `admin:read`，跨租户管理员授予 `platform:admin`。
+
+### 8. 初始化注册链路
+
+1. 管理端（3000）→「注册邀请码」→ 生成邀请码（可设配额/有效期）
+2. 用户端（3001）→ 注册页 → 填写邀请码、邮箱并接收验证码 → 设置用户名密码
+3. 使用用户名密码登录控制台，创建 Bot 扫码连接微信
+
+> 老租户（如 `default`，仅有 API Key 无账号）可在登录页「使用 API Key 激活账号」一次性完善用户名/邮箱/密码。
 
 生产构建：
 
@@ -371,14 +406,23 @@ npm run build
 
 | 变量名                   | 说明                 |
 | --------------------- | ------------------ |
+| `DB_URL`              | MySQL 连接地址（默认本机 3306） |
+| `DB_USERNAME`         | MySQL 用户名（默认 wxclaw） |
+| `DB_PASSWORD`         | MySQL 密码 |
 | `AI_API_KEY`          | AI 模型 API 密钥       |
 | `AI_BASE_URL`         | AI 模型 API 地址       |
+| `API_CREDENTIAL_ID`   | Bootstrap 凭据 ID（默认 default） |
+| `API_BOOTSTRAP_KEY`   | Bootstrap API Key（首个管理凭据） |
+| `REGISTRATION_REQUIRE_INVITE` | 注册是否需要邀请码（默认 true） |
+| `REGISTRATION_INVITE_CODES`   | 启动时预置的邀请码（逗号分隔） |
+| `PASSWORD_RESET_BASE_URL`     | 密码重置邮件中的前端地址（默认 http://localhost:3001） |
 | `SILICONFLOW_API_KEY` | SiliconFlow 图片生成密钥 |
 | `TTS_API_KEY`         | TTS 语音合成密钥         |
 | `BOCHA_API_KEY`       | 博查搜索密钥             |
 | `SENIVERSE_KEY`       | 心知天气密钥             |
 | `MAIL_USERNAME`       | 邮箱账号               |
 | `MAIL_PASSWORD`       | 邮箱授权码              |
+| `CORS_ALLOWED_ORIGINS`| 允许的跨域来源（默认 3000/3001） |
 | `RAGFLOW_API_KEY`     | RAGFlow 知识库密钥      |
 | `RAGFLOW_BASE_URL`    | RAGFlow 服务地址       |
 
@@ -402,8 +446,29 @@ wxclaw:
   api:
     auth-enabled: true     # 启用 API 认证
     key: ${API_KEY:your-secret-api-key-here}  # API 密钥
+    bootstrap-key: ${API_BOOTSTRAP_KEY:your-bootstrap-key}  # 管理凭据
     cors:
-      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}  # 允许的 CORS 来源
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001,http://127.0.0.1:3001}  # 管理端 + 用户端
+    # 注册邀请码
+    registration:
+      require-invite: ${REGISTRATION_REQUIRE_INVITE:true}
+      invite-codes: ${REGISTRATION_INVITE_CODES:}
+      max-per-ip: 5
+      max-per-email: 3
+    # 登录限流与会话
+    login:
+      max-per-user-and-ip: 10
+      max-per-ip: 30
+    session:
+      ttl: PT168H           # 会话有效期（默认 7 天）
+    # 邮箱验证码（注册）
+    email-code:
+      ttl: PT10M
+      max-per-email-and-ip: 5
+    # 密码重置
+    password-reset:
+      base-url: ${PASSWORD_RESET_BASE_URL:http://localhost:3001}
+      token-ttl: PT30M
 
   # 用户验证配置
   user:
@@ -495,11 +560,20 @@ wx-claw/
 │       │   ├── service/               # 业务服务
 │       │   └── scheduler/             # 定时任务
 │       ├── ilink/                     # ILink 接入
-│       ├── tenancy/                   # 多租户
+│       ├── tenancy/                   # 多租户与账号体系
+│       │   ├── entity/                # Tenant / TenantAccount / TenantSession /
+│       │   │                          # TenantApiCredential / TenantInviteCode / TenantEmailVerification
+│       │   ├── service/               # 注册 / 登录 / 找回 / 邮箱验证 / 邀请码
+│       │   ├── security/              # API Key 认证、PBKDF2 哈希、限流
+│       │   └── api/                   # 公开接口（/api/public/*）
+│       ├── user/                      # 用户控制台接口（/api/user/*）
+│       └── admin/                     # 管理端接口（/api/admin/*）
 │       └── config/                    # 配置类
 │   └── src/main/resources/
 │       ├── ai/prompts/                # Agent 编排提示词模板（agent-planner.md）
-│       └── ai/skills/                 # Spring AI 技能定义
+│       ├── ai/skills/                 # Spring AI 技能定义
+│       └── db/migration/              # Flyway 数据库迁移（V1..V31）
+├── wx-claw-user/                      # Vue 3 用户端（官网 + 控制台，端口 3001）
 ├── wx-claw-admin/                     # Vue 3 只读管理端
 └── docs/                              # 文档
 ```
@@ -586,22 +660,63 @@ ai/prompts/
 
 ## API 接口
 
-### 图片生成
+### 公开接口（/api/public/*，无需凭据）
 
-- **API**: SiliconFlow
-- **模型**: Kwai-Kolors/Kolors
-- **文档**: <https://api-docs.siliconflow.cn/docs/api/images-generations-post>
+| 接口 | 说明 |
+| --- | --- |
+| `POST /tenants/register` | 租户自助注册（邀请码 + 邮箱验证码 + 用户名密码） |
+| `POST /auth/email-code` | 发送邮箱验证码（purpose: REGISTER / SETUP / RESET） |
+| `POST /auth/login` | 用户名密码登录，返回会话 token |
+| `POST /auth/forgot-password` | 申请密码重置（发重置链接到邮箱） |
+| `POST /auth/reset-password` | 用重置链接设置新密码 |
 
-### 语音合成
+### 用户控制台接口（/api/user/*，需会话 token 或 API Key）
 
-- **API**: 火山引擎 TTS
-- **模型**: seed-audio-1.0
+| 接口 | 说明 |
+| --- | --- |
+| `GET /bots` / `POST /bots` / `DELETE /bots/{botId}` | Bot 列表 / 创建 / 删除 |
+| `GET /bots/{botId}/qr` | 扫码连接二维码 |
+| `GET /bots/{botId}/conversations` 等 | 会话与聊天记录 |
+| `GET /ai-config` / `PUT /ai-config/{cap}` 等 | 各能力 API Key 与模型配置 |
+| `GET /account` | 当前租户账号信息（hasAccount） |
+| `POST /account/setup` | 为无账号租户创建控制台账号 |
+| `POST /account/password` | 修改密码（吊销全部会话） |
+
+### 管理端接口（/api/admin/*，需 admin:invite 等权限）
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /overview` / `GET /bots` / `GET /conversations` | 运行总览 / Bot 状态 / 对话与调用审计 |
+| `GET /invite-codes` / `POST /invite-codes` / `DELETE /invite-codes/{code}` | 邀请码列表 / 生成 / 停用 |
+
+### 多媒体能力
+
+#### 图片生成
+
+- **服务商**: SiliconFlow / 火山方舟 / OpenAI（用户控制台可切换并配置各自 Key）
+- **模型**: Kolors、豆包文生图、OpenAI 图片模型等
+
+#### 视频生成
+
+- **服务商**: 火山方舟 Seedance / OpenAI Sora / 阿里云 DashScope（通义万相）
+
+#### 语音合成
+
+- **API**: 火山引擎豆包语音（openspeech.bytedance.com）
+- **模型**: seed-audio-1.0（需在豆包语音控制台开通服务，欠费/未开通返回 403）
+
+#### 对话模型
+
+- **服务商**: DeepSeek / 火山方舟 / OpenAI / 自定义兼容端点
+- **模型**: 由用户控制台按服务商选择或自定义输入
 
 ## 常见问题
 
 ### Q: 如何更换 AI 模型？
 
-修改 `application.yml` 中的配置：
+登录用户控制台 →「API Key 与模型设置」，按能力（对话/图片/视频）选择服务商、模型并配置自己的 API Key；也支持直接输入自定义模型名。
+
+后端默认配置（租户未覆盖时生效）修改 `application.yml`：
 
 ```yaml
 spring:
@@ -637,7 +752,21 @@ logging:
 
 ## 更新日志
 
-### v2.1 (当前版本)
+### v3.0 (当前版本)
+
+- **平台化** - 新增官网主页与租户自助注册，注册从后端配置改为自助流程
+- **邀请码注册制** - 新增邀请码表与管理端生成/停用能力，支持配额与有效期，原子扣减防超发
+- **邮箱验证** - 注册邮箱必填，发送 6 位验证码校验邮箱归属（10 分钟单次有效）
+- **账号密码登录** - 新增控制台账号与会话体系，token 只存 SHA-256、7 天过期；用户端登录改为纯密码，API Key 仅用于接口调用与一次性激活账号
+- **密码管理** - 忘记密码走邮箱重置链接（30 分钟单次有效），登录后支持修改密码并吊销全部会话
+- **用户控制台** - 自助创建/删除 Bot、扫码连接、聊天记录、多能力 API Key 与模型配置
+- **管理端完善** - 运行总览、Bot 状态、对话与调用审计、注册邀请码管理
+- **多服务商模型** - 对话/图片/视频支持 DeepSeek、火山方舟、OpenAI、SiliconFlow、阿里云 DashScope，模型目录含免费标记与自定义输入
+- **安全加固** - PBKDF2 密码哈希、登录/注册/验证码限流、防用户枚举（伪哈希比对）、Scope 权限收敛
+- **工业暗色主题** - 官网、注册、登录、用户控制台统一视觉
+- **TTS 诊断** - 语音失败透出服务端错误码与可执行提示（未开通/欠费/Key 无效）
+
+### v2.1
 
 - **编排提示词文件化** - 规划提示词从 Java 代码迁移至 `ai/prompts/agent-planner.md`，支持变量替换与 career 条件段，缺失即快速失败
 - **意图识别交还模型** - 删除 `requiresHighLevelPlanning` 等硬编码关键词判断，所有消息统一交规划模型，规划失败统一降级 chat
