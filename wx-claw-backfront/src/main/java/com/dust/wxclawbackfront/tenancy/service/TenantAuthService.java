@@ -50,7 +50,8 @@ public class TenantAuthService {
     private static final String SESSION_PREFIX = "sess_";
     private static final Set<String> CONSOLE_ROLES = Set.of("TENANT_ADMIN");
     private static final Set<String> CONSOLE_SCOPES = Set.of(
-            "userbot:read", "userbot:write", "conversation:read", "aiconfig:read", "aiconfig:write");
+            "userbot:read", "userbot:write", "conversation:read", "aiconfig:read", "aiconfig:write",
+            "account:read", "account:write");
 
     private final TenantAccountRepository accountRepository;
     private final TenantSessionRepository sessionRepository;
@@ -138,6 +139,43 @@ public class TenantAuthService {
         }
         return new TenantContext(tenant.getTenantId(), "REST", null, "account:" + account.getUsername(),
                 null, CONSOLE_ROLES, CONSOLE_SCOPES, UUID.randomUUID().toString());
+    }
+
+    /** 登录状态下修改密码：校验旧密码后更新哈希，并吊销该账号全部会话。 */
+    @Transactional
+    public void changePassword(String oldPassword, String newPassword) {
+        TenantContext context = TenantContextHolder.require();
+        String username = accountUsername(context);
+        TenantAccount account = username == null
+                ? null
+                : accountRepository.findByUsername(username).orElse(null);
+        boolean passwordOk = account != null && oldPassword != null
+                && secretHasher.matches(oldPassword, account.getPasswordHash());
+        if (account == null || !"ACTIVE".equals(account.getStatus()) || !passwordOk) {
+            throw new TenantRegistrationException("INVALID_CREDENTIALS", "当前密码不正确",
+                    HttpStatus.UNAUTHORIZED);
+        }
+        String password = newPassword == null ? "" : newPassword.trim();
+        if (password.length() < 8 || password.length() > 128) {
+            throw new TenantRegistrationException("VALIDATION_ERROR", "新密码长度需为 8-128 位",
+                    HttpStatus.BAD_REQUEST);
+        }
+        TenantAccount finalAccount = account;
+        withContext(account.getTenantId(), () -> {
+            finalAccount.setPasswordHash(secretHasher.hash(password));
+            accountRepository.save(finalAccount);
+            long revoked = sessionRepository.deleteByAccountId(finalAccount.getId());
+            log.info("修改密码成功: accountId={}, 吊销会话={}", finalAccount.getId(), revoked);
+            return null;
+        });
+    }
+
+    private String accountUsername(TenantContext context) {
+        String internalUserId = context == null ? null : context.internalUserId();
+        if (internalUserId == null || !internalUserId.startsWith("account:")) {
+            return null;
+        }
+        return internalUserId.substring("account:".length());
     }
 
     private TenantSession saveSession(String tenantId, TenantAccount account, String rawToken) {

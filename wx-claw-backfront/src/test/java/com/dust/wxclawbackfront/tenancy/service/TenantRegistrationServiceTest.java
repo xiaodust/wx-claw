@@ -11,6 +11,7 @@ import com.dust.wxclawbackfront.tenancy.repository.TenantRepository;
 import com.dust.wxclawbackfront.tenancy.security.ApiSecretHasher;
 import com.dust.wxclawbackfront.tenancy.security.PublicAuthRateLimiter;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
@@ -38,16 +39,27 @@ class TenantRegistrationServiceTest {
     private final ApiSecretHasher secretHasher = mock(ApiSecretHasher.class);
     private final PublicAuthRateLimiter rateLimiter = mock(PublicAuthRateLimiter.class);
     private final InviteCodeService inviteCodeService = mock(InviteCodeService.class);
+    private final EmailVerificationService emailVerificationService = mock(EmailVerificationService.class);
     private final TenantRegistrationService service = new TenantRegistrationService(
             tenantRepository, credentialRepository, accountRepository, authService, secretHasher,
-            rateLimiter, inviteCodeService, false);
+            rateLimiter, inviteCodeService, emailVerificationService, false);
     private final TenantRegistrationService inviteRequiredService = new TenantRegistrationService(
             tenantRepository, credentialRepository, accountRepository, authService, secretHasher,
-            rateLimiter, inviteCodeService, true);
+            rateLimiter, inviteCodeService, emailVerificationService, true);
+
+    @BeforeEach
+    void setUp() {
+        when(emailVerificationService.verifyCode(anyString(), eq("REGISTER"), anyString())).thenReturn(true);
+    }
 
     @AfterEach
     void tearDown() {
         TenantContextHolder.clear();
+    }
+
+    private RegisterTenantRequest req(String tenantName, String tenantCode, String email,
+                                      String username, String password, String inviteCode, String emailCode) {
+        return new RegisterTenantRequest(tenantName, tenantCode, email, username, password, inviteCode, emailCode);
     }
 
     @Test
@@ -60,7 +72,7 @@ class TenantRegistrationServiceTest {
                 .thenReturn(new TenantAuthService.AccountIssue("ops", "sess_test", LocalDateTime.now().plusDays(7)));
 
         RegisteredTenant result = service.register(
-                new RegisterTenantRequest("  测试租户  ", null, "ops@example.com", "Ops", "secret-1234", null),
+                req("  测试租户  ", null, "ops@example.com", "Ops", "secret-1234", null, "123456"),
                 "1.2.3.4");
 
         ArgumentCaptor<Tenant> tenantCaptor = ArgumentCaptor.forClass(Tenant.class);
@@ -77,13 +89,15 @@ class TenantRegistrationServiceTest {
         assertThat(credential.getCredentialId()).startsWith("tk_");
         assertThat(credential.getSecretHash()).startsWith("hashed:");
         assertThat(credential.getScopes())
-                .contains("userbot:read", "userbot:write", "conversation:read", "aiconfig:read", "aiconfig:write");
+                .contains("userbot:read", "userbot:write", "conversation:read",
+                        "aiconfig:read", "aiconfig:write", "account:read", "account:write");
         assertThat(credential.getStatus()).isEqualTo("ACTIVE");
 
         assertThat(result.apiKey()).startsWith(credential.getCredentialId() + ".");
         assertThat(result.username()).isEqualTo("ops");
         assertThat(result.sessionToken()).isEqualTo("sess_test");
         verify(authService).createAccountAndIssueSession(anyString(), eq("ops"), eq("secret-1234"), eq("ops@example.com"));
+        verify(emailVerificationService).verifyCode(eq("ops@example.com"), eq("REGISTER"), eq("123456"));
         // 注册前后不残留请求线程上下文。
         assertThat(TenantContextHolder.getNullable()).isNull();
     }
@@ -95,7 +109,7 @@ class TenantRegistrationServiceTest {
         when(secretHasher.hash(anyString())).thenReturn("hash");
 
         RegisteredTenant result = service.register(
-                new RegisterTenantRequest("老租户", null, null, null, null, null), "1.2.3.4");
+                req("老租户", null, "a@b.com", null, null, null, "123456"), "1.2.3.4");
 
         assertThat(result.username()).isNull();
         assertThat(result.sessionToken()).isNull();
@@ -109,9 +123,36 @@ class TenantRegistrationServiceTest {
         when(secretHasher.hash(anyString())).thenReturn("hash");
 
         RegisteredTenant result = service.register(
-                new RegisterTenantRequest("我的租户", "My-Org ", "a@b.com", null, null, null), "127.0.0.1");
+                req("我的租户", "My-Org ", "a@b.com", null, null, null, "123456"), "127.0.0.1");
 
         assertThat(result.tenantCode()).isEqualTo("my-org");
+    }
+
+    @Test
+    void rejectsMissingEmail() {
+        assertThatThrownBy(() -> service.register(
+                req("租户", null, "   ", null, null, null, "123456"), "1.2.3.4"))
+                .isInstanceOf(TenantRegistrationException.class)
+                .satisfies(ex -> {
+                    TenantRegistrationException tre = (TenantRegistrationException) ex;
+                    assertThat(tre.errorCode()).isEqualTo("VALIDATION_ERROR");
+                    assertThat(tre.getMessage()).contains("邮箱为必填项");
+                });
+    }
+
+    @Test
+    void rejectsInvalidEmailCode() {
+        when(emailVerificationService.verifyCode(eq("a@b.com"), eq("REGISTER"), anyString())).thenReturn(false);
+
+        assertThatThrownBy(() -> service.register(
+                req("租户", null, "a@b.com", null, null, null, "000000"), "1.2.3.4"))
+                .isInstanceOf(TenantRegistrationException.class)
+                .satisfies(ex -> {
+                    TenantRegistrationException tre = (TenantRegistrationException) ex;
+                    assertThat(tre.errorCode()).isEqualTo("EMAIL_CODE_INVALID");
+                    assertThat(tre.status()).isEqualTo(HttpStatus.BAD_REQUEST);
+                });
+        verify(tenantRepository, never()).save(any());
     }
 
     @Test
@@ -119,7 +160,7 @@ class TenantRegistrationServiceTest {
         when(tenantRepository.findByTenantCode("taken")).thenReturn(Optional.of(new Tenant()));
 
         assertThatThrownBy(() -> service.register(
-                new RegisterTenantRequest("租户", "taken", null, null, null, null), "127.0.0.1"))
+                req("租户", "taken", "a@b.com", null, null, null, "123456"), "127.0.0.1"))
                 .isInstanceOf(TenantRegistrationException.class)
                 .satisfies(ex -> {
                     TenantRegistrationException tre = (TenantRegistrationException) ex;
@@ -134,7 +175,7 @@ class TenantRegistrationServiceTest {
         when(accountRepository.existsByUsername("taken")).thenReturn(true);
 
         assertThatThrownBy(() -> service.register(
-                new RegisterTenantRequest("租户", null, null, "taken", "secret-1234", null), "127.0.0.1"))
+                req("租户", null, "a@b.com", "taken", "secret-1234", null, "123456"), "127.0.0.1"))
                 .isInstanceOf(TenantRegistrationException.class)
                 .satisfies(ex -> {
                     TenantRegistrationException tre = (TenantRegistrationException) ex;
@@ -146,7 +187,7 @@ class TenantRegistrationServiceTest {
     @Test
     void rejectsShortPassword() {
         assertThatThrownBy(() -> service.register(
-                new RegisterTenantRequest("租户", null, null, "ops", "123", null), "127.0.0.1"))
+                req("租户", null, "a@b.com", "ops", "123", null, "123456"), "127.0.0.1"))
                 .isInstanceOf(TenantRegistrationException.class)
                 .satisfies(ex -> assertThat(((TenantRegistrationException) ex).errorCode())
                         .isEqualTo("VALIDATION_ERROR"));
@@ -155,7 +196,7 @@ class TenantRegistrationServiceTest {
     @Test
     void rejectsInvalidTenantCode() {
         assertThatThrownBy(() -> service.register(
-                new RegisterTenantRequest("租户", "UPPER_123", null, null, null, null), "127.0.0.1"))
+                req("租户", "UPPER_123", "a@b.com", null, null, null, "123456"), "127.0.0.1"))
                 .isInstanceOf(TenantRegistrationException.class)
                 .satisfies(ex -> assertThat(((TenantRegistrationException) ex).errorCode())
                         .isEqualTo("VALIDATION_ERROR"));
@@ -164,7 +205,7 @@ class TenantRegistrationServiceTest {
     @Test
     void rejectsInvalidEmail() {
         assertThatThrownBy(() -> service.register(
-                new RegisterTenantRequest("租户", null, "not-an-email", null, null, null), "127.0.0.1"))
+                req("租户", null, "not-an-email", null, null, null, "123456"), "127.0.0.1"))
                 .isInstanceOf(TenantRegistrationException.class)
                 .satisfies(ex -> assertThat(((TenantRegistrationException) ex).errorCode())
                         .isEqualTo("VALIDATION_ERROR"));
@@ -173,7 +214,7 @@ class TenantRegistrationServiceTest {
     @Test
     void rejectsBlankTenantName() {
         assertThatThrownBy(() -> service.register(
-                new RegisterTenantRequest("   ", null, null, null, null, null), "127.0.0.1"))
+                req("   ", null, "a@b.com", null, null, null, "123456"), "127.0.0.1"))
                 .isInstanceOf(TenantRegistrationException.class)
                 .satisfies(ex -> assertThat(((TenantRegistrationException) ex).errorCode())
                         .isEqualTo("VALIDATION_ERROR"));
@@ -185,7 +226,7 @@ class TenantRegistrationServiceTest {
                 .when(rateLimiter).checkRegistration(anyString(), any());
 
         assertThatThrownBy(() -> service.register(
-                new RegisterTenantRequest("租户", null, null, null, null, null), "1.2.3.4"))
+                req("租户", null, "a@b.com", null, null, null, "123456"), "1.2.3.4"))
                 .isInstanceOf(TenantRegistrationException.class)
                 .satisfies(ex -> assertThat(((TenantRegistrationException) ex).status())
                         .isEqualTo(HttpStatus.TOO_MANY_REQUESTS));
@@ -199,7 +240,7 @@ class TenantRegistrationServiceTest {
         when(inviteCodeService.consume("welcome-2026")).thenReturn(true);
 
         RegisteredTenant result = inviteRequiredService.register(
-                new RegisterTenantRequest("租户", null, null, null, null, "welcome-2026"), "1.2.3.4");
+                req("租户", null, "a@b.com", null, null, "welcome-2026", "123456"), "1.2.3.4");
 
         assertThat(result.tenantCode()).isNotBlank();
         verify(inviteCodeService).consume("welcome-2026");
@@ -210,7 +251,7 @@ class TenantRegistrationServiceTest {
         when(inviteCodeService.consume(anyString())).thenReturn(false);
 
         assertThatThrownBy(() -> inviteRequiredService.register(
-                new RegisterTenantRequest("租户", null, null, null, null, "BAD-CODE"), "1.2.3.4"))
+                req("租户", null, "a@b.com", null, null, "BAD-CODE", "123456"), "1.2.3.4"))
                 .isInstanceOf(TenantRegistrationException.class)
                 .satisfies(ex -> {
                     TenantRegistrationException tre = (TenantRegistrationException) ex;
@@ -225,7 +266,7 @@ class TenantRegistrationServiceTest {
         when(credentialRepository.findByCredentialId(anyString())).thenReturn(Optional.empty());
         when(secretHasher.hash(anyString())).thenReturn("hash");
 
-        service.register(new RegisterTenantRequest("租户", null, null, null, null, null), "1.2.3.4");
+        service.register(req("租户", null, "a@b.com", null, null, null, "123456"), "1.2.3.4");
 
         verify(inviteCodeService, never()).consume(anyString());
     }

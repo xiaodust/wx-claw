@@ -52,3 +52,7 @@ export function saveModel(capability: string, payload: { model?: string; provide
 export function clearModel(capability: string): Promise<void> {
   return api.delete(`/ai-config/${capability}/model`).then(r => r.data)
 }
+
+export function changePassword(oldPassword: string, newPassword: string): Promise<{ message: string }> {
+  return api.post('/account/password', { oldPassword, newPassword }).then(r => r.data)
+}

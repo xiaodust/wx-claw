@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { clearAiConfig, clearModel, getAiConfigs, getModelCatalog, saveAiConfig, saveModel } from '../api/user'
+import { changePassword, clearAiConfig, clearModel, getAiConfigs, getModelCatalog, saveAiConfig, saveModel } from '../api/user'
+import { useAuthStore } from '../stores/auth'
 import type { AiConfigEntry, AiConfigs, ModelCatalog, ModelOption } from '../types/user'
 
+const router = useRouter()
+const authStore = useAuthStore()
 const configs = ref<AiConfigs | null>(null)
 const catalog = ref<ModelCatalog | null>(null)
 const inputs = reactive<Record<string, string>>({})
@@ -15,6 +19,9 @@ const customBaseUrl = ref('')
 const loading = ref(false)
 const savingKey = ref<string | null>(null)
 const savingModel = ref<string | null>(null)
+const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
+const savingPassword = ref(false)
+const pwdError = ref('')
 
 interface CapabilityDef {
   key: string
@@ -196,6 +203,36 @@ async function clearModelCap(key: string) {
 }
 
 onMounted(() => { refresh() })
+
+async function submitPasswordChange() {
+  pwdError.value = ''
+  if (!pwdForm.oldPassword || !pwdForm.newPassword) {
+    pwdError.value = '请输入旧密码和新密码'
+    return
+  }
+  if (pwdForm.newPassword.length < 8 || pwdForm.newPassword.length > 128) {
+    pwdError.value = '新密码长度需为 8-128 位'
+    return
+  }
+  if (pwdForm.newPassword !== pwdForm.confirmPassword) {
+    pwdError.value = '两次输入的新密码不一致'
+    return
+  }
+  savingPassword.value = true
+  try {
+    await changePassword(pwdForm.oldPassword, pwdForm.newPassword)
+    ElMessage.success('密码已修改，请重新登录')
+    authStore.logout()
+    router.push('/login')
+  } catch (e: any) {
+    const status = e?.response?.status
+    const message = e?.response?.data?.message
+    if (status === 401) pwdError.value = '当前密码不正确'
+    else pwdError.value = message || '修改失败，请稍后再试'
+  } finally {
+    savingPassword.value = false
+  }
+}
 </script>
 
 <template>
@@ -264,6 +301,19 @@ onMounted(() => { refresh() })
         </template>
       </div>
     </div>
+
+    <div class="panel pwd-card">
+      <p class="page-kicker">SECURITY</p>
+      <h3 class="pwd-title">修改密码</h3>
+      <p class="muted pwd-desc">修改后所有已登录会话（包括当前）都会失效，需要重新登录。</p>
+      <div class="pwd-row">
+        <el-input v-model="pwdForm.oldPassword" type="password" show-password placeholder="当前密码" style="width: 240px" />
+        <el-input v-model="pwdForm.newPassword" type="password" show-password placeholder="新密码（至少 8 位）" style="width: 240px" />
+        <el-input v-model="pwdForm.confirmPassword" type="password" show-password placeholder="确认新密码" style="width: 240px" @keyup.enter="submitPasswordChange" />
+        <el-button type="primary" :loading="savingPassword" @click="submitPasswordChange">修改密码</el-button>
+      </div>
+      <p v-if="pwdError" class="pwd-error" role="alert">{{ pwdError }}</p>
+    </div>
   </div>
 </template>
 
@@ -311,4 +361,10 @@ onMounted(() => { refresh() })
 .config-chip.off { color: var(--muted); border-color: var(--line); background: rgba(255, 255, 255, 0.03); }
 .config-chip.off .chip-dot { background: #8a94a6; }
 .option-name { font-family: "JetBrains Mono", Consolas, monospace; }
+.pwd-card { margin-top: 18px; }
+.pwd-card .page-kicker { margin-bottom: 10px; }
+.pwd-title { margin: 0 0 4px; font-size: 16px; }
+.pwd-desc { margin: 0 0 14px; font-size: 12px; }
+.pwd-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.pwd-error { margin: 10px 0 0; color: var(--danger); font-size: 12px; }
 </style>

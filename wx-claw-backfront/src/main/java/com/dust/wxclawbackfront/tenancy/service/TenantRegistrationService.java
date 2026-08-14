@@ -38,7 +38,8 @@ public class TenantRegistrationService {
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
     private static final Pattern USERNAME_PATTERN = Pattern.compile("^[a-z0-9_-]{3,32}$");
     private static final String CONSOLE_SCOPES =
-            "userbot:read,userbot:write,conversation:read,aiconfig:read,aiconfig:write";
+            "userbot:read,userbot:write,conversation:read,aiconfig:read,aiconfig:write,"
+                    + "account:read,account:write";
 
     private final TenantRepository tenantRepository;
     private final TenantApiCredentialRepository credentialRepository;
@@ -47,6 +48,7 @@ public class TenantRegistrationService {
     private final ApiSecretHasher secretHasher;
     private final PublicAuthRateLimiter rateLimiter;
     private final InviteCodeService inviteCodeService;
+    private final EmailVerificationService emailVerificationService;
     private final SecureRandom secureRandom = new SecureRandom();
     private final boolean requireInvite;
 
@@ -57,6 +59,7 @@ public class TenantRegistrationService {
                                      ApiSecretHasher secretHasher,
                                      PublicAuthRateLimiter rateLimiter,
                                      InviteCodeService inviteCodeService,
+                                     EmailVerificationService emailVerificationService,
                                      @Value("${wxclaw.api.registration.require-invite:true}") boolean requireInvite) {
         this.tenantRepository = tenantRepository;
         this.credentialRepository = credentialRepository;
@@ -65,6 +68,7 @@ public class TenantRegistrationService {
         this.secretHasher = secretHasher;
         this.rateLimiter = rateLimiter;
         this.inviteCodeService = inviteCodeService;
+        this.emailVerificationService = emailVerificationService;
         this.requireInvite = requireInvite;
     }
 
@@ -76,9 +80,18 @@ public class TenantRegistrationService {
         }
         String tenantCode = resolveTenantCode(request == null ? null : request.tenantCode());
         String contactEmail = normalizeEmail(request == null ? null : request.contactEmail());
+        if (contactEmail == null) {
+            throw new TenantRegistrationException("VALIDATION_ERROR", "邮箱为必填项",
+                    HttpStatus.BAD_REQUEST);
+        }
         String username = resolveUsername(request == null ? null : request.username());
         if (username != null) {
             validatePassword(request == null ? null : request.password());
+        }
+        if (!emailVerificationService.verifyCode(contactEmail, "REGISTER",
+                request == null ? null : request.emailCode())) {
+            throw new TenantRegistrationException("EMAIL_CODE_INVALID",
+                    "邮箱验证码无效或已过期，请重新获取", HttpStatus.BAD_REQUEST);
         }
         String inviteCode = request == null ? null : request.inviteCode();
         if (requireInvite && !inviteCodeService.consume(inviteCode)) {

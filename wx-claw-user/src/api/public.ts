@@ -1,6 +1,7 @@
 import axios from 'axios'
 import type {
   AuthResult,
+  EmailCodeRequest,
   ForgotPasswordRequest,
   LoginRequest,
   OperationResult,
@@ -26,4 +27,8 @@ export function forgotPassword(payload: ForgotPasswordRequest): Promise<Operatio
 
 export function resetPassword(payload: ResetPasswordRequest): Promise<OperationResult> {
   return axios.post('/api/public/auth/reset-password', payload).then(r => r.data)
+}
+
+export function sendEmailCode(payload: EmailCodeRequest): Promise<OperationResult> {
+  return axios.post('/api/public/auth/email-code', payload).then(r => r.data)
 }

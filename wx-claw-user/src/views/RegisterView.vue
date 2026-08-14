@@ -1,19 +1,22 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { registerTenant } from '../api/public'
+import { registerTenant, sendEmailCode } from '../api/public'
 import { useAuthStore } from '../stores/auth'
 import type { RegisterTenantResult } from '../types/user'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
-const form = reactive({ tenantName: '', tenantCode: '', contactEmail: '', username: '', password: '', confirmPassword: '', inviteCode: '' })
+const form = reactive({ tenantName: '', tenantCode: '', contactEmail: '', emailCode: '', username: '', password: '', confirmPassword: '', inviteCode: '' })
 const fieldErrors = reactive<Record<string, string>>({})
 const submitting = ref(false)
 const serverError = ref('')
 const result = ref<RegisterTenantResult | null>(null)
 const copied = ref(false)
+const sendingCode = ref(false)
+const countdown = ref(0)
+let countdownTimer: number | undefined
 
 const codePattern = /^[a-z0-9][a-z0-9-]{0,31}$/
 const emailPattern = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
@@ -24,9 +27,11 @@ const canSubmit = computed(() =>
   && form.username.trim().length >= 3
   && form.password.length >= 8
   && form.inviteCode.trim().length >= 4
+  && form.contactEmail.trim().length >= 5
+  && form.emailCode.trim().length >= 4
   && !Object.values(fieldErrors).some(Boolean))
 
-function validateField(key: 'tenantName' | 'tenantCode' | 'contactEmail' | 'username' | 'password' | 'confirmPassword' | 'inviteCode') {
+function validateField(key: 'tenantName' | 'tenantCode' | 'contactEmail' | 'emailCode' | 'username' | 'password' | 'confirmPassword' | 'inviteCode') {
   fieldErrors[key] = ''
   if (key === 'tenantName') {
     const name = form.tenantName.trim()
@@ -38,10 +43,13 @@ function validateField(key: 'tenantName' | 'tenantCode' | 'contactEmail' | 'user
       fieldErrors.tenantCode = '仅支持小写字母、数字和连字符，以字母或数字开头（2-32 位）'
     }
   }
-  if (key === 'contactEmail' && form.contactEmail.trim()) {
-    if (!emailPattern.test(form.contactEmail.trim())) {
-      fieldErrors.contactEmail = '邮箱格式不正确'
-    }
+  if (key === 'contactEmail') {
+    const email = form.contactEmail.trim()
+    if (!email) fieldErrors.contactEmail = '邮箱为必填项'
+    else if (!emailPattern.test(email)) fieldErrors.contactEmail = '邮箱格式不正确'
+  }
+  if (key === 'emailCode' && form.emailCode.trim().length < 4) {
+    fieldErrors.emailCode = '请输入邮箱验证码'
   }
   if (key === 'username') {
     const username = form.username.trim()
@@ -65,6 +73,7 @@ async function submit() {
   validateField('tenantName')
   validateField('tenantCode')
   validateField('contactEmail')
+  validateField('emailCode')
   validateField('username')
   validateField('password')
   validateField('confirmPassword')
@@ -77,10 +86,11 @@ async function submit() {
     result.value = await registerTenant({
       tenantName: form.tenantName.trim(),
       tenantCode: form.tenantCode.trim() || undefined,
-      contactEmail: form.contactEmail.trim() || undefined,
+      contactEmail: form.contactEmail.trim().toLowerCase(),
       username: form.username.trim().toLowerCase(),
       password: form.password,
       inviteCode: form.inviteCode.trim().toUpperCase(),
+      emailCode: form.emailCode.trim(),
     })
   } catch (e: unknown) {
     const status = (e as { response?: { status?: number } })?.response?.status
@@ -90,6 +100,31 @@ async function submit() {
     else serverError.value = '注册失败，请稍后再试。'
   } finally {
     submitting.value = false
+  }
+}
+
+async function sendCode() {
+  if (sendingCode.value || countdown.value > 0) return
+  validateField('contactEmail')
+  if (fieldErrors.contactEmail) return
+  sendingCode.value = true
+  serverError.value = ''
+  try {
+    await sendEmailCode({ email: form.contactEmail.trim().toLowerCase(), purpose: 'REGISTER' })
+    countdown.value = 60
+    countdownTimer = window.setInterval(() => {
+      countdown.value -= 1
+      if (countdown.value <= 0 && countdownTimer) {
+        window.clearInterval(countdownTimer)
+        countdownTimer = undefined
+      }
+    }, 1000)
+  } catch (e: unknown) {
+    const status = (e as { response?: { status?: number } })?.response?.status
+    const message = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+    serverError.value = status === 429 ? '发送太频繁，请稍后再试' : (message || '验证码发送失败，请稍后再试')
+  } finally {
+    sendingCode.value = false
   }
 }
 
@@ -172,16 +207,43 @@ function enterConsole() {
           </label>
 
           <label class="field">
-            <span class="field-label">联系邮箱 <em>选填</em></span>
-            <input
-              v-model="form.contactEmail"
-              type="email"
-              maxlength="128"
-              placeholder="ops@example.com"
-              :class="{ invalid: fieldErrors.contactEmail }"
-              @blur="validateField('contactEmail')"
-            />
+            <span class="field-label">联系邮箱 <i>*</i></span>
+            <div class="email-row">
+              <input
+                v-model="form.contactEmail"
+                type="email"
+                maxlength="128"
+                autocomplete="email"
+                placeholder="ops@example.com（用于注册验证与密码找回）"
+                :class="{ invalid: fieldErrors.contactEmail }"
+                @blur="validateField('contactEmail')"
+                @input="form.emailCode = ''"
+              />
+              <button
+                type="button"
+                class="code-btn"
+                :disabled="sendingCode || countdown > 0 || !emailPattern.test(form.contactEmail.trim())"
+                @click="sendCode"
+              >
+                {{ countdown > 0 ? `${countdown}s` : (sendingCode ? '发送中…' : '发送验证码') }}
+              </button>
+            </div>
             <span v-if="fieldErrors.contactEmail" class="field-error">{{ fieldErrors.contactEmail }}</span>
+          </label>
+
+          <label class="field">
+            <span class="field-label">邮箱验证码 <i>*</i></span>
+            <input
+              v-model="form.emailCode"
+              type="text"
+              maxlength="6"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              placeholder="输入邮件中的 6 位验证码"
+              :class="{ invalid: fieldErrors.emailCode }"
+              @blur="validateField('emailCode')"
+            />
+            <span v-if="fieldErrors.emailCode" class="field-error">{{ fieldErrors.emailCode }}</span>
           </label>
 
           <label class="field">
@@ -386,6 +448,22 @@ h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: -0.5px; }
 .field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 180, 0, 0.14); }
 .field input.invalid { border-color: var(--danger); }
 .field-error { display: block; margin-top: 6px; color: var(--danger); font-size: 12px; }
+.email-row { display: flex; gap: 8px; }
+.email-row input { flex: 1; min-width: 0; }
+.code-btn {
+  flex-shrink: 0;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 180ms, color 180ms;
+}
+.code-btn:hover:not(:disabled) { border-color: var(--accent); }
+.code-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .server-error {
   margin: 0 0 16px;

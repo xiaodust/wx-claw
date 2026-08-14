@@ -18,6 +18,7 @@ import org.springframework.http.HttpStatus;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -124,8 +125,58 @@ class TenantAuthServiceTest {
         assertThat(context).isNotNull();
         assertThat(context.tenantId()).isEqualTo("tenant-1");
         assertThat(context.scopes()).contains("userbot:read", "aiconfig:write");
+        assertThat(context.scopes()).contains("account:read", "account:write");
         assertThat(context.roles()).contains("TENANT_ADMIN");
         assertThat(context.internalUserId()).isEqualTo("account:ops");
+    }
+
+    @Test
+    void changePasswordUpdatesHashAndRevokesSessions() {
+        TenantAccount account = account("tenant-1", "ops", "old-hash");
+        when(accountRepository.findByUsername("ops")).thenReturn(Optional.of(account));
+        when(secretHasher.matches("old-pass-123", "old-hash")).thenReturn(true);
+        when(secretHasher.hash("new-pass-456")).thenReturn("new-hash");
+        when(accountRepository.save(any(TenantAccount.class))).thenAnswer(inv -> inv.getArgument(0));
+        TenantContextHolder.set(new TenantContext("tenant-1", "REST", null, "account:ops", null,
+                Set.of("TENANT_ADMIN"), Set.of(), "req"));
+
+        service.changePassword("old-pass-123", "new-pass-456");
+
+        assertThat(account.getPasswordHash()).isEqualTo("new-hash");
+        verify(sessionRepository).deleteByAccountId(1L);
+        assertThat(TenantContextHolder.getNullable()).isNotNull();
+    }
+
+    @Test
+    void changePasswordRejectsWrongOldPassword() {
+        TenantAccount account = account("tenant-1", "ops", "old-hash");
+        when(accountRepository.findByUsername("ops")).thenReturn(Optional.of(account));
+        when(secretHasher.matches("wrong-pass", "old-hash")).thenReturn(false);
+        TenantContextHolder.set(new TenantContext("tenant-1", "REST", null, "account:ops", null,
+                Set.of(), Set.of(), "req"));
+
+        assertThatThrownBy(() -> service.changePassword("wrong-pass", "new-pass-456"))
+                .isInstanceOf(TenantRegistrationException.class)
+                .satisfies(ex -> {
+                    TenantRegistrationException tre = (TenantRegistrationException) ex;
+                    assertThat(tre.errorCode()).isEqualTo("INVALID_CREDENTIALS");
+                    assertThat(tre.status()).isEqualTo(HttpStatus.UNAUTHORIZED);
+                });
+        verify(sessionRepository, never()).deleteByAccountId(any());
+    }
+
+    @Test
+    void changePasswordRejectsShortNewPassword() {
+        TenantAccount account = account("tenant-1", "ops", "old-hash");
+        when(accountRepository.findByUsername("ops")).thenReturn(Optional.of(account));
+        when(secretHasher.matches("old-pass-123", "old-hash")).thenReturn(true);
+        TenantContextHolder.set(new TenantContext("tenant-1", "REST", null, "account:ops", null,
+                Set.of(), Set.of(), "req"));
+
+        assertThatThrownBy(() -> service.changePassword("old-pass-123", "123"))
+                .isInstanceOf(TenantRegistrationException.class)
+                .satisfies(ex -> assertThat(((TenantRegistrationException) ex).errorCode())
+                        .isEqualTo("VALIDATION_ERROR"));
     }
 
     @Test

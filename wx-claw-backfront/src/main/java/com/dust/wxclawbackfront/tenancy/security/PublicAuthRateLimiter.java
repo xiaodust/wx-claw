@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Deque;
+import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentMap;
@@ -31,6 +32,8 @@ public class PublicAuthRateLimiter {
     private final int loginPerIp;
     private final int resetPerUserAndIp;
     private final int resetPerIp;
+    private final int emailCodePerEmailAndIp;
+    private final int emailCodePerIp;
     private final Duration window;
 
     public PublicAuthRateLimiter(
@@ -40,13 +43,17 @@ public class PublicAuthRateLimiter {
             @Value("${wxclaw.api.login.max-per-user-and-ip:10}") int loginPerUserAndIp,
             @Value("${wxclaw.api.login.max-per-ip:30}") int loginPerIp,
             @Value("${wxclaw.api.password-reset.max-per-user-and-ip:5}") int resetPerUserAndIp,
-            @Value("${wxclaw.api.password-reset.max-per-ip:20}") int resetPerIp) {
+            @Value("${wxclaw.api.password-reset.max-per-ip:20}") int resetPerIp,
+            @Value("${wxclaw.api.email-code.max-per-email-and-ip:5}") int emailCodePerEmailAndIp,
+            @Value("${wxclaw.api.email-code.max-per-ip:20}") int emailCodePerIp) {
         this.maxPerIp = Math.max(1, maxPerIp);
         this.maxPerEmail = Math.max(1, maxPerEmail);
         this.loginPerUserAndIp = Math.max(1, loginPerUserAndIp);
         this.loginPerIp = Math.max(1, loginPerIp);
         this.resetPerUserAndIp = Math.max(1, resetPerUserAndIp);
         this.resetPerIp = Math.max(1, resetPerIp);
+        this.emailCodePerEmailAndIp = Math.max(1, emailCodePerEmailAndIp);
+        this.emailCodePerIp = Math.max(1, emailCodePerIp);
         this.window = window == null || window.isZero() || window.isNegative() ? Duration.ofHours(1) : window;
     }
 
@@ -67,6 +74,13 @@ public class PublicAuthRateLimiter {
         checkKey("pwd:user+ip:" + (usernameOrEmail == null ? "?" : usernameOrEmail.trim().toLowerCase())
                 + ":" + (clientIp == null ? "unknown" : clientIp), resetPerUserAndIp);
         checkKey("pwd:ip:" + (clientIp == null ? "unknown" : clientIp), resetPerIp);
+    }
+
+    public void checkEmailCode(String email, String purpose, String clientIp) {
+        checkKey("code:" + (purpose == null ? "?" : purpose.toLowerCase(Locale.ROOT))
+                + ":" + (email == null ? "?" : email)
+                + ":" + (clientIp == null ? "unknown" : clientIp), emailCodePerEmailAndIp);
+        checkKey("code:ip:" + (clientIp == null ? "unknown" : clientIp), emailCodePerIp);
     }
 
     private void checkKey(String key, int max) {

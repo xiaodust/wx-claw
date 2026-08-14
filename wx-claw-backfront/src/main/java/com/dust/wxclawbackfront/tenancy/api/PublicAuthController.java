@@ -2,11 +2,13 @@ package com.dust.wxclawbackfront.tenancy.api;
 
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.ApiError;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.AuthResult;
+import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.EmailCodeRequest;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.ForgotPasswordRequest;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.LoginRequest;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.OperationResult;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.ResetPasswordRequest;
 import com.dust.wxclawbackfront.tenancy.service.PasswordResetService;
+import com.dust.wxclawbackfront.tenancy.service.EmailVerificationService;
 import com.dust.wxclawbackfront.tenancy.service.TenantAuthService;
 import com.dust.wxclawbackfront.tenancy.service.TenantRegistrationException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,6 +30,7 @@ public class PublicAuthController {
 
     private final TenantAuthService authService;
     private final PasswordResetService passwordResetService;
+    private final EmailVerificationService emailVerificationService;
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody(required = false) LoginRequest request,
@@ -57,6 +60,22 @@ public class PublicAuthController {
             passwordResetService.requestReset(request.usernameOrEmail(), clientIp(httpRequest));
             // 账号不存在也返回同一提示，避免泄露账号是否存在。
             return ResponseEntity.ok(new OperationResult("如果账号存在，重置链接已发送到对应邮箱"));
+        } catch (TenantRegistrationException ex) {
+            return ResponseEntity.status(ex.status())
+                    .body(new ApiError(ex.errorCode(), ex.getMessage()));
+        }
+    }
+
+    @PostMapping("/email-code")
+    public ResponseEntity<?> sendEmailCode(@RequestBody(required = false) EmailCodeRequest request,
+                                           HttpServletRequest httpRequest) {
+        try {
+            if (request == null || request.email() == null || request.email().isBlank()) {
+                throw new TenantRegistrationException("VALIDATION_ERROR", "请输入邮箱",
+                        HttpStatus.BAD_REQUEST);
+            }
+            emailVerificationService.sendCode(request.email(), request.purpose(), clientIp(httpRequest));
+            return ResponseEntity.ok(new OperationResult("验证码已发送，请查收邮件（注意垃圾箱）"));
         } catch (TenantRegistrationException ex) {
             return ResponseEntity.status(ex.status())
                     .body(new ApiError(ex.errorCode(), ex.getMessage()));

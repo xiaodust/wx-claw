@@ -86,10 +86,16 @@ export interface Message {
 export interface RegisterTenantRequest {
   tenantName: string
   tenantCode?: string
-  contactEmail?: string
+  contactEmail: string
   username: string
   password: string
   inviteCode: string
+  emailCode: string
+}
+
+export interface EmailCodeRequest {
+  email: string
+  purpose?: string
 }
 
 export interface RegisterTenantResult {
@@ -130,4 +136,9 @@ export interface ResetPasswordRequest {
 
 export interface OperationResult {
   message: string
+}
+
+export interface ChangePasswordRequest {
+  oldPassword: string
+  newPassword: string
 }

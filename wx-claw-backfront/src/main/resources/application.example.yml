@@ -141,6 +141,14 @@ wxclaw:
       # 邮件不可用时把重置链接写入日志（开发兜底；生产建议关掉并配置 SMTP）
       log-link-when-mail-unavailable: true
       cleanup-ms: 1800000
+    # 邮箱验证码（注册时验证邮箱归属）
+    email-code:
+      ttl: PT10M
+      max-per-email-and-ip: 5
+      max-per-ip: 20
+      log-code-when-mail-unavailable: true
+      log-code-always: false
+      cleanup-ms: 1800000
     cors:
       # 管理端 3000 + 用户控制台 3001
       allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001,http://127.0.0.1:3001}

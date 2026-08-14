@@ -32,6 +32,9 @@ public final class UserDtos {
     public record UpdateModelRequest(String model, String provider, String baseUrl) {
     }
 
+    public record ChangePasswordRequest(String oldPassword, String newPassword) {
+    }
+
     public record Conversation(String id, String sessionId, String botId, boolean active,
                                int messageCount, LocalDateTime lastMessageTime,
                                LocalDateTime createdTime, LocalDateTime updatedTime) {

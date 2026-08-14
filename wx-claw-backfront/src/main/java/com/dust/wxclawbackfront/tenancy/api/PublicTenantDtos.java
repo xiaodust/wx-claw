@@ -13,7 +13,11 @@ public final class PublicTenantDtos {
     }
 
     public record RegisterTenantRequest(String tenantName, String tenantCode, String contactEmail,
-                                        String username, String password, String inviteCode) {
+                                        String username, String password, String inviteCode,
+                                        String emailCode) {
+    }
+
+    public record EmailCodeRequest(String email, String purpose) {
     }
 
     public record RegisteredTenant(String tenantId, String tenantCode, String tenantName, String status,
