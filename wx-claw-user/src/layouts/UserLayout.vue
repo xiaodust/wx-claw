@@ -1,17 +1,26 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { getAccountInfo } from '../api/user'
+import type { AccountInfo } from '../types/user'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const needsAccountSetup = ref(false)
+const accountInfo = ref<AccountInfo | null>(null)
+
+const chipLabel = computed(() => {
+  if (accountInfo.value?.username) return accountInfo.value.username
+  const key = authStore.token
+  return key.includes('.') ? key.split('.')[0] : '—'
+})
 
 onMounted(async () => {
   try {
     const info = await getAccountInfo()
+    accountInfo.value = info
     needsAccountSetup.value = !info.hasAccount
   } catch {
     needsAccountSetup.value = false
@@ -45,7 +54,7 @@ function logout() {
         <el-menu-item index="/settings">KEY / 模型设置</el-menu-item>
       </el-menu>
       <div class="header-right">
-        <span class="tenant-chip mono">tenant: {{ authStore.apiKey.split('.')[0] || '—' }}</span>
+        <span class="tenant-chip mono">tenant: {{ chipLabel }}</span>
         <button class="logout-btn" type="button" @click="logout">退出</button>
       </div>
     </header>

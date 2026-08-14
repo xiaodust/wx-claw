@@ -5,9 +5,12 @@ import type {
   ForgotPasswordRequest,
   LoginRequest,
   OperationResult,
+  AccountInfo,
   RegisterTenantRequest,
   RegisterTenantResult,
   ResetPasswordRequest,
+  SetupAccountRequest,
+  SetupAccountResult,
 } from '../types/user'
 
 /**
@@ -31,4 +34,14 @@ export function resetPassword(payload: ResetPasswordRequest): Promise<OperationR
 
 export function sendEmailCode(payload: EmailCodeRequest): Promise<OperationResult> {
   return axios.post('/api/public/auth/email-code', payload).then(r => r.data)
+}
+
+/** 用 API Key 探测租户账号状态（仅激活流程使用，Key 不落 storage）。 */
+export function probeAccount(apiKey: string): Promise<AccountInfo> {
+  return axios.get('/api/user/account', { headers: { 'X-API-Key': apiKey } }).then(r => r.data)
+}
+
+/** 用 API Key 为无账号租户创建控制台账号（激活流程，Key 不落 storage）。 */
+export function activateAccount(apiKey: string, payload: SetupAccountRequest): Promise<SetupAccountResult> {
+  return axios.post('/api/user/account/setup', payload, { headers: { 'X-API-Key': apiKey } }).then(r => r.data)
 }

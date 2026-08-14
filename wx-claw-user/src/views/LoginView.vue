@@ -1,58 +1,38 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { loginTenant } from '../api/public'
 import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
-const activeTab = ref<'account' | 'apikey'>('account')
 const account = reactive({ username: '', password: '' })
-const apiKey = ref('')
 const loading = ref(false)
 const errorMsg = ref('')
 
-function switchTab() {
-  errorMsg.value = ''
-}
-
 async function login() {
   if (loading.value) return
-  errorMsg.value = ''
-  if (activeTab.value === 'account') {
-    const username = account.username.trim()
-    if (!username || !account.password) {
-      errorMsg.value = '请输入用户名和密码'
-      return
-    }
-    loading.value = true
-    try {
-      const result = await loginTenant({ username, password: account.password })
-      authStore.login(result.sessionToken)
-      router.push('/bots')
-    } catch (e: unknown) {
-      const status = (e as { response?: { status?: number } })?.response?.status
-      const message = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
-      if (status === 401) errorMsg.value = '用户名或密码错误'
-      else if (status === 429) errorMsg.value = '尝试过于频繁，请稍后再试'
-      else errorMsg.value = message || '登录失败，请稍后再试'
-    } finally {
-      loading.value = false
-    }
-    return
-  }
-
-  const key = apiKey.value.trim()
-  if (!key) {
-    errorMsg.value = '请输入 API Key'
+  const username = account.username.trim()
+  if (!username || !account.password) {
+    errorMsg.value = '请输入用户名和密码'
     return
   }
   loading.value = true
-  authStore.login(key)
-  router.push('/bots')
-  loading.value = false
+  errorMsg.value = ''
+  try {
+    const result = await loginTenant({ username, password: account.password })
+    authStore.login(result.sessionToken)
+    router.push('/bots')
+  } catch (e: unknown) {
+    const status = (e as { response?: { status?: number } })?.response?.status
+    const message = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+    if (status === 401) errorMsg.value = '用户名或密码错误'
+    else if (status === 429) errorMsg.value = '尝试过于频繁，请稍后再试'
+    else errorMsg.value = message || '登录失败，请稍后再试'
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
@@ -66,59 +46,43 @@ async function login() {
       </router-link>
       <p class="page-kicker">CONSOLE SIGN IN</p>
       <h1 class="page-title">登录控制台</h1>
-      <p class="page-subtitle">管理 Bot、会话与 AI 能力配置</p>
+      <p class="page-subtitle">使用注册时设置的用户名和密码登录</p>
 
-      <el-tabs v-model="activeTab" class="login-tabs" @tab-change="switchTab">
-        <el-tab-pane label="账号密码" name="account">
-          <label class="field">
-            <span class="field-label">用户名</span>
-            <el-input
-              v-model="account.username"
-              autocomplete="username"
-              placeholder="注册时设置的用户名"
-              @keyup.enter="login"
-            />
-          </label>
-          <label class="field">
-            <span class="field-label">密码</span>
-            <el-input
-              v-model="account.password"
-              type="password"
-              show-password
-              autocomplete="current-password"
-              placeholder="登录密码"
-              @keyup.enter="login"
-            />
-          </label>
-        </el-tab-pane>
-        <el-tab-pane label="API Key" name="apikey">
-          <label class="field">
-            <span class="field-label">API Key</span>
-            <el-input
-              v-model="apiKey"
-              type="password"
-              show-password
-              placeholder="credentialId.secret（接口/旧账号使用）"
-              @keyup.enter="login"
-            />
-          </label>
-        </el-tab-pane>
-      </el-tabs>
-      <p v-if="activeTab === 'account'" class="forgot-link">
+      <label class="field">
+        <span class="field-label">用户名</span>
+        <el-input
+          v-model="account.username"
+          autocomplete="username"
+          placeholder="用户名"
+          @keyup.enter="login"
+        />
+      </label>
+      <label class="field">
+        <span class="field-label">密码</span>
+        <el-input
+          v-model="account.password"
+          type="password"
+          show-password
+          autocomplete="current-password"
+          placeholder="登录密码"
+          @keyup.enter="login"
+        />
+      </label>
+      <p class="forgot-link">
         <router-link to="/forgot-password">忘记密码？</router-link>
       </p>
 
       <p v-if="errorMsg" class="login-error" role="alert">{{ errorMsg }}</p>
-      <el-button type="primary" class="login-btn" :loading="loading" @click="login">
-        {{ activeTab === 'account' ? '登录' : '使用 Key 登录' }}
-      </el-button>
+      <el-button type="primary" class="login-btn" :loading="loading" @click="login">登录</el-button>
+
       <p class="muted login-hint">
-        新注册租户使用账号密码登录；API Key 仅用于接口调用，也可作为旧账号的登录兜底。
+        还没有账号的租户，可使用 API Key
+        <router-link to="/activate">激活账号</router-link>后再用密码登录。
       </p>
       <p class="login-links">
         <router-link to="/">返回首页</router-link>
         <span class="divider">·</span>
-        <router-link to="/register">还没有账号？免费注册</router-link>
+        <router-link to="/register">免费注册</router-link>
       </p>
     </div>
   </div>
@@ -172,10 +136,12 @@ async function login() {
 }
 .brand-name { font-weight: 800; letter-spacing: 2px; font-size: 14px; }
 .login-card .page-title { font-size: 24px; }
-.login-card .page-subtitle { margin-bottom: 14px; }
-.login-tabs :deep(.el-tabs__item) { font-weight: 600; }
+.login-card .page-subtitle { margin-bottom: 18px; }
 .field { display: block; margin-bottom: 14px; }
 .field-label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 7px; color: var(--muted); }
+.forgot-link { margin: 0 0 4px; text-align: right; font-size: 12px; }
+.forgot-link a { color: var(--muted); text-decoration: none; }
+.forgot-link a:hover { color: var(--accent); }
 .login-error {
   margin: 12px 0 0;
   padding: 9px 12px;
@@ -185,11 +151,9 @@ async function login() {
   color: var(--danger);
   font-size: 13px;
 }
-.forgot-link { margin: 0 0 4px; text-align: right; font-size: 12px; }
-.forgot-link a { color: var(--muted); text-decoration: none; }
-.forgot-link a:hover { color: var(--accent); }
 .login-btn { width: 100%; margin-top: 16px; font-weight: 800; }
-.login-hint { font-size: 12px; margin-top: 14px; line-height: 1.6; }
+.login-hint { font-size: 12px; margin-top: 14px; line-height: 1.7; }
+.login-hint a { color: var(--accent); text-decoration: none; }
 .login-links { margin-top: 16px; display: flex; justify-content: center; gap: 8px; font-size: 13px; }
 .login-links a { color: var(--accent); text-decoration: none; }
 .login-links a:hover { text-decoration: underline; }
