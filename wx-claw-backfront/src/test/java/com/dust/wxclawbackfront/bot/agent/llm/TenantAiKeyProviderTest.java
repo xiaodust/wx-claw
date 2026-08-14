@@ -190,4 +190,27 @@ class TenantAiKeyProviderTest {
         assertThat(provider.videoKey()).isEqualTo("sk-default-openai-video");
         assertThat(provider.videoModel()).isEqualTo("sora-2");
     }
+
+    @Test
+    void dashscopeVideoUsesDashscopeKeyField() {
+        TenantAiConfig config = new TenantAiConfig();
+        config.setTenantId("tenant-a");
+        config.setVideoProvider("dashscope");
+        config.setVideoDashscopeApiKey("sk-user-dash");
+        when(repository.findById("tenant-a")).thenReturn(Optional.of(config));
+        TenantContextHolder.set(TenantContext.ilink("tenant-a", "bot-a", "user-a", "req"));
+
+        assertThat(provider.videoKey()).isEqualTo("sk-user-dash");
+    }
+
+    @Test
+    void dashscopeVideoFallsBackToDashscopeDefaultKey() {
+        TenantAiConfig config = new TenantAiConfig();
+        config.setTenantId("tenant-a");
+        config.setVideoProvider("dashscope");
+        when(repository.findById("tenant-a")).thenReturn(Optional.of(config));
+        TenantContextHolder.set(TenantContext.ilink("tenant-a", "bot-a", "user-a", "req"));
+
+        assertThat(provider.videoKey()).isEqualTo("sk-default-dash");
+    }
 }

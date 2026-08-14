@@ -99,7 +99,7 @@ public class VideoGenerationHandler {
         int durationToUse = customDuration != null ? customDuration : duration;
         String resolutionToUse = customResolution != null ? customResolution : resolution;
         String provider = effectiveProvider();
-        String model = "dashscope".equalsIgnoreCase(provider) ? dashscopeT2vModel : keyProvider.videoModel();
+        String model = "dashscope".equalsIgnoreCase(provider) ? dashscopeModel(false) : keyProvider.videoModel();
         LlmInvocationRecorder.InvocationHandle handle = invocationRecorder.start(
                 "VIDEO_GENERATION", provider, model,
                 auditRequest("text", prompt, null, ratioToUse, durationToUse, resolutionToUse));
@@ -136,7 +136,7 @@ public class VideoGenerationHandler {
         int durationToUse = customDuration != null ? customDuration : duration;
         String resolutionToUse = customResolution != null ? customResolution : resolution;
         String provider = effectiveProvider();
-        String model = "dashscope".equalsIgnoreCase(provider) ? dashscopeI2vModel : keyProvider.videoModel();
+        String model = "dashscope".equalsIgnoreCase(provider) ? dashscopeModel(true) : keyProvider.videoModel();
         LlmInvocationRecorder.InvocationHandle handle = invocationRecorder.start(
                 "VIDEO_GENERATION", provider, model,
                 auditRequest("image", prompt, imageUrl, ratioToUse, durationToUse, resolutionToUse));
@@ -194,11 +194,6 @@ public class VideoGenerationHandler {
 
     public boolean isEnabled() {
         String provider = effectiveProvider();
-        if ("dashscope".equalsIgnoreCase(provider)) {
-            String key = keyProvider.videoDashscopeKey();
-            return key != null && !key.isBlank();
-        }
-        // ark / openai
         String key = keyProvider.videoKey();
         return key != null && !key.isBlank();
     }
@@ -298,10 +293,10 @@ public class VideoGenerationHandler {
 
     private String createDashScopeTask(String prompt, String imageUrl, String ratioVal, int durationVal, String resolutionVal) {
         try {
-            String key = keyProvider.videoDashscopeKey();
+            String key = keyProvider.videoKey();
             // 选择模型：图生视频用 i2v，文生视频用 t2v
             boolean isImageToVideo = imageUrl != null && !imageUrl.isBlank();
-            String model = isImageToVideo ? dashscopeI2vModel : dashscopeT2vModel;
+            String model = dashscopeModel(isImageToVideo);
 
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("model", model);
@@ -566,7 +561,7 @@ public class VideoGenerationHandler {
 
     private VideoGenerationResult pollDashScopeTask(String taskId) {
         String queryUrl = "https://dashscope.aliyuncs.com/api/v1/tasks/" + taskId;
-        String key = keyProvider.videoDashscopeKey();
+        String key = keyProvider.videoKey();
         long deadline = System.currentTimeMillis() + pollTimeoutMs;
 
         while (System.currentTimeMillis() < deadline) {
@@ -699,5 +694,13 @@ public class VideoGenerationHandler {
     private static String truncate(String text) {
         if (text == null) return "null";
         return text.length() > 50 ? text.substring(0, 50) + "..." : text;
+    }
+
+    private String dashscopeModel(boolean imageToVideo) {
+        String tenantModel = keyProvider.tenantVideoModel();
+        if (tenantModel != null && !tenantModel.isBlank()) {
+            return tenantModel;
+        }
+        return imageToVideo ? dashscopeI2vModel : dashscopeT2vModel;
     }
 }

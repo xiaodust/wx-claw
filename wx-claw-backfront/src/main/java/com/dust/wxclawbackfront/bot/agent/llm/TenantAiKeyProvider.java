@@ -150,27 +150,41 @@ public class TenantAiKeyProvider {
     }
 
     /**
-     * 视频生成 Key（ark/openai）：
+     * 视频生成 Key（按服务商取对应 Key 字段）：
      * <ol>
-     *   <li>用户配置的 video_api_key 优先；</li>
+     *   <li>用户配置的对应字段 Key 优先（ark/openai 用 video_api_key，dashscope 用 video_dashscope_api_key）；</li>
      *   <li>服务商为 openai 时回退后端默认 OpenAI 视频 Key；</li>
+     *   <li>服务商为 dashscope 时回退后端默认 DashScope Key；</li>
      *   <li>服务商为 ark 且对话服务商为 ark 时，复用对话 Ark Key；</li>
      *   <li>否则回退后端默认 Ark Key。</li>
      * </ol>
      */
     public String videoKey() {
         String provider = videoProvider();
-        String tenantKey = resolve(currentTenantId(), TenantAiConfig::getVideoApiKey, null);
+        String tenantKey;
+        if ("dashscope".equalsIgnoreCase(provider)) {
+            tenantKey = resolve(currentTenantId(), TenantAiConfig::getVideoDashscopeApiKey, null);
+        } else {
+            tenantKey = resolve(currentTenantId(), TenantAiConfig::getVideoApiKey, null);
+        }
         if (tenantKey != null && !tenantKey.isBlank()) {
             return tenantKey;
         }
         if ("openai".equalsIgnoreCase(provider)) {
             return defaultOpenaiVideoKey;
         }
+        if ("dashscope".equalsIgnoreCase(provider)) {
+            return defaultVideoDashscopeKey;
+        }
         if ("ark".equalsIgnoreCase(provider) && "ark".equalsIgnoreCase(chatProvider())) {
             return chatKey();
         }
         return defaultVideoKey;
+    }
+
+    /** 仅返回租户自定义的视频模型；未配置返回 null。 */
+    public String tenantVideoModel() {
+        return resolve(currentTenantId(), TenantAiConfig::getVideoModel, null);
     }
 
     /** 视频生成模型：租户配置优先；openai 服务商回退 sora，否则回退 Seedance。 */

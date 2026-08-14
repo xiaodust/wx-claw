@@ -101,6 +101,22 @@ class TenantAiConfigServiceTest {
     }
 
     @Test
+    void saveVideoKeyRoutesToDashscopeFieldWhenProviderIsDashscope() {
+        TenantAiConfig saved = new TenantAiConfig();
+        saved.setVideoProvider("dashscope");
+        when(repository.findById("tenant-a")).thenReturn(Optional.of(saved));
+        when(repository.save(any(TenantAiConfig.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        UserDtos.AiConfigEntry entry = service.save("video", "sk-dash-1234");
+
+        assertThat(saved.getVideoApiKey()).isNull();
+        assertThat(saved.getVideoDashscopeApiKey()).isEqualTo("sk-dash-1234");
+        assertThat(entry.configured()).isTrue();
+        assertThat(entry.provider()).isEqualTo("dashscope");
+        verify(factory, never()).evict(any());
+    }
+
+    @Test
     void saveRejectsBlankKey() {
         assertThatThrownBy(() -> service.save("chat", "   "))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -239,5 +255,20 @@ class TenantAiConfigServiceTest {
 
         assertThat(saved.getImageModel()).isNull();
         assertThat(saved.getImageProvider()).isNull();
+    }
+
+    @Test
+    void clearVideoCapabilityClearsBothKeyFields() {
+        TenantAiConfig saved = new TenantAiConfig();
+        saved.setVideoProvider("dashscope");
+        saved.setVideoApiKey("sk-ark");
+        saved.setVideoDashscopeApiKey("sk-dash");
+        when(repository.findById("tenant-a")).thenReturn(Optional.of(saved));
+        when(repository.save(any(TenantAiConfig.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.clear("video");
+
+        assertThat(saved.getVideoApiKey()).isNull();
+        assertThat(saved.getVideoDashscopeApiKey()).isNull();
     }
 }

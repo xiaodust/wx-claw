@@ -69,7 +69,11 @@ public class TenantAiConfigService {
         String tenantId = tenantId();
         TenantAiConfig config = configRepository.findById(tenantId).orElseGet(TenantAiConfig::new);
         config.setTenantId(tenantId);
-        cap.setter().accept(config, apiKey.trim());
+        if ("video".equals(capability) && "dashscope".equalsIgnoreCase(providerId(Optional.of(config), capability))) {
+            config.setVideoDashscopeApiKey(apiKey.trim());
+        } else {
+            cap.setter().accept(config, apiKey.trim());
+        }
         configRepository.save(config);
         if ("chat".equals(capability)) {
             chatClientFactory.evict(tenantId);
@@ -147,7 +151,12 @@ public class TenantAiConfigService {
         if (config.isEmpty()) {
             return;
         }
-        cap.setter().accept(config.get(), null);
+        if ("video".equals(capability)) {
+            config.get().setVideoApiKey(null);
+            config.get().setVideoDashscopeApiKey(null);
+        } else {
+            cap.setter().accept(config.get(), null);
+        }
         configRepository.save(config.get());
         if ("chat".equals(capability)) {
             chatClientFactory.evict(tenantId);
@@ -156,12 +165,18 @@ public class TenantAiConfigService {
 
     private UserDtos.AiConfigEntry entry(Optional<TenantAiConfig> config, String capability) {
         Capability cap = CAPABILITIES.get(capability);
-        String apiKey = config.map(cap.getter()).orElse(null);
+        String provider = providerId(config, capability);
+        String apiKey;
+        if ("video".equals(capability) && "dashscope".equalsIgnoreCase(provider)) {
+            apiKey = config.map(TenantAiConfig::getVideoDashscopeApiKey).orElse(null);
+        } else {
+            apiKey = config.map(cap.getter()).orElse(null);
+        }
         boolean configured = apiKey != null && !apiKey.isBlank();
         return new UserDtos.AiConfigEntry(
                 configured,
                 configured ? mask(apiKey) : null,
-                providerId(config, capability),
+                provider,
                 config.map(cap.modelGetter()).orElse(null));
     }
 
