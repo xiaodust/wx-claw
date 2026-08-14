@@ -24,7 +24,7 @@ import java.util.Map;
 @Service
 public class PlainTextLlmService {
 
-    private final ChatClient chatClient;
+    private final TenantChatClientFactory chatClientFactory;
     private final LlmInvocationRecorder invocationRecorder;
     private final ObjectMapper objectMapper;
     private OpenAiChatOptions.Builder cachedOptionsBuilder;
@@ -41,10 +41,10 @@ public class PlainTextLlmService {
     @Value("${wxclaw.ai.chat.timeout:PT35S}")
     private Duration timeout;
 
-    public PlainTextLlmService(ChatClient.Builder chatClientBuilder,
+    public PlainTextLlmService(TenantChatClientFactory chatClientFactory,
                                LlmInvocationRecorder invocationRecorder,
                                ObjectMapper objectMapper) {
-        this.chatClient = chatClientBuilder.build();
+        this.chatClientFactory = chatClientFactory;
         this.invocationRecorder = invocationRecorder;
         this.objectMapper = objectMapper;
     }
@@ -68,7 +68,7 @@ public class PlainTextLlmService {
         LlmInvocationRecorder.InvocationHandle handle = invocationRecorder.start(
                 invocationType, "OPENAI_COMPATIBLE", model, requestPayload(prompt));
         try {
-            ChatResponse response = chatClient.prompt()
+            ChatResponse response = chatClientFactory.currentClient().prompt()
                     .options(cachedOptionsBuilder)
                     .user(prompt)
                     .call()

@@ -149,7 +149,7 @@ public class AdminQueryService {
     private AdminDtos.BotStatus toBotStatus(TenantBot bot) {
         BotRuntimeSnapshot snapshot = statusRegistry.get(new BotRuntimeKey(bot.getTenantId(), bot.getBotId()))
                 .orElse(new BotRuntimeSnapshot(new BotRuntimeKey(bot.getTenantId(), bot.getBotId()),
-                        BotRuntimeStatus.OFFLINE, null, null, null, null, null, null, 0, false));
+                        BotRuntimeStatus.OFFLINE, null, null, null, null, null, null, 0, false, null));
         return new AdminDtos.BotStatus(bot.getTenantId(), bot.getBotId(), bot.getDisplayName(), bot.getChannel(),
                 bot.getStatus(), snapshot.status().name(), snapshot.connectedAt(), snapshot.statusChangedAt(),
                 snapshot.lastPollAt(), snapshot.lastMessageAt(), snapshot.lastErrorAt(), snapshot.lastError(),

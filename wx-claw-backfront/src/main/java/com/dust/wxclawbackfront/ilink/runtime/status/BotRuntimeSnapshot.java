@@ -14,6 +14,7 @@ public record BotRuntimeSnapshot(
         Instant lastErrorAt,
         String lastError,
         int reconnectAttempts,
-        boolean resumeContextAvailable
+        boolean resumeContextAvailable,
+        String qrContent
 ) {
 }

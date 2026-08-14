@@ -74,6 +74,33 @@ public class ILinkBotService {
         log.info("已启动 {} 个 ILink Bot 运行时", keys.size());
     }
 
+    /**
+     * 动态启动单个 Bot（用户页面创建 bot 后调用）。
+     */
+    public void startBot(BotRuntimeKey key) {
+        if (key == null) {
+            return;
+        }
+        statusRegistry.starting(key, false);
+        botRuntimeExecutor.submit(() -> runILinkMonitor(key));
+        log.info("已提交 Bot 启动任务: tenantId={}, botId={}", key.tenantId(), key.botId());
+    }
+
+    /**
+     * 停止单个 Bot 运行时（用户页面删除/停用 bot 后调用）。
+     */
+    public void stopBot(BotRuntimeKey key) {
+        if (key == null) {
+            return;
+        }
+        AtomicBoolean flag = stopFlags.get(key);
+        if (flag != null) {
+            flag.set(true);
+        }
+        statusRegistry.stopped(key);
+        log.info("已请求停止 Bot: tenantId={}, botId={}", key.tenantId(), key.botId());
+    }
+
     public void runILinkMonitor(BotRuntimeKey key) {
         AtomicBoolean stopFlag = stopFlags.computeIfAbsent(key, ignored -> new AtomicBoolean(false));
         int reconnectAttempts = 0;

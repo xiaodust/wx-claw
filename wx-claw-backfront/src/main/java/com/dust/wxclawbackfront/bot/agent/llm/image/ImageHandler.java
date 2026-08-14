@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.bot.agent.llm.image;
 
+import com.dust.wxclawbackfront.bot.agent.llm.chat.TenantChatClientFactory;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.TextSanitizer;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolInvocationStore;
 import com.dust.wxclawbackfront.bot.agent.tools.time.TimeTools;
@@ -28,7 +29,7 @@ import java.util.Map;
 @Service
 public class ImageHandler {
 
-    private final ChatClient chatClient;
+    private final TenantChatClientFactory chatClientFactory;
     private final String imageModel;
     private final String defaultModel;
     private final String prompt;
@@ -41,7 +42,7 @@ public class ImageHandler {
     private final AiToolInvocationStore toolInvocationStore;
     private final LlmInvocationRecorder invocationRecorder;
 
-    public ImageHandler(ChatClient.Builder chatClientBuilder,
+    public ImageHandler(TenantChatClientFactory chatClientFactory,
                         ObjectMapper objectMapper,
                         TimeTools timeTools,
                         WeatherTools weatherTools,
@@ -53,7 +54,7 @@ public class ImageHandler {
                         @Value("${wxclaw.ai.thinking.type:disabled}") String thinkingType,
                         @Value("${wxclaw.ai.image.max-tokens:512}") int maxTokens,
                         @Value("${wxclaw.ai.image.timeout:PT35S}") Duration timeout) {
-        this.chatClient = chatClientBuilder.build();
+        this.chatClientFactory = chatClientFactory;
         this.objectMapper = objectMapper;
         this.imageModel = imageModel;
         this.defaultModel = defaultModel;
@@ -124,7 +125,7 @@ public class ImageHandler {
                 optionsBuilder = optionsBuilder.timeout(timeout);
             }
             long start = System.currentTimeMillis();
-            ChatResponse response = chatClient.prompt()
+            ChatResponse response = chatClientFactory.currentClient().prompt()
                     .tools(timeTools, weatherTools)
                     .options(optionsBuilder)
                     .messages(userMessage)

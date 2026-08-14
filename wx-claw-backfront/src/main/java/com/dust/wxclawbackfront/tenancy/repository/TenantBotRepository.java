@@ -4,6 +4,7 @@ import com.dust.wxclawbackfront.tenancy.entity.TenantBot;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 /** Bot 配置仓储；调用方必须明确传入租户条件或在返回后建立对应租户上下文。 */
 public interface TenantBotRepository extends JpaRepository<TenantBot, Long> {
@@ -12,4 +13,7 @@ public interface TenantBotRepository extends JpaRepository<TenantBot, Long> {
 
     /** 管理端按租户列出 Bot，避免把其他租户配置混入响应。 */
     List<TenantBot> findAllByTenantId(String tenantId);
+
+    /** 用户自助 API：按租户+botId 定位 Bot，天然隔离其他租户。 */
+    Optional<TenantBot> findByTenantIdAndBotId(String tenantId, String botId);
 }

@@ -25,12 +25,19 @@ public class BotRuntimeStatusRegistry {
     }
 
     public void waitingForQr(BotRuntimeKey key) {
-        state(key).updateStatus(BotRuntimeStatus.WAITING_QR, 0, null, false);
+        waitingForQr(key, null);
+    }
+
+    public void waitingForQr(BotRuntimeKey key, String qrContent) {
+        MutableState state = state(key);
+        state.qrContent = qrContent;
+        state.updateStatus(BotRuntimeStatus.WAITING_QR, 0, null, false);
     }
 
     public void loginSucceeded(BotRuntimeKey key, boolean resumeContextAvailable) {
         MutableState state = state(key);
         state.connectedAt = Instant.now();
+        state.qrContent = null;
         state.updateStatus(BotRuntimeStatus.STARTING, state.reconnectAttempts, null, resumeContextAvailable);
     }
 
@@ -45,19 +52,23 @@ public class BotRuntimeStatusRegistry {
     }
 
     public void reconnecting(BotRuntimeKey key, int attempts, Throwable error) {
+        state(key).qrContent = null;
         state(key).updateStatus(BotRuntimeStatus.RECONNECTING, attempts, message(error), true);
     }
 
     public void error(BotRuntimeKey key, int attempts, Throwable error) {
+        state(key).qrContent = null;
         state(key).updateStatus(BotRuntimeStatus.ERROR, attempts, message(error),
                 state(key).resumeContextAvailable);
     }
 
     public void offline(BotRuntimeKey key) {
+        state(key).qrContent = null;
         state(key).updateStatus(BotRuntimeStatus.OFFLINE, 0, null, state(key).resumeContextAvailable);
     }
 
     public void stopped(BotRuntimeKey key) {
+        state(key).qrContent = null;
         state(key).updateStatus(BotRuntimeStatus.STOPPED, 0, null, state(key).resumeContextAvailable);
     }
 
@@ -105,6 +116,7 @@ public class BotRuntimeStatusRegistry {
         private volatile String lastError;
         private volatile int reconnectAttempts;
         private volatile boolean resumeContextAvailable;
+        private volatile String qrContent;
 
         private MutableState(BotRuntimeKey key) {
             this.key = key;
@@ -126,7 +138,8 @@ public class BotRuntimeStatusRegistry {
 
         private synchronized BotRuntimeSnapshot snapshot() {
             return new BotRuntimeSnapshot(key, status, connectedAt, statusChangedAt, lastPollAt,
-                    lastMessageAt, lastErrorAt, lastError, reconnectAttempts, resumeContextAvailable);
+                    lastMessageAt, lastErrorAt, lastError, reconnectAttempts, resumeContextAvailable,
+                    qrContent);
         }
     }
 }

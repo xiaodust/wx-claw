@@ -49,7 +49,7 @@ public class ILinkRuntimeManager {
         try {
             if (!client.isLoggedIn()) {
                 String qrCodeContent = client.executeLogin();
-                statusRegistry.waitingForQr(key);
+                statusRegistry.waitingForQr(key, qrCodeContent);
                 log.info("Bot {} / {} 请扫码登录：\n{}", key.tenantId(), key.botId(), qrCodeContent);
                 client.getLoginFuture().get();
             }

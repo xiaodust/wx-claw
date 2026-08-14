@@ -33,7 +33,7 @@ import java.util.concurrent.ExecutorService;
 @Slf4j
 @Service
 public class UniversalChatHandler implements ChatHandler {
-    private final ChatClient chatClient;
+    private final TenantChatClientFactory chatClientFactory;
     private final AiToolInvocationStore toolInvocationStore;
     private final ChatRequestBuilder requestBuilder;
     private final LlmToolRegistry toolRegistry;
@@ -71,7 +71,7 @@ public class UniversalChatHandler implements ChatHandler {
     @Value("${wxclaw.ai.chat.hard-timeout:PT60S}")
     private Duration hardTimeout;
 
-    public UniversalChatHandler(ChatClient.Builder chatClientBuilder,
+    public UniversalChatHandler(TenantChatClientFactory chatClientFactory,
                                 AiToolInvocationStore toolInvocationStore,
                                 ChatRequestBuilder requestBuilder,
                                 LlmToolRegistry toolRegistry,
@@ -87,7 +87,7 @@ public class UniversalChatHandler implements ChatHandler {
                                 @Value("${wxclaw.ai.chat.timeout:PT25S}") Duration timeout,
                                 @Value("${wxclaw.ai.context.max-chars:7000}") int maxContextChars,
                                 @Value("${wxclaw.ai.context.max-message-chars:800}") int maxMessageChars) {
-        this.chatClient = chatClientBuilder.build();
+        this.chatClientFactory = chatClientFactory;
         this.toolInvocationStore = toolInvocationStore;
         this.requestBuilder = requestBuilder;
         this.toolRegistry = toolRegistry;
@@ -179,7 +179,7 @@ public class UniversalChatHandler implements ChatHandler {
      * 使用 Spring AI 原生 function calling 调用 LLM
      */
     private String callWithTools(String requestText, String systemPrompt) {
-        ChatClient.ChatClientRequestSpec spec = chatClient.prompt();
+        ChatClient.ChatClientRequestSpec spec = chatClientFactory.currentClient().prompt();
 
         var optionsBuilder = LlmOptionsBuilder.builder()
                 .model(model)
