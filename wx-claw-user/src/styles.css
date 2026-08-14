@@ -5,7 +5,8 @@
   font-synthesis: none;
 }
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 960px; }
+html { scroll-behavior: smooth; }
+body { margin: 0; min-width: 0; }
 .page-title { margin: 0; font-size: 24px; font-weight: 700; }
 .page-subtitle { margin: 6px 0 22px; color: #667085; font-size: 14px; }
 .panel { background: #fff; border: 1px solid #e7ecf2; border-radius: 14px; padding: 20px; box-shadow: 0 4px 18px rgba(16,24,40,.04); }

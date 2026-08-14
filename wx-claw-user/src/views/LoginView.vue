@@ -38,6 +38,11 @@ function login() {
       <p class="muted login-hint">
         首次使用可用后端配置的 bootstrap key；该 Key 需具备 userbot:* 、conversation:read、aiconfig:* 权限。
       </p>
+      <p class="login-links">
+        <router-link to="/">返回首页</router-link>
+        <span class="divider">·</span>
+        <router-link to="/register">还没有账号？免费注册</router-link>
+      </p>
     </div>
   </div>
 </template>
@@ -47,4 +52,8 @@ function login() {
 .login-card { width: 420px; }
 .login-btn { width: 100%; margin-top: 16px; }
 .login-hint { font-size: 12px; margin-top: 14px; line-height: 1.6; }
+.login-links { margin-top: 16px; display: flex; justify-content: center; gap: 8px; font-size: 13px; }
+.login-links a { color: #2563eb; text-decoration: none; }
+.login-links a:hover { text-decoration: underline; }
+.divider { color: #c1c9d2; }
 </style>

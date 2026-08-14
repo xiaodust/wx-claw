@@ -82,3 +82,20 @@ export interface Message {
   errorMsg: string | null
   createTime: string | null
 }
+
+export interface RegisterTenantRequest {
+  tenantName: string
+  tenantCode?: string
+  contactEmail?: string
+}
+
+export interface RegisterTenantResult {
+  tenantId: string
+  tenantCode: string
+  tenantName: string
+  status: string
+  createdAt: string | null
+  credentialId: string
+  apiKey: string
+  scopes: string
+}

@@ -11,4 +11,7 @@ import java.util.Optional;
 public interface TenantRepository extends JpaRepository<Tenant, Long> {
     /** 使用业务隔离键定位租户，而不是使用数据库自增主键。 */
     Optional<Tenant> findByTenantId(String tenantId);
+
+    /** 租户编码全局唯一，用于注册时校验编码是否已被占用。 */
+    Optional<Tenant> findByTenantCode(String tenantCode);
 }

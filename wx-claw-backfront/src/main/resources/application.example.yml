@@ -113,6 +113,12 @@ wxclaw:
     authentication-cache-ttl-seconds: 30
     # 认证缓存/写入标记的定时清理间隔
     authentication-cache-cleanup-ms: 600000
+    # 公开注册接口限流（按 IP / 邮箱的固定窗口）
+    registration:
+      max-per-ip: 5
+      max-per-email: 3
+      window: PT1H
+      cleanup-ms: 600000
     cors:
       # 管理端 3000 + 用户控制台 3001
       allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001,http://127.0.0.1:3001}
