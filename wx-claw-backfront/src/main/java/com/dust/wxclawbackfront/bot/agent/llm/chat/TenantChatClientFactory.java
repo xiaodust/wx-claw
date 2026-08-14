@@ -81,6 +81,9 @@ public class TenantChatClientFactory {
     }
 
     protected ChatClient buildClient(String apiKey, String baseUrl, String model) {
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new IllegalStateException("未配置 LLM API Key：请在后端 application.yml 配置 spring.ai.openai.api-key，或让用户在设置页配置对话 API Key");
+        }
         OpenAIClient openAiClient = OpenAiSetup.setupSyncClient(
                 baseUrl, apiKey, null, null, null, null,
                 false, false, model, timeout, maxRetries,

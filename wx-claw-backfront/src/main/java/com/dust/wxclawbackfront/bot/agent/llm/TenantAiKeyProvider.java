@@ -4,7 +4,9 @@ import com.dust.wxclawbackfront.tenancy.TenantContext;
 import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import com.dust.wxclawbackfront.tenancy.entity.TenantAiConfig;
 import com.dust.wxclawbackfront.tenancy.repository.TenantAiConfigRepository;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +20,7 @@ import java.util.function.Function;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class TenantAiKeyProvider {
 
     private final TenantAiConfigRepository configRepository;
@@ -67,6 +70,16 @@ public class TenantAiKeyProvider {
 
     @Value("${wxclaw.ai.web-search.bocha.api-key:}")
     private String defaultSearchKey;
+
+    @PostConstruct
+    void logStartupConfig() {
+        if (defaultChatKey == null || defaultChatKey.isBlank()) {
+            log.warn("后端默认对话 API Key 未配置（spring.ai.openai.api-key 为空）：用户未配置自己的 Key 时将无法对话");
+        }
+        if (defaultImageKey == null || defaultImageKey.isBlank()) {
+            log.warn("后端默认图片生成 Key 未配置（wxclaw.ai.image.generate.api-key 为空）");
+        }
+    }
 
     /** 文本对话/理解（火山方舟 OpenAI 兼容）。 */
     public String chatKey() {

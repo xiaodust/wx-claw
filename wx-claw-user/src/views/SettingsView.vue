@@ -137,6 +137,18 @@ async function saveModelCap(key: string) {
     }
     payload.baseUrl = customBaseUrl.value.trim()
   }
+  const mismatch = findModelInOtherProvider(key, model)
+  if (mismatch) {
+    try {
+      await ElMessageBox.confirm(
+        `模型「${model}」属于服务商「${mismatch.name}」，当前选择的是「${currentProviderName(key)}」。确认仍以当前服务商保存？`,
+        '模型与服务商不匹配',
+        { type: 'warning' },
+      )
+    } catch {
+      return
+    }
+  }
   savingModel.value = key
   try {
     await saveModel(key, payload)
@@ -148,6 +160,24 @@ async function saveModelCap(key: string) {
   } finally {
     savingModel.value = null
   }
+}
+
+function currentProviderName(key: string): string {
+  const id = key === 'chat' ? provider.value : capProviders[key]
+  return providerOptions(key).find(p => p.id === id)?.name || id || '后端默认'
+}
+
+function findModelInOtherProvider(key: string, model: string) {
+  const cap = capabilities.find(c => c.key === key)
+  if (!cap?.modelCatalog || !catalog.value) return null
+  const currentId = key === 'chat' ? provider.value : capProviders[key]
+  const providers = cap.modelCatalog === 'image'
+    ? catalog.value.imageProviders
+    : cap.modelCatalog === 'video'
+      ? catalog.value.videoProviders
+      : catalog.value.chatProviders
+  if (currentId === 'custom') return null
+  return providers.find(p => p.id !== currentId && p.models.some(m => m.name === model)) || null
 }
 
 async function clearModelCap(key: string) {
