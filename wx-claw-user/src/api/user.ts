@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { AiConfigEntry, AiConfigs, Bot, Conversation, Message, QrInfo } from '../types/user'
+import type { AiConfigEntry, AiConfigs, Bot, Conversation, Message, ModelCatalog, QrInfo } from '../types/user'
 
 export function listBots(): Promise<Bot[]> {
   return api.get('/bots').then(r => r.data)
@@ -39,4 +39,16 @@ export function saveAiConfig(capability: string, apiKey: string): Promise<AiConf
 
 export function clearAiConfig(capability: string): Promise<void> {
   return api.delete(`/ai-config/${capability}`).then(r => r.data)
+}
+
+export function getModelCatalog(): Promise<ModelCatalog> {
+  return api.get('/ai-config/models').then(r => r.data)
+}
+
+export function saveModel(capability: string, payload: { model?: string; provider?: string; baseUrl?: string }): Promise<AiConfigEntry> {
+  return api.put(`/ai-config/${capability}/model`, payload).then(r => r.data)
+}
+
+export function clearModel(capability: string): Promise<void> {
+  return api.delete(`/ai-config/${capability}/model`).then(r => r.data)
 }

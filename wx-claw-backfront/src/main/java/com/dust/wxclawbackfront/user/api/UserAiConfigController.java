@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.user.api;
 
+import com.dust.wxclawbackfront.bot.agent.llm.AiModelCatalog;
 import com.dust.wxclawbackfront.tenancy.TenantAccessGuard;
 import com.dust.wxclawbackfront.user.api.dto.UserDtos;
 import com.dust.wxclawbackfront.user.service.TenantAiConfigService;
@@ -30,6 +31,12 @@ public class UserAiConfigController {
         return configService.current();
     }
 
+    @GetMapping("/models")
+    public AiModelCatalog.Catalog models() {
+        accessGuard.requireScope("aiconfig:read");
+        return configService.catalog();
+    }
+
     @PutMapping("/{capability}")
     public UserDtos.AiConfigEntry save(@PathVariable String capability,
                                        @RequestBody UserDtos.UpdateAiConfigRequest request) {
@@ -41,6 +48,20 @@ public class UserAiConfigController {
     public ResponseEntity<Void> clear(@PathVariable String capability) {
         accessGuard.requireScope("aiconfig:write");
         configService.clear(capability);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{capability}/model")
+    public UserDtos.AiConfigEntry saveModel(@PathVariable String capability,
+                                            @RequestBody UserDtos.UpdateModelRequest request) {
+        accessGuard.requireScope("aiconfig:write");
+        return configService.saveModel(capability, request);
+    }
+
+    @DeleteMapping("/{capability}/model")
+    public ResponseEntity<Void> clearModel(@PathVariable String capability) {
+        accessGuard.requireScope("aiconfig:write");
+        configService.clearModel(capability);
         return ResponseEntity.noContent().build();
     }
 }

@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.bot.agent.llm.image;
 
+import com.dust.wxclawbackfront.bot.agent.llm.TenantAiKeyProvider;
 import com.dust.wxclawbackfront.bot.agent.llm.chat.TenantChatClientFactory;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.TextSanitizer;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolInvocationStore;
@@ -30,8 +31,8 @@ import java.util.Map;
 public class ImageHandler {
 
     private final TenantChatClientFactory chatClientFactory;
+    private final TenantAiKeyProvider keyProvider;
     private final String imageModel;
-    private final String defaultModel;
     private final String prompt;
     private final String thinkingType;
     private final int maxTokens;
@@ -43,21 +44,21 @@ public class ImageHandler {
     private final LlmInvocationRecorder invocationRecorder;
 
     public ImageHandler(TenantChatClientFactory chatClientFactory,
+                        TenantAiKeyProvider keyProvider,
                         ObjectMapper objectMapper,
                         TimeTools timeTools,
                         WeatherTools weatherTools,
                         AiToolInvocationStore toolInvocationStore,
                         LlmInvocationRecorder invocationRecorder,
                         @Value("${spring.ai.openai.image.model:}") String imageModel,
-                        @Value("${spring.ai.openai.chat.model:}") String defaultModel,
                         @Value("${wxclaw.ai.image.prompt:请用中文描述这张图片的内容，尽量提取关键信息与可用于对话的细节。}") String prompt,
                         @Value("${wxclaw.ai.thinking.type:disabled}") String thinkingType,
                         @Value("${wxclaw.ai.image.max-tokens:512}") int maxTokens,
                         @Value("${wxclaw.ai.image.timeout:PT35S}") Duration timeout) {
         this.chatClientFactory = chatClientFactory;
+        this.keyProvider = keyProvider;
         this.objectMapper = objectMapper;
         this.imageModel = imageModel;
-        this.defaultModel = defaultModel;
         this.prompt = prompt;
         this.thinkingType = thinkingType;
         this.maxTokens = maxTokens;
@@ -87,7 +88,8 @@ public class ImageHandler {
                 throw new IllegalArgumentException("无效的图片URL: " + ex.getMessage());
             }
         }
-        String modelToUse = (imageModel == null || imageModel.isBlank()) ? defaultModel : imageModel;
+        String modelToUse = (imageModel == null || imageModel.isBlank())
+                ? keyProvider.chatModel() : imageModel;
         if (modelToUse == null || modelToUse.isBlank()) {
             throw new IllegalStateException("image model is blank");
         }

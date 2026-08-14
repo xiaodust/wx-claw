@@ -59,10 +59,10 @@ public class ImageGenerationHandler {
     }
 
     public ImageGenerationResult generate(String prompt) {
+        String model = keyProvider.imageModel() == null ? null : keyProvider.imageModel().trim();
         if (prompt == null || prompt.isBlank()) {
             return new ImageGenerationResult(generationModel, null, null, null, null, null, null, null, "生图提示词为空");
         }
-        String model = generationModel == null ? null : generationModel.trim();
         if (model == null || model.isBlank()) {
             return new ImageGenerationResult(null, null, null, null, null, null, null, null, "未配置生图 model");
         }

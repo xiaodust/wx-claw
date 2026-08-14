@@ -56,7 +56,7 @@ class TenantChatClientFactoryTest {
         }
 
         @Override
-        protected ChatClient buildClient(String apiKey) {
+        protected ChatClient buildClient(String apiKey, String baseUrl, String model) {
             return tenantClient;
         }
     }

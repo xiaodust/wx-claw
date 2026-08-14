@@ -23,10 +23,14 @@ class TenantAiKeyProviderTest {
     @BeforeEach
     void setUp() {
         repository = mock(TenantAiConfigRepository.class);
-        provider = new TenantAiKeyProvider(repository);
+        provider = new TenantAiKeyProvider(repository, new AiModelCatalog());
         ReflectionTestUtils.setField(provider, "defaultChatKey", "sk-default-chat");
+        ReflectionTestUtils.setField(provider, "defaultChatBaseUrl", "https://ark.cn-beijing.volces.com/api/v3");
+        ReflectionTestUtils.setField(provider, "defaultChatModel", "doubao-seed-2-1-turbo-260628");
         ReflectionTestUtils.setField(provider, "defaultImageKey", "sk-default-image");
+        ReflectionTestUtils.setField(provider, "defaultImageModel", "Kwai-Kolors/Kolors");
         ReflectionTestUtils.setField(provider, "defaultVideoDashscopeKey", "sk-default-dash");
+        ReflectionTestUtils.setField(provider, "defaultVideoModel", "doubao-seedance-2-0-mini-260615");
         ReflectionTestUtils.setField(provider, "defaultTtsKey", "sk-default-tts");
         ReflectionTestUtils.setField(provider, "defaultSearchKey", "sk-default-search");
     }
@@ -70,11 +74,33 @@ class TenantAiKeyProviderTest {
         assertThat(provider.videoDashscopeKey()).isEqualTo("sk-default-dash");
         assertThat(provider.ttsKey()).isEqualTo("sk-default-tts");
         assertThat(provider.searchKey()).isEqualTo("sk-default-search");
+        assertThat(provider.chatProvider()).isEqualTo("ark");
+        assertThat(provider.chatBaseUrl()).isEqualTo("https://ark.cn-beijing.volces.com/api/v3");
+        assertThat(provider.chatModel()).isEqualTo("doubao-seed-2-1-turbo-260628");
+        assertThat(provider.imageModel()).isEqualTo("Kwai-Kolors/Kolors");
+        assertThat(provider.videoModel()).isEqualTo("doubao-seedance-2-0-mini-260615");
     }
 
     @Test
     void fallsBackToDefaultsWithoutTenantContext() {
         assertThat(provider.imageKey()).isEqualTo("sk-default-image");
         assertThat(provider.chatKey()).isEqualTo("sk-default-chat");
+        assertThat(provider.chatBaseUrl()).isEqualTo("https://ark.cn-beijing.volces.com/api/v3");
+    }
+
+    @Test
+    void chatModelAndBaseUrlFollowTenantProvider() {
+        TenantAiConfig config = new TenantAiConfig();
+        config.setTenantId("tenant-a");
+        config.setChatProvider("openai");
+        config.setChatBaseUrl("https://api.openai.com/v1");
+        config.setChatModel("gpt-4o-mini");
+        when(repository.findById("tenant-a")).thenReturn(Optional.of(config));
+        TenantContextHolder.set(TenantContext.ilink("tenant-a", "bot-a", "user-a", "req"));
+
+        assertThat(provider.chatProvider()).isEqualTo("openai");
+        assertThat(provider.chatBaseUrl()).isEqualTo("https://api.openai.com/v1");
+        assertThat(provider.chatModel()).isEqualTo("gpt-4o-mini");
+        assertThat(provider.chatBaseUrlFor("tenant-a")).isEqualTo("https://api.openai.com/v1");
     }
 }

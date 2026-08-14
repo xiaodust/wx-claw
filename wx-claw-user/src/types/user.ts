@@ -24,14 +24,29 @@ export interface AiConfigEntry {
   configured: boolean
   apiKeyMasked: string | null
   provider: string
+  model: string | null
 }
 
 export interface AiConfigs {
   chat: AiConfigEntry
   image: AiConfigEntry
+  video: AiConfigEntry
   videoDashscope: AiConfigEntry
   tts: AiConfigEntry
   search: AiConfigEntry
+}
+
+export interface ChatProviderOption {
+  id: string
+  name: string
+  baseUrl: string
+  models: string[]
+}
+
+export interface ModelCatalog {
+  chatProviders: ChatProviderOption[]
+  imageModels: string[]
+  videoModels: string[]
 }
 
 export interface Conversation {

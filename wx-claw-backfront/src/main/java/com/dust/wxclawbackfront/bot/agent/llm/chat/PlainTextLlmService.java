@@ -1,9 +1,9 @@
 package com.dust.wxclawbackfront.bot.agent.llm.chat;
 
+import com.dust.wxclawbackfront.bot.agent.llm.TenantAiKeyProvider;
 import com.dust.wxclawbackfront.observability.llm.service.LlmInvocationRecorder;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.metadata.Usage;
@@ -25,12 +25,9 @@ import java.util.Map;
 public class PlainTextLlmService {
 
     private final TenantChatClientFactory chatClientFactory;
+    private final TenantAiKeyProvider keyProvider;
     private final LlmInvocationRecorder invocationRecorder;
     private final ObjectMapper objectMapper;
-    private OpenAiChatOptions.Builder cachedOptionsBuilder;
-
-    @Value("${spring.ai.openai.chat.model:}")
-    private String model;
 
     @Value("${wxclaw.ai.thinking.type:disabled}")
     private String thinkingType;
@@ -42,21 +39,13 @@ public class PlainTextLlmService {
     private Duration timeout;
 
     public PlainTextLlmService(TenantChatClientFactory chatClientFactory,
+                               TenantAiKeyProvider keyProvider,
                                LlmInvocationRecorder invocationRecorder,
                                ObjectMapper objectMapper) {
         this.chatClientFactory = chatClientFactory;
+        this.keyProvider = keyProvider;
         this.invocationRecorder = invocationRecorder;
         this.objectMapper = objectMapper;
-    }
-
-    @PostConstruct
-    public void init() {
-        this.cachedOptionsBuilder = LlmOptionsBuilder.builder()
-                .model(model)
-                .thinkingType(thinkingType)
-                .maxTokens(maxTokens)
-                .timeout(timeout)
-                .buildBuilder();
     }
 
     public String chat(String prompt) {
@@ -65,11 +54,18 @@ public class PlainTextLlmService {
 
     public String chat(String prompt, String invocationType) {
         long start = System.currentTimeMillis();
+        String model = keyProvider.chatModel();
+        OpenAiChatOptions.Builder optionsBuilder = LlmOptionsBuilder.builder()
+                .model(model)
+                .thinkingType(thinkingType)
+                .maxTokens(maxTokens)
+                .timeout(timeout)
+                .buildBuilder();
         LlmInvocationRecorder.InvocationHandle handle = invocationRecorder.start(
-                invocationType, "OPENAI_COMPATIBLE", model, requestPayload(prompt));
+                invocationType, "OPENAI_COMPATIBLE", model, requestPayload(prompt, model));
         try {
             ChatResponse response = chatClientFactory.currentClient().prompt()
-                    .options(cachedOptionsBuilder)
+                    .options(optionsBuilder)
                     .user(prompt)
                     .call()
                     .chatResponse();
@@ -89,7 +85,7 @@ public class PlainTextLlmService {
         }
     }
 
-    private String requestPayload(String prompt) {
+    private String requestPayload(String prompt, String model) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", model);
         payload.put("thinkingType", thinkingType);

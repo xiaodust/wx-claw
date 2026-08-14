@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.user.service;
 
+import com.dust.wxclawbackfront.bot.agent.llm.AiModelCatalog;
 import com.dust.wxclawbackfront.bot.agent.llm.chat.TenantChatClientFactory;
 import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import com.dust.wxclawbackfront.tenancy.entity.TenantAiConfig;
@@ -26,24 +27,35 @@ public class TenantAiConfigService {
 
     private final TenantAiConfigRepository configRepository;
     private final TenantChatClientFactory chatClientFactory;
+    private final AiModelCatalog modelCatalog;
 
     private static final Map<String, Capability> CAPABILITIES = Map.of(
             "chat", new Capability("火山方舟（文本对话/图片理解/视频 Seedance/向量记忆）",
-                    TenantAiConfig::getApiKey, TenantAiConfig::setApiKey),
+                    TenantAiConfig::getApiKey, TenantAiConfig::setApiKey,
+                    TenantAiConfig::getChatModel, TenantAiConfig::setChatModel),
             "image", new Capability("图片生成（SiliconFlow）",
-                    TenantAiConfig::getImageApiKey, TenantAiConfig::setImageApiKey),
+                    TenantAiConfig::getImageApiKey, TenantAiConfig::setImageApiKey,
+                    TenantAiConfig::getImageModel, TenantAiConfig::setImageModel),
+            "video", new Capability("视频生成（火山方舟 Seedance，使用 Ark Key）",
+                    config -> null, (config, value) -> {
+                    },
+                    TenantAiConfig::getVideoModel, TenantAiConfig::setVideoModel),
             "videoDashscope", new Capability("视频生成（阿里云通义万相 DashScope）",
-                    TenantAiConfig::getVideoDashscopeApiKey, TenantAiConfig::setVideoDashscopeApiKey),
+                    TenantAiConfig::getVideoDashscopeApiKey, TenantAiConfig::setVideoDashscopeApiKey,
+                    config -> null, null),
             "tts", new Capability("语音合成（火山引擎 TTS）",
-                    TenantAiConfig::getTtsApiKey, TenantAiConfig::setTtsApiKey),
+                    TenantAiConfig::getTtsApiKey, TenantAiConfig::setTtsApiKey,
+                    config -> null, null),
             "search", new Capability("联网搜索（博查）",
-                    TenantAiConfig::getSearchApiKey, TenantAiConfig::setSearchApiKey));
+                    TenantAiConfig::getSearchApiKey, TenantAiConfig::setSearchApiKey,
+                    config -> null, null));
 
     public UserDtos.AiConfigs current() {
         Optional<TenantAiConfig> config = configRepository.findById(tenantId());
         return new UserDtos.AiConfigs(
                 entry(config, "chat"),
                 entry(config, "image"),
+                entry(config, "video"),
                 entry(config, "videoDashscope"),
                 entry(config, "tts"),
                 entry(config, "search"));
@@ -64,6 +76,58 @@ public class TenantAiConfigService {
             chatClientFactory.evict(tenantId);
         }
         return entry(Optional.of(config), capability);
+    }
+
+    @Transactional
+    public UserDtos.AiConfigEntry saveModel(String capability, UserDtos.UpdateModelRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("请求体不能为空");
+        }
+        Capability cap = requireCapability(capability);
+        String tenantId = tenantId();
+        TenantAiConfig config = configRepository.findById(tenantId).orElseGet(TenantAiConfig::new);
+        config.setTenantId(tenantId);
+
+        if ("chat".equals(capability)) {
+            applyChatModel(config, request);
+        } else {
+            if (request.model() == null || request.model().isBlank()) {
+                throw new IllegalArgumentException("模型不能为空");
+            }
+            if (cap.modelSetter() == null) {
+                throw new IllegalArgumentException("该能力不支持模型自定义: " + capability);
+            }
+            cap.modelSetter().accept(config, request.model().trim());
+        }
+        configRepository.save(config);
+        if ("chat".equals(capability)) {
+            chatClientFactory.evict(tenantId);
+        }
+        return entry(Optional.of(config), capability);
+    }
+
+    @Transactional
+    public void clearModel(String capability) {
+        Capability cap = requireCapability(capability);
+        if (cap.modelSetter() == null) {
+            throw new IllegalArgumentException("该能力不支持模型自定义: " + capability);
+        }
+        String tenantId = tenantId();
+        Optional<TenantAiConfig> config = configRepository.findById(tenantId);
+        if (config.isEmpty()) {
+            return;
+        }
+        cap.modelSetter().accept(config.get(), null);
+        if ("chat".equals(capability)) {
+            config.get().setChatProvider(null);
+            config.get().setChatBaseUrl(null);
+            chatClientFactory.evict(tenantId);
+        }
+        configRepository.save(config.get());
+    }
+
+    public AiModelCatalog.Catalog catalog() {
+        return modelCatalog.catalog();
     }
 
     @Transactional
@@ -88,7 +152,30 @@ public class TenantAiConfigService {
         return new UserDtos.AiConfigEntry(
                 configured,
                 configured ? mask(apiKey) : null,
-                cap.provider());
+                cap.provider(),
+                config.map(cap.modelGetter()).orElse(null));
+    }
+
+    private void applyChatModel(TenantAiConfig config, UserDtos.UpdateModelRequest request) {
+        String provider = request.provider() == null ? null : request.provider().trim();
+        if (provider != null && !provider.isBlank()) {
+            AiModelCatalog.ChatProvider chatProvider = modelCatalog.provider(provider);
+            if (chatProvider == null) {
+                throw new IllegalArgumentException("未知服务商: " + provider);
+            }
+            config.setChatProvider(provider);
+            if ("custom".equals(provider)) {
+                if (request.baseUrl() == null || request.baseUrl().isBlank()) {
+                    throw new IllegalArgumentException("自定义服务商必须填写 baseUrl");
+                }
+                config.setChatBaseUrl(request.baseUrl().trim());
+            } else {
+                config.setChatBaseUrl(chatProvider.baseUrl());
+            }
+        }
+        if (request.model() != null && !request.model().isBlank()) {
+            config.setChatModel(request.model().trim());
+        }
     }
 
     private Capability requireCapability(String capability) {
@@ -116,6 +203,8 @@ public class TenantAiConfigService {
 
     private record Capability(String provider,
                               Function<TenantAiConfig, String> getter,
-                              BiConsumer<TenantAiConfig, String> setter) {
+                              BiConsumer<TenantAiConfig, String> setter,
+                              Function<TenantAiConfig, String> modelGetter,
+                              BiConsumer<TenantAiConfig, String> modelSetter) {
     }
 }

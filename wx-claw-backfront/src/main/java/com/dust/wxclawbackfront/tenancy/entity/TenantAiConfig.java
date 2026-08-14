@@ -28,9 +28,25 @@ public class TenantAiConfig {
     @Column(name = "api_key", columnDefinition = "TEXT")
     private String apiKey;
 
+    /** 聊天服务商：ark / openai / deepseek / zhipu / custom */
+    @Column(name = "chat_provider", length = 32)
+    private String chatProvider;
+
+    /** 聊天服务商对应 baseUrl（custom 时由用户输入） */
+    @Column(name = "chat_base_url", length = 512)
+    private String chatBaseUrl;
+
+    /** 聊天模型 */
+    @Column(name = "chat_model", length = 128)
+    private String chatModel;
+
     /** 图片生成（SiliconFlow） */
     @Column(name = "image_api_key", columnDefinition = "TEXT")
     private String imageApiKey;
+
+    /** 图片生成模型 */
+    @Column(name = "image_model", length = 128)
+    private String imageModel;
 
     /** 视频生成（阿里云通义万相 DashScope） */
     @Column(name = "video_dashscope_api_key", columnDefinition = "TEXT")
@@ -39,6 +55,10 @@ public class TenantAiConfig {
     /** 语音合成（火山引擎 TTS） */
     @Column(name = "tts_api_key", columnDefinition = "TEXT")
     private String ttsApiKey;
+
+    /** 视频生成（火山方舟 Seedance）模型 */
+    @Column(name = "video_model", length = 128)
+    private String videoModel;
 
     /** 联网搜索（博查） */
     @Column(name = "search_api_key", columnDefinition = "TEXT")

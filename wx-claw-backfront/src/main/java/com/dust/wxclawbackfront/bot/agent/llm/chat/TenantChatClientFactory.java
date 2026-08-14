@@ -67,7 +67,7 @@ public class TenantChatClientFactory {
         }
         return tenantClients.computeIfAbsent(tenantId, id -> {
             log.info("为租户 {} 构建独立 LLM client", id);
-            return buildClient(apiKey);
+            return buildClient(apiKey, keyProvider.chatBaseUrlFor(id), keyProvider.chatModelFor(id));
         });
     }
 
@@ -80,7 +80,7 @@ public class TenantChatClientFactory {
         }
     }
 
-    protected ChatClient buildClient(String apiKey) {
+    protected ChatClient buildClient(String apiKey, String baseUrl, String model) {
         OpenAIClient openAiClient = OpenAiSetup.setupSyncClient(
                 baseUrl, apiKey, null, null, null, null,
                 false, false, model, timeout, maxRetries,

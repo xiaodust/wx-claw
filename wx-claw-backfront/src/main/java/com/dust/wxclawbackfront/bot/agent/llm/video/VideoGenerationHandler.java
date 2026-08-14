@@ -101,7 +101,7 @@ public class VideoGenerationHandler {
         String ratioToUse = customRatio != null ? customRatio : ratio;
         int durationToUse = customDuration != null ? customDuration : duration;
         String resolutionToUse = customResolution != null ? customResolution : resolution;
-        String model = "dashscope".equalsIgnoreCase(provider) ? dashscopeT2vModel : arkModel;
+        String model = "dashscope".equalsIgnoreCase(provider) ? dashscopeT2vModel : keyProvider.videoModel();
         LlmInvocationRecorder.InvocationHandle handle = invocationRecorder.start(
                 "VIDEO_GENERATION", provider, model,
                 auditRequest("text", prompt, null, ratioToUse, durationToUse, resolutionToUse));
@@ -137,7 +137,7 @@ public class VideoGenerationHandler {
         String ratioToUse = customRatio != null ? customRatio : ratio;
         int durationToUse = customDuration != null ? customDuration : duration;
         String resolutionToUse = customResolution != null ? customResolution : resolution;
-        String model = "dashscope".equalsIgnoreCase(provider) ? dashscopeI2vModel : arkModel;
+        String model = "dashscope".equalsIgnoreCase(provider) ? dashscopeI2vModel : keyProvider.videoModel();
         LlmInvocationRecorder.InvocationHandle handle = invocationRecorder.start(
                 "VIDEO_GENERATION", provider, model,
                 auditRequest("image", prompt, imageUrl, ratioToUse, durationToUse, resolutionToUse));
@@ -225,7 +225,7 @@ public class VideoGenerationHandler {
         try {
             String key = keyProvider.videoKey();
             Map<String, Object> payload = new LinkedHashMap<>();
-            payload.put("model", arkModel);
+            payload.put("model", keyProvider.videoModel());
 
             List<Map<String, Object>> content;
             if (imageUrl != null && !imageUrl.isBlank()) {

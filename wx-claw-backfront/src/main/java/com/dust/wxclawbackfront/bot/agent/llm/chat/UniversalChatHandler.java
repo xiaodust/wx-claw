@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.bot.agent.llm.chat;
 
+import com.dust.wxclawbackfront.bot.agent.llm.TenantAiKeyProvider;
 import com.dust.wxclawbackfront.bot.agent.llm.LlmToolRegistry;
 import com.dust.wxclawbackfront.bot.agent.llm.SkillLoader;
 import com.dust.wxclawbackfront.bot.dao.entity.AiMessage;
@@ -34,6 +35,7 @@ import java.util.concurrent.ExecutorService;
 @Service
 public class UniversalChatHandler implements ChatHandler {
     private final TenantChatClientFactory chatClientFactory;
+    private final TenantAiKeyProvider keyProvider;
     private final AiToolInvocationStore toolInvocationStore;
     private final ChatRequestBuilder requestBuilder;
     private final LlmToolRegistry toolRegistry;
@@ -43,9 +45,6 @@ public class UniversalChatHandler implements ChatHandler {
     private final LlmInvocationRecorder invocationRecorder;
     private final ObjectMapper objectMapper;
     private final AgentToolLoopGuard loopGuard;
-
-    @Value("${spring.ai.openai.chat.model:}")
-    private String model;
 
     @Value("${wxclaw.ai.thinking.type:disabled}")
     private String thinkingType;
@@ -72,6 +71,7 @@ public class UniversalChatHandler implements ChatHandler {
     private Duration hardTimeout;
 
     public UniversalChatHandler(TenantChatClientFactory chatClientFactory,
+                                TenantAiKeyProvider keyProvider,
                                 AiToolInvocationStore toolInvocationStore,
                                 ChatRequestBuilder requestBuilder,
                                 LlmToolRegistry toolRegistry,
@@ -81,13 +81,13 @@ public class UniversalChatHandler implements ChatHandler {
                                 LlmInvocationRecorder invocationRecorder,
                                 ObjectMapper objectMapper,
                                 AgentToolLoopGuard loopGuard,
-                                @Value("${spring.ai.openai.chat.model:}") String model,
                                 @Value("${wxclaw.ai.thinking.type:disabled}") String thinkingType,
                                 @Value("${wxclaw.ai.chat.max-tokens:768}") int maxTokens,
                                 @Value("${wxclaw.ai.chat.timeout:PT25S}") Duration timeout,
                                 @Value("${wxclaw.ai.context.max-chars:7000}") int maxContextChars,
                                 @Value("${wxclaw.ai.context.max-message-chars:800}") int maxMessageChars) {
         this.chatClientFactory = chatClientFactory;
+        this.keyProvider = keyProvider;
         this.toolInvocationStore = toolInvocationStore;
         this.requestBuilder = requestBuilder;
         this.toolRegistry = toolRegistry;
@@ -97,7 +97,6 @@ public class UniversalChatHandler implements ChatHandler {
         this.invocationRecorder = invocationRecorder;
         this.objectMapper = objectMapper;
         this.loopGuard = loopGuard;
-        this.model = model;
         this.thinkingType = thinkingType;
         this.maxTokens = maxTokens;
         this.timeout = timeout;
@@ -179,6 +178,7 @@ public class UniversalChatHandler implements ChatHandler {
      * 使用 Spring AI 原生 function calling 调用 LLM
      */
     private String callWithTools(String requestText, String systemPrompt) {
+        String model = keyProvider.chatModel();
         ChatClient.ChatClientRequestSpec spec = chatClientFactory.currentClient().prompt();
 
         var optionsBuilder = LlmOptionsBuilder.builder()
@@ -200,7 +200,7 @@ public class UniversalChatHandler implements ChatHandler {
 
         long start = System.currentTimeMillis();
         LlmInvocationRecorder.InvocationHandle handle = invocationRecorder.start(
-                "CHAT", "OPENAI_COMPATIBLE", model, requestPayload(requestText, systemPrompt));
+                "CHAT", "OPENAI_COMPATIBLE", model, requestPayload(requestText, systemPrompt, model));
         loopGuard.begin(maxToolCalls, maxRepeatedToolCalls, hardTimeout);
         try {
             ChatResponse response = finalSpec.call().chatResponse();
@@ -244,7 +244,7 @@ public class UniversalChatHandler implements ChatHandler {
         return invocations;
     }
 
-    private String requestPayload(String requestText, String systemPrompt) {
+    private String requestPayload(String requestText, String systemPrompt, String model) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", model);
         payload.put("thinkingType", thinkingType);

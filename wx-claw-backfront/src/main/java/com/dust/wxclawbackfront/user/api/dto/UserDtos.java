@@ -19,14 +19,17 @@ public final class UserDtos {
     public record Qr(String botId, String qrImage, String status, Instant statusChangedAt) {
     }
 
-    public record AiConfigEntry(boolean configured, String apiKeyMasked, String provider) {
+    public record AiConfigEntry(boolean configured, String apiKeyMasked, String provider, String model) {
     }
 
-    public record AiConfigs(AiConfigEntry chat, AiConfigEntry image,
+    public record AiConfigs(AiConfigEntry chat, AiConfigEntry image, AiConfigEntry video,
                             AiConfigEntry videoDashscope, AiConfigEntry tts, AiConfigEntry search) {
     }
 
     public record UpdateAiConfigRequest(String apiKey) {
+    }
+
+    public record UpdateModelRequest(String model, String provider, String baseUrl) {
     }
 
     public record Conversation(String id, String sessionId, String botId, boolean active,
