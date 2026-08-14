@@ -51,7 +51,7 @@ class TenantAiConfigServiceTest {
         assertThat(configs.chat().configured()).isFalse();
         assertThat(configs.chat().apiKeyMasked()).isNull();
         assertThat(configs.image().provider()).contains("SiliconFlow");
-        assertThat(configs.chat().provider()).contains("火山方舟");
+        assertThat(configs.chat().provider()).contains("对话");
         assertThat(configs.video().provider()).contains("Seedance");
         assertThat(configs.videoDashscope().provider()).contains("通义万相");
         assertThat(configs.tts().provider()).contains("TTS");
@@ -84,6 +84,19 @@ class TenantAiConfigServiceTest {
 
         assertThat(saved.getImageApiKey()).isEqualTo("sk-img-1234");
         assertThat(entry.provider()).contains("SiliconFlow");
+        verify(factory, never()).evict(any());
+    }
+
+    @Test
+    void saveVideoKeyPersists() {
+        TenantAiConfig saved = new TenantAiConfig();
+        when(repository.findById("tenant-a")).thenReturn(Optional.of(saved));
+        when(repository.save(any(TenantAiConfig.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        UserDtos.AiConfigEntry entry = service.save("video", "sk-video-1234");
+
+        assertThat(saved.getVideoApiKey()).isEqualTo("sk-video-1234");
+        assertThat(entry.provider()).contains("Seedance");
         verify(factory, never()).evict(any());
     }
 

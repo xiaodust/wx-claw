@@ -31,6 +31,7 @@ class TenantAiKeyProviderTest {
         ReflectionTestUtils.setField(provider, "defaultImageModel", "Kwai-Kolors/Kolors");
         ReflectionTestUtils.setField(provider, "defaultVideoDashscopeKey", "sk-default-dash");
         ReflectionTestUtils.setField(provider, "defaultVideoModel", "doubao-seedance-2-0-mini-260615");
+        ReflectionTestUtils.setField(provider, "defaultVideoKey", "sk-default-video");
         ReflectionTestUtils.setField(provider, "defaultTtsKey", "sk-default-tts");
         ReflectionTestUtils.setField(provider, "defaultSearchKey", "sk-default-search");
     }
@@ -102,5 +103,40 @@ class TenantAiKeyProviderTest {
         assertThat(provider.chatBaseUrl()).isEqualTo("https://api.openai.com/v1");
         assertThat(provider.chatModel()).isEqualTo("gpt-4o-mini");
         assertThat(provider.chatBaseUrlFor("tenant-a")).isEqualTo("https://api.openai.com/v1");
+    }
+
+    @Test
+    void videoKeyPrefersOwnConfiguredKey() {
+        TenantAiConfig config = new TenantAiConfig();
+        config.setTenantId("tenant-a");
+        config.setChatProvider("openai");
+        config.setVideoApiKey("sk-own-video");
+        when(repository.findById("tenant-a")).thenReturn(Optional.of(config));
+        TenantContextHolder.set(TenantContext.ilink("tenant-a", "bot-a", "user-a", "req"));
+
+        assertThat(provider.videoKey()).isEqualTo("sk-own-video");
+    }
+
+    @Test
+    void videoKeyReusesChatKeyWhenChatProviderIsArk() {
+        TenantAiConfig config = new TenantAiConfig();
+        config.setTenantId("tenant-a");
+        config.setChatProvider("ark");
+        config.setApiKey("sk-ark-chat");
+        when(repository.findById("tenant-a")).thenReturn(Optional.of(config));
+        TenantContextHolder.set(TenantContext.ilink("tenant-a", "bot-a", "user-a", "req"));
+
+        assertThat(provider.videoKey()).isEqualTo("sk-ark-chat");
+    }
+
+    @Test
+    void videoKeyFallsBackToDefaultWhenChatIsNotArk() {
+        TenantAiConfig config = new TenantAiConfig();
+        config.setTenantId("tenant-a");
+        config.setChatProvider("openai");
+        when(repository.findById("tenant-a")).thenReturn(Optional.of(config));
+        TenantContextHolder.set(TenantContext.ilink("tenant-a", "bot-a", "user-a", "req"));
+
+        assertThat(provider.videoKey()).isEqualTo("sk-default-video");
     }
 }

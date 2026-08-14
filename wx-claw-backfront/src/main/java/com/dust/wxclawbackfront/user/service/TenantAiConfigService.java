@@ -30,15 +30,14 @@ public class TenantAiConfigService {
     private final AiModelCatalog modelCatalog;
 
     private static final Map<String, Capability> CAPABILITIES = Map.of(
-            "chat", new Capability("火山方舟（文本对话/图片理解/视频 Seedance/向量记忆）",
+            "chat", new Capability("对话（文本/图片理解；服务商可切换）",
                     TenantAiConfig::getApiKey, TenantAiConfig::setApiKey,
                     TenantAiConfig::getChatModel, TenantAiConfig::setChatModel),
             "image", new Capability("图片生成（SiliconFlow）",
                     TenantAiConfig::getImageApiKey, TenantAiConfig::setImageApiKey,
                     TenantAiConfig::getImageModel, TenantAiConfig::setImageModel),
-            "video", new Capability("视频生成（火山方舟 Seedance，使用 Ark Key）",
-                    config -> null, (config, value) -> {
-                    },
+            "video", new Capability("视频生成（火山方舟 Seedance）",
+                    TenantAiConfig::getVideoApiKey, TenantAiConfig::setVideoApiKey,
                     TenantAiConfig::getVideoModel, TenantAiConfig::setVideoModel),
             "videoDashscope", new Capability("视频生成（阿里云通义万相 DashScope）",
                     TenantAiConfig::getVideoDashscopeApiKey, TenantAiConfig::setVideoDashscopeApiKey,

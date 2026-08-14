@@ -14,10 +14,19 @@ const loading = ref(false)
 const savingKey = ref<string | null>(null)
 const savingModel = ref<string | null>(null)
 
-const capabilities = [
-  { key: 'chat', title: '火山方舟 API Key', desc: '一个 Key 通用：文本对话、图片理解、视频生成（Seedance）、向量记忆', modelLabel: '对话模型', modelCatalog: 'chat' },
+interface CapabilityDef {
+  key: string
+  title: string
+  desc: string
+  modelLabel?: string
+  modelCatalog?: string
+  keyHidden?: boolean
+}
+
+const capabilities: CapabilityDef[] = [
+  { key: 'chat', title: '对话 API Key（多服务商）', desc: '文本对话与图片理解；选择服务商后模型列表与接入地址随之切换', modelLabel: '对话模型', modelCatalog: 'chat' },
   { key: 'image', title: '图片生成', desc: 'SiliconFlow（Kolors）', modelLabel: '生成模型', modelCatalog: 'image' },
-  { key: 'video', title: '视频生成（Seedance）', desc: '使用火山方舟 Key，独立选择视频模型', modelLabel: '视频模型', modelCatalog: 'video', keyHidden: true },
+  { key: 'video', title: '视频生成（Seedance）', desc: '火山方舟视频模型；不填 Key 时：对话为火山方舟则复用对话 Key，否则用后端默认', modelLabel: '视频模型', modelCatalog: 'video' },
   { key: 'videoDashscope', title: '视频生成（阿里云）', desc: '通义万相 DashScope（模型使用后端默认）' },
   { key: 'tts', title: '语音合成', desc: '火山引擎 TTS（模型使用后端默认）' },
   { key: 'search', title: '联网搜索', desc: '博查 Bocha（无模型概念）' },

@@ -44,6 +44,9 @@ public class TenantAiKeyProvider {
     @Value("${wxclaw.ai.video-gen.ark.model:doubao-seedance-2-0-mini-260615}")
     private String defaultVideoModel;
 
+    @Value("${wxclaw.ai.video-gen.ark.api-key:${spring.ai.openai.api-key:}}")
+    private String defaultVideoKey;
+
     @Value("${wxclaw.ai.tts.api-key:}")
     private String defaultTtsKey;
 
@@ -101,11 +104,22 @@ public class TenantAiKeyProvider {
     }
 
     /**
-     * 视频生成（火山方舟 Seedance）：与对话共用同一个 Ark API Key，
-     * 无需用户单独配置。
+     * 视频生成（火山方舟 Seedance）Key：
+     * <ol>
+     *   <li>用户配置的 video_api_key 优先；</li>
+     *   <li>未配置且对话服务商为 ark 时，复用对话 Ark Key；</li>
+     *   <li>否则回退后端默认 Ark Key。</li>
+     * </ol>
      */
     public String videoKey() {
-        return chatKey();
+        String tenantKey = resolve(currentTenantId(), TenantAiConfig::getVideoApiKey, null);
+        if (tenantKey != null && !tenantKey.isBlank()) {
+            return tenantKey;
+        }
+        if ("ark".equalsIgnoreCase(chatProvider())) {
+            return chatKey();
+        }
+        return defaultVideoKey;
     }
 
     /** 视频生成模型（火山方舟 Seedance）。 */

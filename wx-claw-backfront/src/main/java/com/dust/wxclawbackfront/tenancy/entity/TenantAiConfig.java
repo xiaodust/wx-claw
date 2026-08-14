@@ -60,6 +60,10 @@ public class TenantAiConfig {
     @Column(name = "video_model", length = 128)
     private String videoModel;
 
+    /** 视频生成（火山方舟 Seedance）专用 Key；未配置时复用对话 Ark Key */
+    @Column(name = "video_api_key", columnDefinition = "TEXT")
+    private String videoApiKey;
+
     /** 联网搜索（博查） */
     @Column(name = "search_api_key", columnDefinition = "TEXT")
     private String searchApiKey;
