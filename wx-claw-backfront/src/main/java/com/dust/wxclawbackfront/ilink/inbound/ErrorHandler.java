@@ -63,31 +63,35 @@ public class ErrorHandler {
                     msgToUser = "工具执行失败，请稍后再试。";
                     break;
                 default:
-                    // 使用原来的逻辑处理其他情况
-                    if (em.contains("TTS") || em.contains("tts") || em.contains("语音")) {
-                        if (em.contains("未配置")) {
-                            msgToUser = "语音功能暂未配置完成，请稍后再试。";
-                        } else {
-                            msgToUser = "语音生成失败，请稍后再试。";
-                        }
-                    } else if (em.contains("生图")) {
-                        msgToUser = "图片生成失败，请稍后再试。";
-                    }
+                    msgToUser = buildFallbackMessage(em);
                     break;
             }
         } else {
-            // 原来的处理逻辑
-            if (em.contains("TTS") || em.contains("tts") || em.contains("语音")) {
-                if (em.contains("未配置")) {
-                    msgToUser = "语音功能暂未配置完成，请稍后再试。";
-                } else {
-                    msgToUser = "语音生成失败，请稍后再试。";
-                }
-            } else if (em.contains("生图")) {
-                msgToUser = "图片生成失败，请稍后再试。";
-            }
+            msgToUser = buildFallbackMessage(em);
         }
 
         return msgToUser;
+    }
+
+    /**
+     * 按异常文案生成用户友好的兜底消息（TTS / 生图等能力的常见失败原因）。
+     */
+    static String buildFallbackMessage(String em) {
+        if (em.contains("TTS") || em.contains("tts") || em.contains("语音")) {
+            if (em.contains("API Key 无效")) {
+                return "语音功能配置的 API Key 无效，请在设置页核对语音合成 Key。";
+            }
+            if (em.contains("未配置")) {
+                return "语音功能暂未配置完成，请稍后再试。";
+            }
+            if (em.contains("未开通") || em.contains("未授权")) {
+                return "语音功能暂未开通（豆包语音服务未授权），请到火山引擎豆包语音控制台开通语音合成服务后重试。";
+            }
+            return "语音生成失败，请稍后再试。";
+        }
+        if (em.contains("生图")) {
+            return "图片生成失败，请稍后再试。";
+        }
+        return "处理失败，请稍后再试。";
     }
 }

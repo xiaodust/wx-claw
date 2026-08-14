@@ -135,13 +135,19 @@ public class VolcTtsHandler {
             String responseJson = TextSanitizer.sanitizeForPrompt(toPrettyJsonOrRaw(responseText));
 
             if (resp.statusCode() / 100 != 2) {
-                return complete(handle, new VolcTtsResult(requestJson, responseJson, "TTS 请求失败，HTTP " + resp.statusCode(), null, null, null, null, null, null));
+                return complete(handle, new VolcTtsResult(requestJson, responseJson, buildHttpError(resp.statusCode(), responseText), null, null, null, null, null, null));
             }
 
             Integer code = extractIntField(responseText, "code");
             if (code != null && code != 0) {
                 String message = extractStringField(responseText, "message");
-                String msg = message == null || message.isBlank() ? ("TTS 返回错误码: " + code) : ("TTS 返回错误: " + message);
+                String msg = message == null || message.isBlank()
+                        ? ("TTS 返回错误码: " + code)
+                        : ("TTS 返回错误: " + message);
+                String hint = actionableHint(code, message);
+                if (hint != null) {
+                    msg = msg + "。" + hint;
+                }
                 return complete(handle, new VolcTtsResult(requestJson, responseJson, msg, null, null, null, null, null, null));
             }
 
@@ -269,6 +275,43 @@ public class VolcTtsHandler {
         } catch (Exception ex) {
             return null;
         }
+    }
+
+    /**
+     * 构造非 2xx 响应时的可读错误信息：优先解析服务端 code/message 并给出可执行提示，
+     * 无法解析时回退为 HTTP 状态码 + 截断的响应体（响应体为空说明请求在网关层被拒绝）。
+     */
+    String buildHttpError(int statusCode, String responseText) {
+        Integer code = extractIntField(responseText, "code");
+        String message = extractStringField(responseText, "message");
+        String hint = actionableHint(code, message);
+        if (hint != null) {
+            return hint;
+        }
+        if (statusCode == 401) {
+            return "API Key 无效或未配置，请在豆包语音控制台核对 API Key（设置页「语音合成」或后端 wxclaw.ai.tts.api-key）";
+        }
+        String body = responseText == null ? "" : responseText.trim();
+        if (body.length() > 200) {
+            body = body.substring(0, 200) + "…";
+        }
+        return "TTS 请求失败，HTTP " + statusCode + (body.isEmpty() ? "" : "，服务端返回: " + body);
+    }
+
+    /**
+     * 火山豆包语音常见错误映射：45000030 / "resource not granted" 表示账号未开通或未授权该模型资源
+     * （HTTP 403 空响应体通常是同一原因在网关层被拒绝）。
+     */
+    private String actionableHint(Integer code, String message) {
+        String msg = message == null ? "" : message;
+        if ((code != null && code == 45000030) || msg.contains("requested resource not granted") || msg.contains("resource not granted")) {
+            String detail = msg.isBlank() ? ("错误码 " + code) : msg;
+            return "豆包语音模型服务未开通/未授权（" + detail + "）。请到火山引擎豆包语音控制台（console.volcengine.com/speech/new/setting/apikeys）开通语音合成/音频生成服务（seed-audio-1.0），并确认 API Key 已授权该模型";
+        }
+        if ((code != null && code == 45000003) || msg.contains("invalid api key") || msg.contains("invalid credential")) {
+            return "API Key 无效，请在豆包语音控制台重新生成并核对";
+        }
+        return null;
     }
 
     private String extractStringField(String json, String fieldName) {

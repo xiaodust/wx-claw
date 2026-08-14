@@ -29,7 +29,7 @@ const capabilities: CapabilityDef[] = [
   { key: 'chat', title: '对话 API Key（多服务商）', desc: '文本对话与图片理解；选择服务商后模型列表与接入地址随之切换', modelLabel: '对话模型', modelCatalog: 'chat' },
   { key: 'image', title: '图片生成', desc: 'SiliconFlow / 火山方舟 / OpenAI；Kolors 免费，其余模型按量计费', modelLabel: '生成模型', modelCatalog: 'image' },
   { key: 'video', title: '视频生成', desc: '火山方舟 Seedance / OpenAI Sora / 阿里云通义万相；不填 Key 时：ark 服务商复用对话 Key，否则用后端默认', modelLabel: '视频模型', modelCatalog: 'video' },
-  { key: 'tts', title: '语音合成', desc: '火山引擎 TTS（模型使用后端默认）' },
+  { key: 'tts', title: '语音合成', desc: '火山引擎豆包语音（openspeech.bytedance.com）；Key 在豆包语音控制台创建，需开通 seed-audio-1.0 语音合成/音频生成服务，欠费或未开通会报 403' },
   { key: 'search', title: '联网搜索', desc: '博查 Bocha（无模型概念）' },
 ]
 
