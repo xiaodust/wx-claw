@@ -8,6 +8,7 @@ const configs = ref<AiConfigs | null>(null)
 const catalog = ref<ModelCatalog | null>(null)
 const inputs = reactive<Record<string, string>>({})
 const modelInputs = reactive<Record<string, string>>({})
+const customModelMode = reactive<Record<string, boolean>>({})
 const provider = ref('ark')
 const customBaseUrl = ref('')
 const loading = ref(false)
@@ -47,6 +48,13 @@ function modelOptions(key: string): ModelOption[] {
   if (cap.modelCatalog === 'image') return catalog.value.imageModels
   if (cap.modelCatalog === 'video') return catalog.value.videoModels
   return chatModels.value
+}
+
+function toggleCustomModel(key: string) {
+  customModelMode[key] = !customModelMode[key]
+  if (customModelMode[key] && !(modelInputs[key] || '').trim()) {
+    modelInputs[key] = entry(key)?.model || ''
+  }
 }
 
 async function refresh() {
@@ -146,6 +154,7 @@ onMounted(() => { refresh() })
     <h1 class="page-title">API Key 与模型设置</h1>
     <p class="page-subtitle">
       按能力配置你自己的 API Key 与模型；模型列表与服务商对应（聊天能力选择服务商后，只显示该服务商的模型）。
+      模型支持下拉选择，也可以切换到"自定义"直接输入目录外的模型名。
       未配置的能力自动回退到后端默认。
     </p>
 
@@ -187,12 +196,16 @@ onMounted(() => { refresh() })
           </div>
           <div class="cap-row model-row">
             <span class="muted">{{ cap.modelLabel }}：</span>
-            <el-select v-model="modelInputs[cap.key]" filterable allow-create default-first-option placeholder="选择或输入模型" style="width: 320px;">
+            <el-select v-if="!customModelMode[cap.key]" v-model="modelInputs[cap.key]" filterable allow-create default-first-option placeholder="选择模型" style="width: 320px;">
               <el-option v-for="m in modelOptions(cap.key)" :key="m.name" :label="m.name" :value="m.name">
                 <span class="option-name">{{ m.name }}</span>
                 <el-tag v-if="m.free" type="success" size="small" effect="light" class="free-tag">免费</el-tag>
               </el-option>
             </el-select>
+            <el-input v-else v-model="modelInputs[cap.key]" placeholder="输入自定义模型名，回车保存" clearable style="width: 320px;" @keyup.enter="saveModelCap(cap.key)" />
+            <el-button text type="primary" @click="toggleCustomModel(cap.key)">
+              {{ customModelMode[cap.key] ? '从列表选择' : '自定义' }}
+            </el-button>
             <el-button type="primary" plain :loading="savingModel === cap.key" @click="saveModelCap(cap.key)">保存模型</el-button>
             <el-button v-if="entry(cap.key)?.model" type="danger" text @click="clearModelCap(cap.key)">恢复默认</el-button>
             <span class="muted">当前：<span class="mono">{{ entry(cap.key)?.model || '后端默认' }}</span></span>
