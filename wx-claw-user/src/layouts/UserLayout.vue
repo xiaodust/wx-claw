@@ -1,10 +1,22 @@
 <script setup lang="ts">
+import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { getAccountInfo } from '../api/user'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const needsAccountSetup = ref(false)
+
+onMounted(async () => {
+  try {
+    const info = await getAccountInfo()
+    needsAccountSetup.value = !info.hasAccount
+  } catch {
+    needsAccountSetup.value = false
+  }
+})
 
 function activePath() {
   if (route.path.startsWith('/bots/')) return '/bots'
@@ -20,6 +32,9 @@ function logout() {
 <template>
   <div class="layout">
     <div class="accent-rail" aria-hidden="true"></div>
+    <div v-if="needsAccountSetup" class="setup-banner">
+      当前租户还没有登录账号，<router-link to="/settings">点此完善用户名 / 邮箱 / 密码</router-link>，之后即可用账号密码登录。
+    </div>
     <header class="header">
       <router-link class="brand" to="/">
         <span class="brand-mark">WX</span>
@@ -43,6 +58,15 @@ function logout() {
 <style scoped>
 .layout { min-height: 100vh; }
 .accent-rail { height: 3px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.setup-banner {
+  padding: 8px 26px;
+  background: rgba(255, 180, 0, 0.12);
+  border-bottom: 1px solid rgba(255, 180, 0, 0.3);
+  color: #e8c066;
+  font-size: 13px;
+  text-align: center;
+}
+.setup-banner a { color: var(--accent); font-weight: 700; }
 .header {
   position: sticky;
   top: 0;

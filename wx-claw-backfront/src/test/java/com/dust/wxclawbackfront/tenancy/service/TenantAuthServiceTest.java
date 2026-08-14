@@ -36,8 +36,10 @@ class TenantAuthServiceTest {
     private final TenantRepository tenantRepository = mock(TenantRepository.class);
     private final ApiSecretHasher secretHasher = mock(ApiSecretHasher.class);
     private final PublicAuthRateLimiter rateLimiter = mock(PublicAuthRateLimiter.class);
+    private final EmailVerificationService emailVerificationService = mock(EmailVerificationService.class);
     private final TenantAuthService service = new TenantAuthService(
-            accountRepository, sessionRepository, tenantRepository, secretHasher, rateLimiter);
+            accountRepository, sessionRepository, tenantRepository, secretHasher, rateLimiter,
+            emailVerificationService);
 
     @AfterEach
     void tearDown() {
@@ -177,6 +179,78 @@ class TenantAuthServiceTest {
                 .isInstanceOf(TenantRegistrationException.class)
                 .satisfies(ex -> assertThat(((TenantRegistrationException) ex).errorCode())
                         .isEqualTo("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void consoleAccountIsNullForApiKeyOnlyContext() {
+        TenantContextHolder.set(new TenantContext("tenant-1", "REST", null, "api:default", null,
+                Set.of(), Set.of(), "req"));
+
+        assertThat(service.consoleAccount()).isNull();
+    }
+
+    @Test
+    void consoleAccountResolvesFromAccountContext() {
+        TenantAccount account = account("tenant-1", "ops", "hash");
+        when(accountRepository.findByUsername("ops")).thenReturn(Optional.of(account));
+        TenantContextHolder.set(new TenantContext("tenant-1", "REST", null, "account:ops", null,
+                Set.of(), Set.of(), "req"));
+
+        assertThat(service.consoleAccount()).isSameAs(account);
+    }
+
+    @Test
+    void setupAccountCreatesAccountWithVerifiedEmail() {
+        when(accountRepository.findByTenantId("tenant-1")).thenReturn(Optional.empty());
+        when(accountRepository.existsByUsername("ops")).thenReturn(false);
+        when(emailVerificationService.verifyCode("ops@example.com", "SETUP", "123456")).thenReturn(true);
+        when(secretHasher.hash("secret-1234")).thenReturn("hashed");
+        when(accountRepository.save(any(TenantAccount.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(sessionRepository.save(any(TenantSession.class))).thenAnswer(inv -> inv.getArgument(0));
+        TenantContextHolder.set(new TenantContext("tenant-1", "REST", null, "api:default", null,
+                Set.of(), Set.of(), "req"));
+
+        TenantAuthService.AccountIssue issue = service.setupAccount(
+                "Ops", "secret-1234", "Ops@Example.COM", "123456");
+
+        assertThat(issue.username()).isEqualTo("ops");
+        assertThat(issue.sessionToken()).startsWith("sess_");
+        ArgumentCaptor<TenantAccount> captor = ArgumentCaptor.forClass(TenantAccount.class);
+        verify(accountRepository).save(captor.capture());
+        assertThat(captor.getValue().getUsername()).isEqualTo("ops");
+        assertThat(captor.getValue().getContactEmail()).isEqualTo("ops@example.com");
+        assertThat(captor.getValue().getPasswordHash()).isEqualTo("hashed");
+    }
+
+    @Test
+    void setupAccountRejectsWhenAccountExists() {
+        when(accountRepository.findByTenantId("tenant-1"))
+                .thenReturn(Optional.of(account("tenant-1", "ops", "hash")));
+        TenantContextHolder.set(new TenantContext("tenant-1", "REST", null, "api:default", null,
+                Set.of(), Set.of(), "req"));
+
+        assertThatThrownBy(() -> service.setupAccount("newops", "secret-1234", "a@b.com", "123456"))
+                .isInstanceOf(TenantRegistrationException.class)
+                .satisfies(ex -> {
+                    TenantRegistrationException tre = (TenantRegistrationException) ex;
+                    assertThat(tre.errorCode()).isEqualTo("CONFLICT");
+                    assertThat(tre.status()).isEqualTo(HttpStatus.CONFLICT);
+                });
+    }
+
+    @Test
+    void setupAccountRejectsInvalidEmailCode() {
+        when(accountRepository.findByTenantId("tenant-1")).thenReturn(Optional.empty());
+        when(accountRepository.existsByUsername("ops")).thenReturn(false);
+        when(emailVerificationService.verifyCode("a@b.com", "SETUP", "000000")).thenReturn(false);
+        TenantContextHolder.set(new TenantContext("tenant-1", "REST", null, "api:default", null,
+                Set.of(), Set.of(), "req"));
+
+        assertThatThrownBy(() -> service.setupAccount("ops", "secret-1234", "a@b.com", "000000"))
+                .isInstanceOf(TenantRegistrationException.class)
+                .satisfies(ex -> assertThat(((TenantRegistrationException) ex).errorCode())
+                        .isEqualTo("EMAIL_CODE_INVALID"));
+        verify(accountRepository, never()).save(any());
     }
 
     @Test

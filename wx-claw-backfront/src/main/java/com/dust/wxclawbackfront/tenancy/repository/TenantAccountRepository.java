@@ -11,5 +11,8 @@ public interface TenantAccountRepository extends JpaRepository<TenantAccount, Lo
 
     Optional<TenantAccount> findByContactEmail(String contactEmail);
 
+    /** 每个租户最多一个控制台账号，用于判断是否已完善账号信息。 */
+    Optional<TenantAccount> findByTenantId(String tenantId);
+
     boolean existsByUsername(String username);
 }

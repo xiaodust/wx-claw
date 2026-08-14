@@ -2,9 +2,10 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { changePassword, clearAiConfig, clearModel, getAiConfigs, getModelCatalog, saveAiConfig, saveModel } from '../api/user'
+import { changePassword, clearAiConfig, clearModel, getAccountInfo, getAiConfigs, getModelCatalog, saveAiConfig, saveModel, setupAccount } from '../api/user'
+import { sendEmailCode } from '../api/public'
 import { useAuthStore } from '../stores/auth'
-import type { AiConfigEntry, AiConfigs, ModelCatalog, ModelOption } from '../types/user'
+import type { AccountInfo, AiConfigEntry, AiConfigs, ModelCatalog, ModelOption } from '../types/user'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -22,6 +23,15 @@ const savingModel = ref<string | null>(null)
 const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
 const savingPassword = ref(false)
 const pwdError = ref('')
+const accountInfo = ref<AccountInfo | null>(null)
+const setupForm = reactive({ username: '', contactEmail: '', emailCode: '', password: '', confirmPassword: '' })
+const setupError = ref('')
+const settingUp = ref(false)
+const setupCodeSending = ref(false)
+const setupCodeCountdown = ref(0)
+let setupCodeTimer: number | undefined
+const emailPattern = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+const usernamePattern = /^[a-z0-9_-]{3,32}$/
 
 interface CapabilityDef {
   key: string
@@ -202,7 +212,90 @@ async function clearModelCap(key: string) {
   }
 }
 
-onMounted(() => { refresh() })
+onMounted(() => { refresh(); loadAccount() })
+
+async function loadAccount() {
+  try {
+    accountInfo.value = await getAccountInfo()
+  } catch {
+    accountInfo.value = null
+  }
+}
+
+async function sendSetupCode() {
+  if (setupCodeSending.value || setupCodeCountdown.value > 0) return
+  if (!emailPattern.test(setupForm.contactEmail.trim())) {
+    setupError.value = '邮箱格式不正确'
+    return
+  }
+  setupError.value = ''
+  setupCodeSending.value = true
+  try {
+    await sendEmailCode({ email: setupForm.contactEmail.trim().toLowerCase(), purpose: 'SETUP' })
+    setupCodeCountdown.value = 60
+    setupCodeTimer = window.setInterval(() => {
+      setupCodeCountdown.value -= 1
+      if (setupCodeCountdown.value <= 0 && setupCodeTimer) {
+        window.clearInterval(setupCodeTimer)
+        setupCodeTimer = undefined
+      }
+    }, 1000)
+  } catch (e: any) {
+    const status = e?.response?.status
+    setupError.value = status === 429 ? '发送太频繁，请稍后再试' : (e?.response?.data?.message || '验证码发送失败')
+  } finally {
+    setupCodeSending.value = false
+  }
+}
+
+async function submitSetup() {
+  setupError.value = ''
+  if (!usernamePattern.test(setupForm.username.trim().toLowerCase())) {
+    setupError.value = '用户名需为 3-32 位，仅支持小写字母、数字、下划线、连字符'
+    return
+  }
+  if (!emailPattern.test(setupForm.contactEmail.trim())) {
+    setupError.value = '邮箱格式不正确'
+    return
+  }
+  if (setupForm.emailCode.trim().length < 4) {
+    setupError.value = '请输入邮箱验证码'
+    return
+  }
+  if (setupForm.password.length < 8 || setupForm.password.length > 128) {
+    setupError.value = '密码长度需为 8-128 位'
+    return
+  }
+  if (setupForm.password !== setupForm.confirmPassword) {
+    setupError.value = '两次输入的密码不一致'
+    return
+  }
+  settingUp.value = true
+  try {
+    const result = await setupAccount({
+      username: setupForm.username.trim().toLowerCase(),
+      contactEmail: setupForm.contactEmail.trim().toLowerCase(),
+      emailCode: setupForm.emailCode.trim(),
+      password: setupForm.password,
+    })
+    // 切到刚签发的会话，账号密码登录即刻生效
+    authStore.login(result.sessionToken)
+    ElMessage.success('账号已完善，现在可以使用用户名和密码登录')
+    setupForm.username = ''
+    setupForm.contactEmail = ''
+    setupForm.emailCode = ''
+    setupForm.password = ''
+    setupForm.confirmPassword = ''
+    await loadAccount()
+  } catch (e: any) {
+    const status = e?.response?.status
+    const message = e?.response?.data?.message
+    if (status === 409) setupError.value = message || '用户名已被注册'
+    else setupError.value = message || '完善账号失败，请稍后再试'
+  } finally {
+    settingUp.value = false
+  }
+}
 
 async function submitPasswordChange() {
   pwdError.value = ''
@@ -302,10 +395,36 @@ async function submitPasswordChange() {
       </div>
     </div>
 
-    <div class="panel pwd-card">
+    <div v-if="accountInfo && !accountInfo.hasAccount" class="panel pwd-card setup-card">
+      <p class="page-kicker">ACCOUNT SETUP</p>
+      <h3 class="pwd-title">完善账号信息</h3>
+      <p class="muted pwd-desc">
+        当前租户还没有登录账号（仅配置了 API Key）。设置用户名、邮箱和密码后，就可以用账号密码登录控制台；邮箱也用于密码找回。
+      </p>
+      <div class="setup-grid">
+        <el-input v-model="setupForm.username" maxlength="32" placeholder="登录用户名（小写字母/数字/_/-，3-32 位）" />
+        <div class="email-code-row">
+          <el-input v-model="setupForm.contactEmail" maxlength="128" placeholder="联系邮箱（用于验证与密码找回）" @input="setupForm.emailCode = ''" />
+          <el-button :disabled="setupCodeSending || setupCodeCountdown > 0" @click="sendSetupCode">
+            {{ setupCodeCountdown > 0 ? `${setupCodeCountdown}s` : (setupCodeSending ? '发送中…' : '发送验证码') }}
+          </el-button>
+        </div>
+        <el-input v-model="setupForm.emailCode" maxlength="6" placeholder="邮箱验证码" />
+        <el-input v-model="setupForm.password" type="password" show-password maxlength="128" placeholder="登录密码（至少 8 位）" />
+        <el-input v-model="setupForm.confirmPassword" type="password" show-password maxlength="128" placeholder="确认密码" @keyup.enter="submitSetup" />
+        <el-button type="primary" :loading="settingUp" @click="submitSetup">保存账号</el-button>
+      </div>
+      <p v-if="setupError" class="pwd-error" role="alert">{{ setupError }}</p>
+    </div>
+
+    <div v-if="accountInfo?.hasAccount" class="panel pwd-card">
       <p class="page-kicker">SECURITY</p>
       <h3 class="pwd-title">修改密码</h3>
-      <p class="muted pwd-desc">修改后所有已登录会话（包括当前）都会失效，需要重新登录。</p>
+      <p class="muted pwd-desc">
+        当前账号：<span class="mono">{{ accountInfo.username }}</span>
+        <span v-if="accountInfo.contactEmail"> · <span class="mono">{{ accountInfo.contactEmail }}</span></span>。
+        修改后所有已登录会话（包括当前）都会失效，需要重新登录。
+      </p>
       <div class="pwd-row">
         <el-input v-model="pwdForm.oldPassword" type="password" show-password placeholder="当前密码" style="width: 240px" />
         <el-input v-model="pwdForm.newPassword" type="password" show-password placeholder="新密码（至少 8 位）" style="width: 240px" />
@@ -367,4 +486,7 @@ async function submitPasswordChange() {
 .pwd-desc { margin: 0 0 14px; font-size: 12px; }
 .pwd-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .pwd-error { margin: 10px 0 0; color: var(--danger); font-size: 12px; }
+.setup-grid { display: grid; grid-template-columns: 1fr; gap: 10px; max-width: 540px; }
+.email-code-row { display: flex; gap: 10px; }
+.email-code-row .el-input { flex: 1; min-width: 0; }
 </style>

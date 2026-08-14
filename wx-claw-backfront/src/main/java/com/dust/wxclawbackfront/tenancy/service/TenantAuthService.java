@@ -30,6 +30,7 @@ import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.Supplier;
@@ -48,6 +49,8 @@ import java.util.function.Supplier;
 public class TenantAuthService {
 
     private static final String SESSION_PREFIX = "sess_";
+    private static final Pattern USERNAME_PATTERN = Pattern.compile("^[a-z0-9_-]{3,32}$");
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
     private static final Set<String> CONSOLE_ROLES = Set.of("TENANT_ADMIN");
     private static final Set<String> CONSOLE_SCOPES = Set.of(
             "userbot:read", "userbot:write", "conversation:read", "aiconfig:read", "aiconfig:write",
@@ -58,6 +61,7 @@ public class TenantAuthService {
     private final TenantRepository tenantRepository;
     private final ApiSecretHasher secretHasher;
     private final PublicAuthRateLimiter rateLimiter;
+    private final EmailVerificationService emailVerificationService;
 
     private final SecureRandom secureRandom = new SecureRandom();
     private final ConcurrentMap<Long, Instant> lastUsedWrites = new ConcurrentHashMap<>();
@@ -176,6 +180,64 @@ public class TenantAuthService {
             return null;
         }
         return internalUserId.substring("account:".length());
+    }
+
+    /** 当前租户的控制台账号（可能为 null：仅用 API Key 登录、尚未完善账号）。 */
+    public TenantAccount consoleAccount() {
+        String username = accountUsername(TenantContextHolder.getNullable());
+        return username == null ? null : accountRepository.findByUsername(username).orElse(null);
+    }
+
+    /** 为尚无账号的租户完善控制台账号：用户名 + 已验证邮箱 + 密码。 */
+    public AccountIssue setupAccount(String username, String password, String contactEmail, String emailCode) {
+        TenantContext context = TenantContextHolder.require();
+        String tenantId = context.tenantId();
+        if (accountRepository.findByTenantId(tenantId).isPresent()) {
+            throw new TenantRegistrationException("CONFLICT", "当前租户已配置控制台账号",
+                    HttpStatus.CONFLICT);
+        }
+        String normalizedUsername = normalizeUsername(username);
+        String normalizedEmail = normalizeEmail(contactEmail);
+        String pwd = password == null ? "" : password.trim();
+        if (pwd.length() < 8 || pwd.length() > 128) {
+            throw new TenantRegistrationException("VALIDATION_ERROR", "密码长度需为 8-128 位",
+                    HttpStatus.BAD_REQUEST);
+        }
+        if (!emailVerificationService.verifyCode(normalizedEmail, "SETUP", emailCode)) {
+            throw new TenantRegistrationException("EMAIL_CODE_INVALID", "邮箱验证码无效或已过期，请重新获取",
+                    HttpStatus.BAD_REQUEST);
+        }
+        return createAccountAndIssueSession(tenantId, normalizedUsername, pwd, normalizedEmail);
+    }
+
+    private String normalizeUsername(String raw) {
+        if (raw == null || raw.isBlank()) {
+            throw new TenantRegistrationException("VALIDATION_ERROR", "用户名不能为空",
+                    HttpStatus.BAD_REQUEST);
+        }
+        String username = raw.trim().toLowerCase();
+        if (!USERNAME_PATTERN.matcher(username).matches()) {
+            throw new TenantRegistrationException("VALIDATION_ERROR",
+                    "用户名需为 3-32 位，仅支持小写字母、数字、下划线和连字符", HttpStatus.BAD_REQUEST);
+        }
+        if (accountRepository.existsByUsername(username)) {
+            throw new TenantRegistrationException("CONFLICT", "用户名已被注册：" + username,
+                    HttpStatus.CONFLICT);
+        }
+        return username;
+    }
+
+    private String normalizeEmail(String raw) {
+        if (raw == null || raw.isBlank()) {
+            throw new TenantRegistrationException("VALIDATION_ERROR", "邮箱不能为空",
+                    HttpStatus.BAD_REQUEST);
+        }
+        String email = raw.trim().toLowerCase();
+        if (email.length() > 128 || !EMAIL_PATTERN.matcher(email).matches()) {
+            throw new TenantRegistrationException("VALIDATION_ERROR", "邮箱格式不正确",
+                    HttpStatus.BAD_REQUEST);
+        }
+        return email;
     }
 
     private TenantSession saveSession(String tenantId, TenantAccount account, String rawToken) {

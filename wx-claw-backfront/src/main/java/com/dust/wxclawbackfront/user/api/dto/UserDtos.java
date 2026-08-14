@@ -35,6 +35,15 @@ public final class UserDtos {
     public record ChangePasswordRequest(String oldPassword, String newPassword) {
     }
 
+    public record AccountInfo(String username, String contactEmail, boolean hasAccount) {
+    }
+
+    public record SetupAccountRequest(String username, String contactEmail, String emailCode, String password) {
+    }
+
+    public record SetupAccountResult(String username, String sessionToken, LocalDateTime sessionExpiresAt) {
+    }
+
     public record Conversation(String id, String sessionId, String botId, boolean active,
                                int messageCount, LocalDateTime lastMessageTime,
                                LocalDateTime createdTime, LocalDateTime updatedTime) {

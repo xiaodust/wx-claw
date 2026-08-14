@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { AiConfigEntry, AiConfigs, Bot, Conversation, Message, ModelCatalog, QrInfo } from '../types/user'
+import type { AccountInfo, AiConfigEntry, AiConfigs, Bot, Conversation, Message, ModelCatalog, QrInfo, SetupAccountRequest, SetupAccountResult } from '../types/user'
 
 export function listBots(): Promise<Bot[]> {
   return api.get('/bots').then(r => r.data)
@@ -55,4 +55,12 @@ export function clearModel(capability: string): Promise<void> {
 
 export function changePassword(oldPassword: string, newPassword: string): Promise<{ message: string }> {
   return api.post('/account/password', { oldPassword, newPassword }).then(r => r.data)
+}
+
+export function getAccountInfo(): Promise<AccountInfo> {
+  return api.get('/account').then(r => r.data)
+}
+
+export function setupAccount(payload: SetupAccountRequest): Promise<SetupAccountResult> {
+  return api.post('/account/setup', payload).then(r => r.data)
 }

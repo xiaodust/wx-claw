@@ -38,7 +38,7 @@ import java.util.regex.Pattern;
 public class EmailVerificationService {
 
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
-    private static final List<String> PURPOSES = List.of("REGISTER", "RESET");
+    private static final List<String> PURPOSES = List.of("REGISTER", "RESET", "SETUP");
 
     private final TenantEmailVerificationRepository verificationRepository;
     private final PublicAuthRateLimiter rateLimiter;

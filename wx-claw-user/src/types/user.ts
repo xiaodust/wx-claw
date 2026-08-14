@@ -142,3 +142,22 @@ export interface ChangePasswordRequest {
   oldPassword: string
   newPassword: string
 }
+
+export interface AccountInfo {
+  username: string | null
+  contactEmail: string | null
+  hasAccount: boolean
+}
+
+export interface SetupAccountRequest {
+  username: string
+  contactEmail: string
+  emailCode: string
+  password: string
+}
+
+export interface SetupAccountResult {
+  username: string
+  sessionToken: string
+  sessionExpiresAt: string
+}
