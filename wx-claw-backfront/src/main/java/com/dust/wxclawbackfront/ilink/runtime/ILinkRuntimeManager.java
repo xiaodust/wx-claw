@@ -115,6 +115,25 @@ public class ILinkRuntimeManager {
         resumeContextStore.delete(key);
     }
 
+    /**
+     * 取消等待扫码登录的 Bot（删除/停用时调用），使阻塞在登录 Future 上的监听线程及时退出。
+     */
+    public void cancelLogin(BotRuntimeKey key) {
+        ILinkRuntime runtime = runtimes.get(key);
+        if (runtime == null || runtime.client() == null) {
+            return;
+        }
+        try {
+            if (!runtime.client().isLoggedIn()) {
+                runtime.client().cancelLogin();
+                log.info("已取消 Bot 登录等待: tenantId={}, botId={}", key.tenantId(), key.botId());
+            }
+        } catch (Exception ex) {
+            log.warn("取消 Bot 登录失败: tenantId={}, botId={}, error={}",
+                    key.tenantId(), key.botId(), ex.getMessage());
+        }
+    }
+
     @PreDestroy
     public void closeAll() {
         runtimes.forEach((key, runtime) -> closeClient(key, runtime.client()));

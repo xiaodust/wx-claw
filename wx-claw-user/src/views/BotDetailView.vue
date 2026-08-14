@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { getBot, listConversations, listMessages } from '../api/user'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { deleteBot, getBot, listConversations, listMessages } from '../api/user'
 import type { Bot, Conversation, Message } from '../types/user'
 
 const route = useRoute()
@@ -69,6 +69,21 @@ async function selectConversation(row: Conversation) {
   await refreshMessages()
 }
 
+async function removeBot() {
+  try {
+    await ElMessageBox.confirm(`确认删除 Bot「${bot.value?.displayName || botId}」？删除后将从列表移除，需要重新创建并扫码连接。`, '删除 Bot', { type: 'warning' })
+  } catch {
+    return
+  }
+  try {
+    await deleteBot(botId)
+    ElMessage.success('Bot 已删除')
+    router.push('/bots')
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '删除失败')
+  }
+}
+
 function formatTime(value: string | null): string {
   if (!value) return '—'
   return new Date(value).toLocaleString('zh-CN', { hour12: false })
@@ -98,6 +113,7 @@ onBeforeUnmount(() => {
     <div class="toolbar">
       <el-button @click="router.push('/bots')">← 返回</el-button>
       <el-button :loading="loadingConv" @click="refreshConversations">刷新会话</el-button>
+      <el-button type="danger" plain @click="removeBot">删除 Bot</el-button>
     </div>
 
     <h1 class="page-title">{{ bot?.displayName || botId }}</h1>

@@ -82,6 +82,13 @@ public class BotRuntimeStatusRegistry {
     }
 
     /**
+     * 删除 Bot 时立即移除其运行时状态，避免已删除的 Bot 残留状态。
+     */
+    public void remove(BotRuntimeKey key) {
+        states.remove(key);
+    }
+
+    /**
      * 清理停止时间超过保留期的已停止机器人状态，防止配置中已删除的 Bot 永久残留。
      */
     @Scheduled(cron = "${wxclaw.ilink.status-cleanup.cron:0 30 3 * * ?}")

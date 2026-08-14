@@ -4,6 +4,7 @@ import com.dust.wxclawbackfront.ilink.ILinkBotService;
 import com.dust.wxclawbackfront.ilink.runtime.BotRuntimeKey;
 import com.dust.wxclawbackfront.ilink.runtime.status.BotRuntimeSnapshot;
 import com.dust.wxclawbackfront.ilink.runtime.status.BotRuntimeStatusRegistry;
+import com.dust.wxclawbackfront.ilink.runtime.ILinkRuntimeManager;
 import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import com.dust.wxclawbackfront.tenancy.entity.TenantBot;
 import com.dust.wxclawbackfront.tenancy.repository.TenantBotRepository;
@@ -30,6 +31,7 @@ public class UserBotService {
     private final TenantBotRepository botRepository;
     private final BotRuntimeStatusRegistry statusRegistry;
     private final ILinkBotService ilinkBotService;
+    private final ILinkRuntimeManager runtimeManager;
 
     public List<UserDtos.Bot> listBots() {
         String tenantId = TenantContextHolder.require().tenantId();
@@ -85,10 +87,12 @@ public class UserBotService {
     @Transactional
     public void deleteBot(String botId) {
         TenantBot bot = requireBot(botId);
-        bot.setStatus("INACTIVE");
-        botRepository.save(bot);
-        ilinkBotService.stopBot(new BotRuntimeKey(bot.getTenantId(), bot.getBotId()));
-        log.info("用户停用 Bot: tenantId={}, botId={}", bot.getTenantId(), bot.getBotId());
+        BotRuntimeKey key = new BotRuntimeKey(bot.getTenantId(), bot.getBotId());
+        ilinkBotService.stopBot(key);
+        runtimeManager.deleteResumeContext(key);
+        statusRegistry.remove(key);
+        botRepository.delete(bot);
+        log.info("用户删除 Bot: tenantId={}, botId={}", bot.getTenantId(), bot.getBotId());
     }
 
     private TenantBot requireBot(String botId) {

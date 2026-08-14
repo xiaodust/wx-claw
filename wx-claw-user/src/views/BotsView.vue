@@ -123,9 +123,9 @@ async function toQrDataUrl(content: string | null): Promise<string | null> {
   }
 }
 
-async function deactivate(bot: Bot) {
+async function removeBot(bot: Bot) {
   try {
-    await ElMessageBox.confirm(`确认停用 Bot「${bot.displayName}」？停用后需要重新创建并扫码连接。`, '停用 Bot', {
+    await ElMessageBox.confirm(`确认删除 Bot「${bot.displayName}」？删除后将从列表移除，需要重新创建并扫码连接。`, '删除 Bot', {
       type: 'warning',
     })
   } catch {
@@ -133,10 +133,10 @@ async function deactivate(bot: Bot) {
   }
   try {
     await deleteBot(bot.botId)
-    ElMessage.success('Bot 已停用')
+    ElMessage.success('Bot 已删除')
     await refresh()
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message || '停用失败')
+    ElMessage.error(e?.response?.data?.message || '删除失败')
   }
 }
 
@@ -171,7 +171,7 @@ onBeforeUnmount(() => { stopQrPolling() })
           <template #default="{ row }">
             <el-button size="small" @click="openQr(row)">扫码连接</el-button>
             <el-button size="small" type="primary" @click="router.push(`/bots/${row.botId}`)">详情</el-button>
-            <el-button size="small" type="danger" text @click="deactivate(row)">停用</el-button>
+            <el-button size="small" type="danger" @click="removeBot(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>

@@ -1,6 +1,7 @@
 package com.dust.wxclawbackfront.user.service;
 
 import com.dust.wxclawbackfront.ilink.ILinkBotService;
+import com.dust.wxclawbackfront.ilink.runtime.ILinkRuntimeManager;
 import com.dust.wxclawbackfront.ilink.runtime.BotRuntimeKey;
 import com.dust.wxclawbackfront.ilink.runtime.status.BotRuntimeSnapshot;
 import com.dust.wxclawbackfront.ilink.runtime.status.BotRuntimeStatus;
@@ -29,6 +30,7 @@ class UserBotServiceTest {
     private TenantBotRepository botRepository;
     private BotRuntimeStatusRegistry statusRegistry;
     private ILinkBotService ilinkBotService;
+    private ILinkRuntimeManager runtimeManager;
     private UserBotService service;
 
     @BeforeEach
@@ -36,7 +38,8 @@ class UserBotServiceTest {
         botRepository = mock(TenantBotRepository.class);
         statusRegistry = mock(BotRuntimeStatusRegistry.class);
         ilinkBotService = mock(ILinkBotService.class);
-        service = new UserBotService(botRepository, statusRegistry, ilinkBotService);
+        runtimeManager = mock(ILinkRuntimeManager.class);
+        service = new UserBotService(botRepository, statusRegistry, ilinkBotService, runtimeManager);
         TenantContextHolder.set(TenantContext.ilink("tenant-a", "bot-a", "user-a", "req"));
     }
 
@@ -104,15 +107,16 @@ class UserBotServiceTest {
     }
 
     @Test
-    void deleteBotDeactivatesAndStopsRuntime() {
+    void deleteBotRemovesRowAndStopsRuntime() {
         TenantBot bot = bot("bot-1", "ACTIVE");
         when(botRepository.findByTenantIdAndBotId("tenant-a", "bot-1")).thenReturn(Optional.of(bot));
 
         service.deleteBot("bot-1");
 
-        assertThat(bot.getStatus()).isEqualTo("INACTIVE");
-        verify(botRepository).save(bot);
+        verify(botRepository).delete(bot);
         verify(ilinkBotService).stopBot(new BotRuntimeKey("tenant-a", "bot-1"));
+        verify(runtimeManager).deleteResumeContext(new BotRuntimeKey("tenant-a", "bot-1"));
+        verify(statusRegistry).remove(new BotRuntimeKey("tenant-a", "bot-1"));
     }
 
     @Test

@@ -97,6 +97,8 @@ public class ILinkBotService {
         if (flag != null) {
             flag.set(true);
         }
+        // 等待扫码登录中的线程阻塞在 login future 上，需显式取消才能退出
+        runtimeManager.cancelLogin(key);
         statusRegistry.stopped(key);
         log.info("已请求停止 Bot: tenantId={}, botId={}", key.tenantId(), key.botId());
     }
