@@ -45,6 +45,22 @@ class TenantChatClientFactoryTest {
         assertThat(factory.clientFor("tenant-a")).isSameAs(tenantClient);
     }
 
+    @Test
+    void buildClientProvidesBothSyncAndAsyncClients() {
+        ChatClient.Builder builder = mock(ChatClient.Builder.class);
+        when(builder.build()).thenReturn(mock(ChatClient.class));
+
+        TenantChatClientFactory factory = new TenantChatClientFactory(
+                builder, mock(TenantAiKeyProvider.class), "http://localhost", "test-model",
+                Duration.ofSeconds(5), 2);
+
+        // OpenAiChatModel 构建时会同时创建 sync/async client；
+        // 若只提供 sync client，async 会回退用 options.apiKey（null）构建并抛"缺少凭据"
+        ChatClient client = factory.buildClient("sk-test-key", "http://localhost", "test-model");
+
+        assertThat(client).isNotNull();
+    }
+
     private static final class FactoryStub extends TenantChatClientFactory {
         private final ChatClient tenantClient;
 

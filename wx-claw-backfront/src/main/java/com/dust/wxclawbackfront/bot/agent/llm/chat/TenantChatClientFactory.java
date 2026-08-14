@@ -3,6 +3,7 @@ package com.dust.wxclawbackfront.bot.agent.llm.chat;
 import com.dust.wxclawbackfront.bot.agent.llm.TenantAiKeyProvider;
 import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import com.openai.client.OpenAIClient;
+import com.openai.client.OpenAIClientAsync;
 import io.micrometer.observation.ObservationRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -88,8 +89,15 @@ public class TenantChatClientFactory {
                 baseUrl, apiKey, null, null, null, null,
                 false, false, model, timeout, maxRetries,
                 null, null, ObservationRegistry.NOOP, null, List.of());
+        // OpenAiChatModel 构建时若未显式提供 async client，会退回用 options.apiKey（此处为 null）重建并抛"缺少凭据"，
+        // 因此同步/异步 client 必须同时传入
+        OpenAIClientAsync openAiClientAsync = OpenAiSetup.setupAsyncClient(
+                baseUrl, apiKey, null, null, null, null,
+                false, false, model, timeout, maxRetries,
+                null, null, ObservationRegistry.NOOP, null, List.of());
         OpenAiChatModel chatModel = OpenAiChatModel.builder()
                 .openAiClient(openAiClient)
+                .openAiClientAsync(openAiClientAsync)
                 .options(OpenAiChatOptions.builder().model(model).build())
                 .build();
         return ChatClient.builder(chatModel).build();
