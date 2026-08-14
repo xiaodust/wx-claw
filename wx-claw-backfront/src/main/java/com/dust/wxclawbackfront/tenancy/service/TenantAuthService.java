@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -99,12 +100,14 @@ public class TenantAuthService {
     }
 
     /** 注册时创建账号并直接签发会话（注册成功即可一键进入控制台）。 */
-    public AccountIssue createAccountAndIssueSession(String tenantId, String username, String password) {
+    public AccountIssue createAccountAndIssueSession(String tenantId, String username, String password,
+                                                     String contactEmail) {
         String rawToken = newSessionToken();
         return withContext(tenantId, () -> {
             TenantAccount account = new TenantAccount();
             account.setUsername(username);
             account.setPasswordHash(secretHasher.hash(password));
+            account.setContactEmail(contactEmail);
             account.setStatus("ACTIVE");
             TenantAccount saved = accountRepository.save(account);
             TenantSession session = saveSession(tenantId, saved, rawToken);
@@ -198,6 +201,7 @@ public class TenantAuthService {
     }
 
     @Scheduled(fixedDelayString = "${wxclaw.api.session.cleanup-ms:3600000}")
+    @Transactional
     public void cleanupExpiredSessions() {
         long removed = sessionRepository.deleteByExpiresAtBefore(LocalDateTime.now());
         if (removed > 0) {

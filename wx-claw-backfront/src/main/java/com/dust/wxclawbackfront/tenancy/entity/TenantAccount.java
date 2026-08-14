@@ -34,6 +34,10 @@ public class TenantAccount extends TenantOwnedEntity {
     @Column(name = "password_hash", nullable = false, length = 512)
     private String passwordHash;
 
+    /** 找回密码的投递邮箱（注册时保存）。 */
+    @Column(name = "contact_email", length = 128)
+    private String contactEmail;
+
     @Column(nullable = false, length = 20)
     private String status = "ACTIVE";
 

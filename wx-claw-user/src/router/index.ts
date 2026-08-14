@@ -3,17 +3,21 @@ import { API_KEY_STORAGE } from '../api/client'
 import HomeView from '../views/HomeView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import LoginView from '../views/LoginView.vue'
+import ForgotPasswordView from '../views/ForgotPasswordView.vue'
+import ResetPasswordView from '../views/ResetPasswordView.vue'
 import UserLayout from '../layouts/UserLayout.vue'
 import BotsView from '../views/BotsView.vue'
 import BotDetailView from '../views/BotDetailView.vue'
 import SettingsView from '../views/SettingsView.vue'
 
-const PUBLIC_PATHS = new Set(['/', '/register', '/login'])
+const PUBLIC_PATHS = new Set(['/', '/register', '/login', '/forgot-password', '/reset-password'])
 
 const router = createRouter({ history: createWebHistory(), routes: [
   { path: '/', component: HomeView },
   { path: '/register', component: RegisterView },
   { path: '/login', component: LoginView },
+  { path: '/forgot-password', component: ForgotPasswordView },
+  { path: '/reset-password', component: ResetPasswordView },
   { path: '/', component: UserLayout, children: [
     { path: '', redirect: '/bots' },
     { path: 'bots', component: BotsView },

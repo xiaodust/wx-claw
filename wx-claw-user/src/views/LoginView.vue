@@ -104,6 +104,9 @@ async function login() {
           </label>
         </el-tab-pane>
       </el-tabs>
+      <p v-if="activeTab === 'account'" class="forgot-link">
+        <router-link to="/forgot-password">忘记密码？</router-link>
+      </p>
 
       <p v-if="errorMsg" class="login-error" role="alert">{{ errorMsg }}</p>
       <el-button type="primary" class="login-btn" :loading="loading" @click="login">
@@ -182,6 +185,9 @@ async function login() {
   color: var(--danger);
   font-size: 13px;
 }
+.forgot-link { margin: 0 0 4px; text-align: right; font-size: 12px; }
+.forgot-link a { color: var(--muted); text-decoration: none; }
+.forgot-link a:hover { color: var(--accent); }
 .login-btn { width: 100%; margin-top: 16px; font-weight: 800; }
 .login-hint { font-size: 12px; margin-top: 14px; line-height: 1.6; }
 .login-links { margin-top: 16px; display: flex; justify-content: center; gap: 8px; font-size: 13px; }

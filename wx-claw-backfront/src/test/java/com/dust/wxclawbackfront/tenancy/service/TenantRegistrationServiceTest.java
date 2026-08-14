@@ -22,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -50,7 +51,7 @@ class TenantRegistrationServiceTest {
         when(credentialRepository.findByCredentialId(anyString())).thenReturn(Optional.empty());
         when(accountRepository.existsByUsername("ops")).thenReturn(false);
         when(secretHasher.hash(anyString())).thenAnswer(inv -> "hashed:" + inv.getArgument(0));
-        when(authService.createAccountAndIssueSession(anyString(), anyString(), anyString()))
+        when(authService.createAccountAndIssueSession(anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(new TenantAuthService.AccountIssue("ops", "sess_test", LocalDateTime.now().plusDays(7)));
 
         RegisteredTenant result = service.register(
@@ -77,6 +78,7 @@ class TenantRegistrationServiceTest {
         assertThat(result.apiKey()).startsWith(credential.getCredentialId() + ".");
         assertThat(result.username()).isEqualTo("ops");
         assertThat(result.sessionToken()).isEqualTo("sess_test");
+        verify(authService).createAccountAndIssueSession(anyString(), eq("ops"), eq("secret-1234"), eq("ops@example.com"));
         // 注册前后不残留请求线程上下文。
         assertThat(TenantContextHolder.getNullable()).isNull();
     }
@@ -92,7 +94,7 @@ class TenantRegistrationServiceTest {
 
         assertThat(result.username()).isNull();
         assertThat(result.sessionToken()).isNull();
-        verify(authService, never()).createAccountAndIssueSession(anyString(), anyString(), anyString());
+        verify(authService, never()).createAccountAndIssueSession(anyString(), anyString(), anyString(), anyString());
     }
 
     @Test

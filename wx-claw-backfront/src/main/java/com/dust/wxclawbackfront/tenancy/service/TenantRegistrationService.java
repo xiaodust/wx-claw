@@ -100,7 +100,7 @@ public class TenantRegistrationService {
         // 账号与会话在凭据之后创建；注册成功即返回会话 token，前端可一键进入控制台。
         TenantAuthService.AccountIssue accountIssue = username == null
                 ? null
-                : authService.createAccountAndIssueSession(tenantId, username, request.password().trim());
+                : authService.createAccountAndIssueSession(tenantId, username, request.password().trim(), contactEmail);
         return new RegisteredTenant(tenantId, tenantCode, tenantName, tenant.getStatus(),
                 tenant.getCreatedAt(), credential.getCredentialId(),
                 credential.getCredentialId() + "." + secret, CONSOLE_SCOPES,

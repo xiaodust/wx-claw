@@ -117,3 +117,16 @@ export interface AuthResult {
   tenantCode: string
   tenantName: string
 }
+
+export interface ForgotPasswordRequest {
+  usernameOrEmail: string
+}
+
+export interface ResetPasswordRequest {
+  token: string
+  newPassword: string
+}
+
+export interface OperationResult {
+  message: string
+}

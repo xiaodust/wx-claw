@@ -10,5 +10,7 @@ import java.util.Optional;
 public interface TenantSessionRepository extends JpaRepository<TenantSession, Long> {
     Optional<TenantSession> findByTokenHash(String tokenHash);
 
+    long deleteByAccountId(Long accountId);
+
     long deleteByExpiresAtBefore(LocalDateTime time);
 }

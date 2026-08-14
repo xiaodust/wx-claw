@@ -29,6 +29,8 @@ public class PublicAuthRateLimiter {
     private final int maxPerEmail;
     private final int loginPerUserAndIp;
     private final int loginPerIp;
+    private final int resetPerUserAndIp;
+    private final int resetPerIp;
     private final Duration window;
 
     public PublicAuthRateLimiter(
@@ -36,11 +38,15 @@ public class PublicAuthRateLimiter {
             @Value("${wxclaw.api.registration.max-per-email:3}") int maxPerEmail,
             @Value("${wxclaw.api.registration.window:PT1H}") Duration window,
             @Value("${wxclaw.api.login.max-per-user-and-ip:10}") int loginPerUserAndIp,
-            @Value("${wxclaw.api.login.max-per-ip:30}") int loginPerIp) {
+            @Value("${wxclaw.api.login.max-per-ip:30}") int loginPerIp,
+            @Value("${wxclaw.api.password-reset.max-per-user-and-ip:5}") int resetPerUserAndIp,
+            @Value("${wxclaw.api.password-reset.max-per-ip:20}") int resetPerIp) {
         this.maxPerIp = Math.max(1, maxPerIp);
         this.maxPerEmail = Math.max(1, maxPerEmail);
         this.loginPerUserAndIp = Math.max(1, loginPerUserAndIp);
         this.loginPerIp = Math.max(1, loginPerIp);
+        this.resetPerUserAndIp = Math.max(1, resetPerUserAndIp);
+        this.resetPerIp = Math.max(1, resetPerIp);
         this.window = window == null || window.isZero() || window.isNegative() ? Duration.ofHours(1) : window;
     }
 
@@ -55,6 +61,12 @@ public class PublicAuthRateLimiter {
         checkKey("login:user+ip:" + (username == null ? "?" : username.toLowerCase())
                 + ":" + (clientIp == null ? "unknown" : clientIp), loginPerUserAndIp);
         checkKey("login:ip:" + (clientIp == null ? "unknown" : clientIp), loginPerIp);
+    }
+
+    public void checkPasswordReset(String usernameOrEmail, String clientIp) {
+        checkKey("pwd:user+ip:" + (usernameOrEmail == null ? "?" : usernameOrEmail.trim().toLowerCase())
+                + ":" + (clientIp == null ? "unknown" : clientIp), resetPerUserAndIp);
+        checkKey("pwd:ip:" + (clientIp == null ? "unknown" : clientIp), resetPerIp);
     }
 
     private void checkKey(String key, int max) {

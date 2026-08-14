@@ -2,7 +2,11 @@ package com.dust.wxclawbackfront.tenancy.api;
 
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.ApiError;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.AuthResult;
+import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.ForgotPasswordRequest;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.LoginRequest;
+import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.OperationResult;
+import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.ResetPasswordRequest;
+import com.dust.wxclawbackfront.tenancy.service.PasswordResetService;
 import com.dust.wxclawbackfront.tenancy.service.TenantAuthService;
 import com.dust.wxclawbackfront.tenancy.service.TenantRegistrationException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -23,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class PublicAuthController {
 
     private final TenantAuthService authService;
+    private final PasswordResetService passwordResetService;
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody(required = false) LoginRequest request,
@@ -35,6 +40,38 @@ public class PublicAuthController {
             }
             AuthResult result = authService.login(request.username(), request.password(), clientIp(httpRequest));
             return ResponseEntity.ok(result);
+        } catch (TenantRegistrationException ex) {
+            return ResponseEntity.status(ex.status())
+                    .body(new ApiError(ex.errorCode(), ex.getMessage()));
+        }
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@RequestBody(required = false) ForgotPasswordRequest request,
+                                            HttpServletRequest httpRequest) {
+        try {
+            if (request == null || request.usernameOrEmail() == null || request.usernameOrEmail().isBlank()) {
+                throw new TenantRegistrationException("VALIDATION_ERROR", "请输入用户名或邮箱",
+                        HttpStatus.BAD_REQUEST);
+            }
+            passwordResetService.requestReset(request.usernameOrEmail(), clientIp(httpRequest));
+            // 账号不存在也返回同一提示，避免泄露账号是否存在。
+            return ResponseEntity.ok(new OperationResult("如果账号存在，重置链接已发送到对应邮箱"));
+        } catch (TenantRegistrationException ex) {
+            return ResponseEntity.status(ex.status())
+                    .body(new ApiError(ex.errorCode(), ex.getMessage()));
+        }
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@RequestBody(required = false) ResetPasswordRequest request) {
+        try {
+            if (request == null || request.token() == null || request.token().isBlank()) {
+                throw new TenantRegistrationException("INVALID_TOKEN", "重置链接无效或已过期",
+                        HttpStatus.BAD_REQUEST);
+            }
+            passwordResetService.resetPassword(request.token(), request.newPassword());
+            return ResponseEntity.ok(new OperationResult("密码已重置，请使用新密码登录"));
         } catch (TenantRegistrationException ex) {
             return ResponseEntity.status(ex.status())
                     .body(new ApiError(ex.errorCode(), ex.getMessage()));

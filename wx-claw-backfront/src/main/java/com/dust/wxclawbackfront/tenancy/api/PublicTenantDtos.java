@@ -24,6 +24,15 @@ public final class PublicTenantDtos {
     public record LoginRequest(String username, String password) {
     }
 
+    public record ForgotPasswordRequest(String usernameOrEmail) {
+    }
+
+    public record ResetPasswordRequest(String token, String newPassword) {
+    }
+
+    public record OperationResult(String message) {
+    }
+
     public record AuthResult(String sessionToken, LocalDateTime expiresAt,
                              String tenantId, String tenantCode, String tenantName) {
     }
