@@ -36,17 +36,22 @@ export interface AiConfigs {
   search: AiConfigEntry
 }
 
+export interface ModelOption {
+  name: string
+  free: boolean
+}
+
 export interface ChatProviderOption {
   id: string
   name: string
   baseUrl: string
-  models: string[]
+  models: ModelOption[]
 }
 
 export interface ModelCatalog {
   chatProviders: ChatProviderOption[]
-  imageModels: string[]
-  videoModels: string[]
+  imageModels: ModelOption[]
+  videoModels: ModelOption[]
 }
 
 export interface Conversation {

@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { clearAiConfig, clearModel, getAiConfigs, getModelCatalog, saveAiConfig, saveModel } from '../api/user'
-import type { AiConfigEntry, AiConfigs, ModelCatalog } from '../types/user'
+import type { AiConfigEntry, AiConfigs, ModelCatalog, ModelOption } from '../types/user'
 
 const configs = ref<AiConfigs | null>(null)
 const catalog = ref<ModelCatalog | null>(null)
@@ -25,14 +25,14 @@ interface CapabilityDef {
 
 const capabilities: CapabilityDef[] = [
   { key: 'chat', title: '对话 API Key（多服务商）', desc: '文本对话与图片理解；选择服务商后模型列表与接入地址随之切换', modelLabel: '对话模型', modelCatalog: 'chat' },
-  { key: 'image', title: '图片生成', desc: 'SiliconFlow（Kolors）', modelLabel: '生成模型', modelCatalog: 'image' },
+  { key: 'image', title: '图片生成', desc: 'SiliconFlow（Kolors 免费，其余模型按量计费）', modelLabel: '生成模型', modelCatalog: 'image' },
   { key: 'video', title: '视频生成（Seedance）', desc: '火山方舟视频模型；不填 Key 时：对话为火山方舟则复用对话 Key，否则用后端默认', modelLabel: '视频模型', modelCatalog: 'video' },
   { key: 'videoDashscope', title: '视频生成（阿里云）', desc: '通义万相 DashScope（模型使用后端默认）' },
   { key: 'tts', title: '语音合成', desc: '火山引擎 TTS（模型使用后端默认）' },
   { key: 'search', title: '联网搜索', desc: '博查 Bocha（无模型概念）' },
 ]
 
-const chatModels = computed(() =>
+const chatModels = computed<ModelOption[]>(() =>
   catalog.value?.chatProviders.find(p => p.id === provider.value)?.models || [])
 const selectedProvider = computed(() =>
   catalog.value?.chatProviders.find(p => p.id === provider.value))
@@ -41,7 +41,7 @@ function entry(key: string): AiConfigEntry | null {
   return configs.value?.[key as keyof AiConfigs] ?? null
 }
 
-function modelOptions(key: string): string[] {
+function modelOptions(key: string): ModelOption[] {
   const cap = capabilities.find(c => c.key === key)
   if (!cap?.modelCatalog || !catalog.value) return []
   if (cap.modelCatalog === 'image') return catalog.value.imageModels
@@ -188,7 +188,10 @@ onMounted(() => { refresh() })
           <div class="cap-row model-row">
             <span class="muted">{{ cap.modelLabel }}：</span>
             <el-select v-model="modelInputs[cap.key]" filterable allow-create default-first-option placeholder="选择或输入模型" style="width: 320px;">
-              <el-option v-for="m in modelOptions(cap.key)" :key="m" :label="m" :value="m" />
+              <el-option v-for="m in modelOptions(cap.key)" :key="m.name" :label="m.name" :value="m.name">
+                <span class="option-name">{{ m.name }}</span>
+                <el-tag v-if="m.free" type="success" size="small" effect="light" class="free-tag">免费</el-tag>
+              </el-option>
             </el-select>
             <el-button type="primary" plain :loading="savingModel === cap.key" @click="saveModelCap(cap.key)">保存模型</el-button>
             <el-button v-if="entry(cap.key)?.model" type="danger" text @click="clearModelCap(cap.key)">恢复默认</el-button>
@@ -211,4 +214,5 @@ onMounted(() => { refresh() })
 .model-row { padding-top: 10px; border-top: 1px dashed #e7ecf2; }
 .cap-actions { display: flex; gap: 10px; align-items: center; flex: 1; }
 .cap-actions .el-input { flex: 1; min-width: 220px; max-width: 420px; }
+.free-tag { margin-left: 8px; flex-shrink: 0; }
 </style>
