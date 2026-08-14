@@ -12,11 +12,20 @@ public final class PublicTenantDtos {
     private PublicTenantDtos() {
     }
 
-    public record RegisterTenantRequest(String tenantName, String tenantCode, String contactEmail) {
+    public record RegisterTenantRequest(String tenantName, String tenantCode, String contactEmail,
+                                        String username, String password) {
     }
 
     public record RegisteredTenant(String tenantId, String tenantCode, String tenantName, String status,
-                                   LocalDateTime createdAt, String credentialId, String apiKey, String scopes) {
+                                   LocalDateTime createdAt, String credentialId, String apiKey, String scopes,
+                                   String username, String sessionToken, LocalDateTime sessionExpiresAt) {
+    }
+
+    public record LoginRequest(String username, String password) {
+    }
+
+    public record AuthResult(String sessionToken, LocalDateTime expiresAt,
+                             String tenantId, String tenantCode, String tenantName) {
     }
 
     /** 与现有 REST API 一致的结构化错误体：{error, message}。 */

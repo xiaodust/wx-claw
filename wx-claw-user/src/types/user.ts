@@ -87,6 +87,8 @@ export interface RegisterTenantRequest {
   tenantName: string
   tenantCode?: string
   contactEmail?: string
+  username: string
+  password: string
 }
 
 export interface RegisterTenantResult {
@@ -98,4 +100,20 @@ export interface RegisterTenantResult {
   credentialId: string
   apiKey: string
   scopes: string
+  username: string | null
+  sessionToken: string | null
+  sessionExpiresAt: string | null
+}
+
+export interface LoginRequest {
+  username: string
+  password: string
+}
+
+export interface AuthResult {
+  sessionToken: string
+  expiresAt: string
+  tenantId: string
+  tenantCode: string
+  tenantName: string
 }

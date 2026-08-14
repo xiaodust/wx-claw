@@ -2,6 +2,7 @@ package com.dust.wxclawbackfront.config.security;
 
 import com.dust.wxclawbackfront.tenancy.TenantContext;
 import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
+import com.dust.wxclawbackfront.tenancy.service.TenantAuthService;
 import com.dust.wxclawbackfront.tenancy.security.TenantApiKeyAuthenticator;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -27,9 +28,11 @@ import java.io.IOException;
 public class ApiKeyAuthFilter extends OncePerRequestFilter {
 
     private final TenantApiKeyAuthenticator authenticator;
+    private final TenantAuthService sessionAuthenticator;
 
-    public ApiKeyAuthFilter(TenantApiKeyAuthenticator authenticator) {
+    public ApiKeyAuthFilter(TenantApiKeyAuthenticator authenticator, TenantAuthService sessionAuthenticator) {
         this.authenticator = authenticator;
+        this.sessionAuthenticator = sessionAuthenticator;
     }
 
     @Override
@@ -53,7 +56,11 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
 
         String requestApiKey = request.getHeader("X-API-Key");
 
+        // 优先按 API Key 认证；失败时回退到控制台会话 token（sess_ 前缀）。
         TenantContext context = authenticator.authenticate(requestApiKey);
+        if (context == null) {
+            context = sessionAuthenticator.authenticateSession(requestApiKey);
+        }
         if (context == null) {
             log.warn("API 认证失败: path={}, remoteAddr={}", path, request.getRemoteAddr());
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);

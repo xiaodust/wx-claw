@@ -8,7 +8,7 @@ import type { RegisterTenantResult } from '../types/user'
 const router = useRouter()
 const authStore = useAuthStore()
 
-const form = reactive({ tenantName: '', tenantCode: '', contactEmail: '' })
+const form = reactive({ tenantName: '', tenantCode: '', contactEmail: '', username: '', password: '', confirmPassword: '' })
 const fieldErrors = reactive<Record<string, string>>({})
 const submitting = ref(false)
 const serverError = ref('')
@@ -17,11 +17,15 @@ const copied = ref(false)
 
 const codePattern = /^[a-z0-9][a-z0-9-]{0,31}$/
 const emailPattern = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+const usernamePattern = /^[a-z0-9_-]{3,32}$/
 
 const canSubmit = computed(() =>
-  form.tenantName.trim().length >= 2 && !Object.values(fieldErrors).some(Boolean))
+  form.tenantName.trim().length >= 2
+  && form.username.trim().length >= 3
+  && form.password.length >= 8
+  && !Object.values(fieldErrors).some(Boolean))
 
-function validateField(key: 'tenantName' | 'tenantCode' | 'contactEmail') {
+function validateField(key: 'tenantName' | 'tenantCode' | 'contactEmail' | 'username' | 'password' | 'confirmPassword') {
   fieldErrors[key] = ''
   if (key === 'tenantName') {
     const name = form.tenantName.trim()
@@ -38,6 +42,18 @@ function validateField(key: 'tenantName' | 'tenantCode' | 'contactEmail') {
       fieldErrors.contactEmail = '邮箱格式不正确'
     }
   }
+  if (key === 'username') {
+    const username = form.username.trim()
+    if (username && !usernamePattern.test(username)) {
+      fieldErrors.username = '用户名需为 3-32 位，仅支持小写字母、数字、下划线、连字符'
+    }
+  }
+  if (key === 'password' && form.password && form.password.length < 8) {
+    fieldErrors.password = '密码至少 8 位'
+  }
+  if (key === 'confirmPassword' && form.confirmPassword && form.confirmPassword !== form.password) {
+    fieldErrors.confirmPassword = '两次输入的密码不一致'
+  }
 }
 
 async function submit() {
@@ -45,6 +61,9 @@ async function submit() {
   validateField('tenantName')
   validateField('tenantCode')
   validateField('contactEmail')
+  validateField('username')
+  validateField('password')
+  validateField('confirmPassword')
   if (Object.values(fieldErrors).some(Boolean)) return
 
   submitting.value = true
@@ -54,6 +73,8 @@ async function submit() {
       tenantName: form.tenantName.trim(),
       tenantCode: form.tenantCode.trim() || undefined,
       contactEmail: form.contactEmail.trim() || undefined,
+      username: form.username.trim().toLowerCase(),
+      password: form.password,
     })
   } catch (e: unknown) {
     const status = (e as { response?: { status?: number } })?.response?.status
@@ -80,7 +101,7 @@ async function copyKey() {
 
 function enterConsole() {
   if (!result.value) return
-  authStore.login(result.value.apiKey)
+  authStore.login(result.value.sessionToken || result.value.apiKey)
   router.push('/bots')
 }
 </script>
@@ -143,10 +164,52 @@ function enterConsole() {
             <span v-if="fieldErrors.contactEmail" class="field-error">{{ fieldErrors.contactEmail }}</span>
           </label>
 
+          <label class="field">
+            <span class="field-label">登录用户名 <i>*</i></span>
+            <input
+              v-model="form.username"
+              type="text"
+              maxlength="32"
+              autocomplete="username"
+              placeholder="小写字母/数字/下划线/连字符，3-32 位"
+              :class="{ invalid: fieldErrors.username }"
+              @blur="validateField('username')"
+            />
+            <span v-if="fieldErrors.username" class="field-error">{{ fieldErrors.username }}</span>
+          </label>
+
+          <label class="field">
+            <span class="field-label">登录密码 <i>*</i></span>
+            <input
+              v-model="form.password"
+              type="password"
+              maxlength="128"
+              autocomplete="new-password"
+              placeholder="至少 8 位"
+              :class="{ invalid: fieldErrors.password }"
+              @blur="validateField('password')"
+            />
+            <span v-if="fieldErrors.password" class="field-error">{{ fieldErrors.password }}</span>
+          </label>
+
+          <label class="field">
+            <span class="field-label">确认密码 <i>*</i></span>
+            <input
+              v-model="form.confirmPassword"
+              type="password"
+              maxlength="128"
+              autocomplete="new-password"
+              placeholder="再次输入密码"
+              :class="{ invalid: fieldErrors.confirmPassword }"
+              @blur="validateField('confirmPassword')"
+            />
+            <span v-if="fieldErrors.confirmPassword" class="field-error">{{ fieldErrors.confirmPassword }}</span>
+          </label>
+
           <p v-if="serverError" class="server-error" role="alert">{{ serverError }}</p>
 
           <button class="submit-btn" type="submit" :disabled="!canSubmit || submitting">
-            {{ submitting ? '注册中…' : '注册并生成 API Key' }}
+            {{ submitting ? '注册中…' : '注册并进入控制台' }}
           </button>
         </form>
 
@@ -159,11 +222,18 @@ function enterConsole() {
       <div v-else class="reg-card success-card">
         <p class="kicker"><span class="kicker-dot"></span> REGISTERED ✓</p>
         <h1>注册成功</h1>
-        <p class="sub">租户 <b>{{ result.tenantName }}</b>（{{ result.tenantCode }}）已创建。</p>
+        <p class="sub">
+          租户 <b>{{ result.tenantName }}</b>（{{ result.tenantCode }}）已创建，
+          用户名 <b class="mono">{{ result.username }}</b> 可用于登录。
+        </p>
+
+        <div class="alert-box ok-box">
+          <b>账号已就绪</b>：控制台支持用户名 + 密码登录，不再依赖一次性 API Key。
+        </div>
 
         <div class="key-block">
           <div class="key-head">
-            <span>控制台 API Key</span>
+            <span>接口 API Key</span>
             <span class="key-warn mono">仅显示一次</span>
           </div>
           <code class="key-value">{{ result.apiKey }}</code>
@@ -171,13 +241,13 @@ function enterConsole() {
             <button class="btn copy-btn" type="button" @click="copyKey">
               {{ copied ? '已复制 ✓' : '复制 Key' }}
             </button>
-            <button class="btn ghost-btn" type="button" @click="enterConsole">复制并进入控制台 →</button>
+            <button class="btn ghost-btn" type="button" @click="enterConsole">进入控制台 →</button>
           </div>
         </div>
 
         <div class="alert-box">
-          <b>请立即保存</b>：API Key 只展示这一次，关闭页面后无法再次查看。
-          忘记后可在控制台设置页重新生成。该 Key 已具备管理 Bot、查看会话与配置 AI 能力的权限。
+          <b>请立即保存 API Key</b>：它只展示这一次，用于接口调用；关闭页面后无法再次查看。
+          控制台登录请使用你刚设置的用户名和密码。
         </div>
       </div>
     </main>
@@ -363,6 +433,11 @@ h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: -0.5px; }
   color: #e8c066;
   font-size: 12px;
   line-height: 1.7;
+}
+.alert-box.ok-box {
+  border-color: rgba(45, 225, 194, 0.35);
+  background: rgba(45, 225, 194, 0.07);
+  color: #9fe8db;
 }
 
 .reg-footer {

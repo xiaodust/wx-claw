@@ -6,10 +6,11 @@ import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.RegisterTenantReque
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.RegisteredTenant;
 import com.dust.wxclawbackfront.tenancy.entity.Tenant;
 import com.dust.wxclawbackfront.tenancy.entity.TenantApiCredential;
+import com.dust.wxclawbackfront.tenancy.repository.TenantAccountRepository;
 import com.dust.wxclawbackfront.tenancy.repository.TenantApiCredentialRepository;
 import com.dust.wxclawbackfront.tenancy.repository.TenantRepository;
 import com.dust.wxclawbackfront.tenancy.security.ApiSecretHasher;
-import com.dust.wxclawbackfront.tenancy.security.RegistrationRateLimiter;
+import com.dust.wxclawbackfront.tenancy.security.PublicAuthRateLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -36,13 +37,16 @@ public class TenantRegistrationService {
 
     private static final Pattern TENANT_CODE_PATTERN = Pattern.compile("^[a-z0-9][a-z0-9-]{0,31}$");
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
+    private static final Pattern USERNAME_PATTERN = Pattern.compile("^[a-z0-9_-]{3,32}$");
     private static final String CONSOLE_SCOPES =
             "userbot:read,userbot:write,conversation:read,aiconfig:read,aiconfig:write";
 
     private final TenantRepository tenantRepository;
     private final TenantApiCredentialRepository credentialRepository;
+    private final TenantAccountRepository accountRepository;
+    private final TenantAuthService authService;
     private final ApiSecretHasher secretHasher;
-    private final RegistrationRateLimiter rateLimiter;
+    private final PublicAuthRateLimiter rateLimiter;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -54,8 +58,12 @@ public class TenantRegistrationService {
         }
         String tenantCode = resolveTenantCode(request == null ? null : request.tenantCode());
         String contactEmail = normalizeEmail(request == null ? null : request.contactEmail());
+        String username = resolveUsername(request == null ? null : request.username());
+        if (username != null) {
+            validatePassword(request == null ? null : request.password());
+        }
 
-        rateLimiter.check(clientIp, contactEmail);
+        rateLimiter.checkRegistration(clientIp, contactEmail);
 
         String tenantId = UUID.randomUUID().toString();
         Tenant tenant = new Tenant();
@@ -70,9 +78,11 @@ public class TenantRegistrationService {
         TenantContext previous = TenantContextHolder.getNullable();
         TenantContextHolder.set(new TenantContext(tenantId, "REST", null, "api:register", null,
                 Set.of("TENANT_ADMIN"), Set.of("*"), UUID.randomUUID().toString()));
+        String secret;
+        TenantApiCredential credential;
         try {
-            String secret = randomHex(32);
-            TenantApiCredential credential = new TenantApiCredential();
+            secret = randomHex(32);
+            credential = new TenantApiCredential();
             credential.setCredentialId(uniqueCredentialId());
             credential.setName("控制台 API Key");
             credential.setSecretHash(secretHasher.hash(secret));
@@ -80,9 +90,6 @@ public class TenantRegistrationService {
             credential.setStatus("ACTIVE");
             credentialRepository.save(credential);
             log.info("租户注册成功: tenantId={}, tenantCode={}, credentialId={}", tenantId, tenantCode, credential.getCredentialId());
-            return new RegisteredTenant(tenantId, tenantCode, tenantName, tenant.getStatus(),
-                    tenant.getCreatedAt(), credential.getCredentialId(),
-                    credential.getCredentialId() + "." + secret, CONSOLE_SCOPES);
         } finally {
             if (previous == null) {
                 TenantContextHolder.clear();
@@ -90,6 +97,16 @@ public class TenantRegistrationService {
                 TenantContextHolder.set(previous);
             }
         }
+        // 账号与会话在凭据之后创建；注册成功即返回会话 token，前端可一键进入控制台。
+        TenantAuthService.AccountIssue accountIssue = username == null
+                ? null
+                : authService.createAccountAndIssueSession(tenantId, username, request.password().trim());
+        return new RegisteredTenant(tenantId, tenantCode, tenantName, tenant.getStatus(),
+                tenant.getCreatedAt(), credential.getCredentialId(),
+                credential.getCredentialId() + "." + secret, CONSOLE_SCOPES,
+                accountIssue == null ? null : accountIssue.username(),
+                accountIssue == null ? null : accountIssue.sessionToken(),
+                accountIssue == null ? null : accountIssue.expiresAt());
     }
 
     private String normalizeName(String raw) {
@@ -137,6 +154,28 @@ public class TenantRegistrationService {
             throw new TenantRegistrationException("VALIDATION_ERROR", "联系邮箱格式不正确", HttpStatus.BAD_REQUEST);
         }
         return email;
+    }
+
+    private String resolveUsername(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String username = raw.trim().toLowerCase();
+        if (!USERNAME_PATTERN.matcher(username).matches()) {
+            throw new TenantRegistrationException("VALIDATION_ERROR",
+                    "用户名需为 3-32 位，仅支持小写字母、数字、下划线和连字符", HttpStatus.BAD_REQUEST);
+        }
+        if (accountRepository.existsByUsername(username)) {
+            throw new TenantRegistrationException("CONFLICT", "用户名已被注册：" + username, HttpStatus.CONFLICT);
+        }
+        return username;
+    }
+
+    private void validatePassword(String password) {
+        if (password == null || password.trim().length() < 8 || password.trim().length() > 128) {
+            throw new TenantRegistrationException("VALIDATION_ERROR",
+                    "密码长度需为 8-128 位", HttpStatus.BAD_REQUEST);
+        }
     }
 
     private String uniqueCredentialId() {

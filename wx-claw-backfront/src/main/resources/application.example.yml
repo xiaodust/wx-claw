@@ -119,6 +119,15 @@ wxclaw:
       max-per-email: 3
       window: PT1H
       cleanup-ms: 600000
+    # 控制台账号登录限流
+    login:
+      max-per-user-and-ip: 10
+      max-per-ip: 30
+    # 登录会话（DB 存 token 哈希，默认 7 天过期）
+    session:
+      ttl: PT168H
+      last-used-write-interval-seconds: 60
+      cleanup-ms: 3600000
     cors:
       # 管理端 3000 + 用户控制台 3001
       allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001,http://127.0.0.1:3001}
