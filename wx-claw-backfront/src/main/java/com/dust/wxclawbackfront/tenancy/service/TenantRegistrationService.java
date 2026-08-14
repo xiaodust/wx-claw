@@ -11,8 +11,8 @@ import com.dust.wxclawbackfront.tenancy.repository.TenantApiCredentialRepository
 import com.dust.wxclawbackfront.tenancy.repository.TenantRepository;
 import com.dust.wxclawbackfront.tenancy.security.ApiSecretHasher;
 import com.dust.wxclawbackfront.tenancy.security.PublicAuthRateLimiter;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,7 +32,6 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class TenantRegistrationService {
 
     private static final Pattern TENANT_CODE_PATTERN = Pattern.compile("^[a-z0-9][a-z0-9-]{0,31}$");
@@ -47,8 +46,27 @@ public class TenantRegistrationService {
     private final TenantAuthService authService;
     private final ApiSecretHasher secretHasher;
     private final PublicAuthRateLimiter rateLimiter;
-
+    private final InviteCodeService inviteCodeService;
     private final SecureRandom secureRandom = new SecureRandom();
+    private final boolean requireInvite;
+
+    public TenantRegistrationService(TenantRepository tenantRepository,
+                                     TenantApiCredentialRepository credentialRepository,
+                                     TenantAccountRepository accountRepository,
+                                     TenantAuthService authService,
+                                     ApiSecretHasher secretHasher,
+                                     PublicAuthRateLimiter rateLimiter,
+                                     InviteCodeService inviteCodeService,
+                                     @Value("${wxclaw.api.registration.require-invite:true}") boolean requireInvite) {
+        this.tenantRepository = tenantRepository;
+        this.credentialRepository = credentialRepository;
+        this.accountRepository = accountRepository;
+        this.authService = authService;
+        this.secretHasher = secretHasher;
+        this.rateLimiter = rateLimiter;
+        this.inviteCodeService = inviteCodeService;
+        this.requireInvite = requireInvite;
+    }
 
     @Transactional
     public RegisteredTenant register(RegisterTenantRequest request, String clientIp) {
@@ -61,6 +79,11 @@ public class TenantRegistrationService {
         String username = resolveUsername(request == null ? null : request.username());
         if (username != null) {
             validatePassword(request == null ? null : request.password());
+        }
+        String inviteCode = request == null ? null : request.inviteCode();
+        if (requireInvite && !inviteCodeService.consume(inviteCode)) {
+            throw new TenantRegistrationException("INVALID_INVITE",
+                    "邀请码无效、已过期或已用尽", HttpStatus.BAD_REQUEST);
         }
 
         rateLimiter.checkRegistration(clientIp, contactEmail);

@@ -12,6 +12,7 @@ function logout(){ auth.logout(); router.replace('/login') }
         <el-menu-item index="/overview">运行总览</el-menu-item>
         <el-menu-item index="/bots">Bot 状态</el-menu-item>
         <el-menu-item index="/conversations">对话与调用</el-menu-item>
+        <el-menu-item index="/invite-codes">注册邀请码</el-menu-item>
       </el-menu>
       <button class="logout" @click="logout">退出管理端</button>
     </el-aside>

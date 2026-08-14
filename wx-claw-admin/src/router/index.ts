@@ -6,6 +6,7 @@ import OverviewView from '../views/OverviewView.vue'
 import BotsView from '../views/BotsView.vue'
 import ConversationsView from '../views/ConversationsView.vue'
 import ConversationDetailView from '../views/ConversationDetailView.vue'
+import InviteCodesView from '../views/InviteCodesView.vue'
 
 const router = createRouter({ history:createWebHistory(), routes:[
   { path:'/login', component:LoginView },
@@ -15,6 +16,7 @@ const router = createRouter({ history:createWebHistory(), routes:[
     { path:'bots', component:BotsView },
     { path:'conversations', component:ConversationsView },
     { path:'conversations/:id', component:ConversationDetailView },
+    { path:'invite-codes', component:InviteCodesView },
   ]},
   { path:'/:pathMatch(.*)*', redirect:'/overview' },
 ]})

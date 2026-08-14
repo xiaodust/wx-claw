@@ -89,6 +89,7 @@ export interface RegisterTenantRequest {
   contactEmail?: string
   username: string
   password: string
+  inviteCode: string
 }
 
 export interface RegisterTenantResult {

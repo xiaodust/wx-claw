@@ -8,7 +8,7 @@ import type { RegisterTenantResult } from '../types/user'
 const router = useRouter()
 const authStore = useAuthStore()
 
-const form = reactive({ tenantName: '', tenantCode: '', contactEmail: '', username: '', password: '', confirmPassword: '' })
+const form = reactive({ tenantName: '', tenantCode: '', contactEmail: '', username: '', password: '', confirmPassword: '', inviteCode: '' })
 const fieldErrors = reactive<Record<string, string>>({})
 const submitting = ref(false)
 const serverError = ref('')
@@ -23,9 +23,10 @@ const canSubmit = computed(() =>
   form.tenantName.trim().length >= 2
   && form.username.trim().length >= 3
   && form.password.length >= 8
+  && form.inviteCode.trim().length >= 4
   && !Object.values(fieldErrors).some(Boolean))
 
-function validateField(key: 'tenantName' | 'tenantCode' | 'contactEmail' | 'username' | 'password' | 'confirmPassword') {
+function validateField(key: 'tenantName' | 'tenantCode' | 'contactEmail' | 'username' | 'password' | 'confirmPassword' | 'inviteCode') {
   fieldErrors[key] = ''
   if (key === 'tenantName') {
     const name = form.tenantName.trim()
@@ -54,6 +55,9 @@ function validateField(key: 'tenantName' | 'tenantCode' | 'contactEmail' | 'user
   if (key === 'confirmPassword' && form.confirmPassword && form.confirmPassword !== form.password) {
     fieldErrors.confirmPassword = '两次输入的密码不一致'
   }
+  if (key === 'inviteCode' && form.inviteCode.trim().length < 4) {
+    fieldErrors.inviteCode = '请输入注册邀请码'
+  }
 }
 
 async function submit() {
@@ -64,6 +68,7 @@ async function submit() {
   validateField('username')
   validateField('password')
   validateField('confirmPassword')
+  validateField('inviteCode')
   if (Object.values(fieldErrors).some(Boolean)) return
 
   submitting.value = true
@@ -75,6 +80,7 @@ async function submit() {
       contactEmail: form.contactEmail.trim() || undefined,
       username: form.username.trim().toLowerCase(),
       password: form.password,
+      inviteCode: form.inviteCode.trim().toUpperCase(),
     })
   } catch (e: unknown) {
     const status = (e as { response?: { status?: number } })?.response?.status
@@ -122,9 +128,23 @@ function enterConsole() {
       <div v-if="!result" class="reg-card">
         <p class="kicker"><span class="kicker-dot"></span> TENANT SIGNUP</p>
         <h1>注册租户</h1>
-        <p class="sub">注册成功后立即获得控制台 API Key，用于登录与全部 API 调用。</p>
+        <p class="sub">需要邀请码才能注册；注册成功后即可用账号密码登录控制台。</p>
 
         <form novalidate @submit.prevent="submit">
+          <label class="field">
+            <span class="field-label">注册邀请码 <i>*</i></span>
+            <input
+              v-model="form.inviteCode"
+              type="text"
+              maxlength="32"
+              autocomplete="off"
+              placeholder="向平台申请获取邀请码"
+              :class="{ invalid: fieldErrors.inviteCode }"
+              @blur="validateField('inviteCode')"
+            />
+            <span v-if="fieldErrors.inviteCode" class="field-error">{{ fieldErrors.inviteCode }}</span>
+          </label>
+
           <label class="field">
             <span class="field-label">租户名称 <i>*</i></span>
             <input

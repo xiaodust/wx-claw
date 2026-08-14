@@ -24,6 +24,15 @@ public final class AdminDtos {
                            Instant generatedAt) {
     }
 
+    public record InviteCode(Long id, String code, String status, Integer quota, int usedCount,
+                             LocalDateTime expiresAt, String remark, String createdBy,
+                             LocalDateTime createdAt) {
+    }
+
+    public record GenerateInviteCodesRequest(Integer count, Integer quota,
+                                             LocalDateTime expiresAt, String remark) {
+    }
+
     public record BotStatus(String tenantId, String botId, String displayName, String channel,
                             String configuredStatus, String runtimeStatus, Instant connectedAt,
                             Instant statusChangedAt, Instant lastPollAt, Instant lastMessageAt,

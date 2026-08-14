@@ -2,8 +2,10 @@ package com.dust.wxclawbackfront.tenancy;
 
 import com.dust.wxclawbackfront.tenancy.entity.Tenant;
 import com.dust.wxclawbackfront.tenancy.entity.TenantApiCredential;
+import com.dust.wxclawbackfront.tenancy.entity.TenantInviteCode;
 import com.dust.wxclawbackfront.tenancy.repository.TenantApiCredentialRepository;
 import com.dust.wxclawbackfront.tenancy.repository.TenantBotRepository;
+import com.dust.wxclawbackfront.tenancy.repository.TenantInviteCodeRepository;
 import com.dust.wxclawbackfront.tenancy.repository.TenantRepository;
 import com.dust.wxclawbackfront.tenancy.entity.TenantBot;
 import com.dust.wxclawbackfront.tenancy.security.ApiSecretHasher;
@@ -31,6 +33,7 @@ public class TenantBootstrapInitializer implements ApplicationRunner {
     private final TenantRepository tenantRepository;
     private final TenantApiCredentialRepository credentialRepository;
     private final TenantBotRepository tenantBotRepository;
+    private final TenantInviteCodeRepository inviteCodeRepository;
     private final ApiSecretHasher secretHasher;
 
     @Value("${wxclaw.tenancy.default-tenant-id:default}")
@@ -41,6 +44,9 @@ public class TenantBootstrapInitializer implements ApplicationRunner {
 
     @Value("${wxclaw.api.bootstrap-key:}")
     private String bootstrapKey;
+
+    @Value("${wxclaw.api.registration.invite-codes:}")
+    private List<String> bootstrapInviteCodes;
 
     @Value("${wxclaw.ilink.bot-ids:${wxclaw.ilink.default-bot-id:default}}")
     private List<String> botIds;
@@ -79,6 +85,21 @@ public class TenantBootstrapInitializer implements ApplicationRunner {
                 credential.setSecretHash(secretHasher.hash(bootstrapKey));
                 credential.setScopes("*");
                 credentialRepository.save(credential);
+            }
+            // 配置文件里的邀请码在首次启动时落库（幂等），用于初期发号。
+            if (bootstrapInviteCodes != null) {
+                for (String raw : bootstrapInviteCodes) {
+                    String code = raw == null ? "" : raw.trim().toUpperCase();
+                    if (code.isEmpty() || inviteCodeRepository.findByCode(code).isPresent()) {
+                        continue;
+                    }
+                    TenantInviteCode invite = new TenantInviteCode();
+                    invite.setCode(code);
+                    invite.setStatus("ACTIVE");
+                    invite.setRemark("bootstrap");
+                    invite.setCreatedBy("bootstrap");
+                    inviteCodeRepository.save(invite);
+                }
             }
         } finally {
             // ApplicationRunner 运行在线程池外也必须清理，避免污染后续启动逻辑。

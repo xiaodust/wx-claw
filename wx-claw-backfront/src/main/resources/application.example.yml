@@ -115,6 +115,10 @@ wxclaw:
     authentication-cache-cleanup-ms: 600000
     # 公开注册接口限流（按 IP / 邮箱的固定窗口）
     registration:
+      # 注册是否需要邀请码（true 时没有邀请码无法注册）
+      require-invite: ${REGISTRATION_REQUIRE_INVITE:true}
+      # 启动时预置的邀请码（逗号分隔，仅首次落库）
+      invite-codes: ${REGISTRATION_INVITE_CODES:}
       max-per-ip: 5
       max-per-email: 3
       window: PT1H
