@@ -200,6 +200,7 @@ onMounted(() => { refresh() })
 
 <template>
   <div>
+    <p class="page-kicker">KEY &amp; MODEL CONFIG</p>
     <h1 class="page-title">API Key 与模型设置</h1>
     <p class="page-subtitle">
       按能力配置你自己的 API Key 与模型；模型列表与服务商对应（选择服务商后，只显示该服务商的模型）。
@@ -209,14 +210,15 @@ onMounted(() => { refresh() })
 
     <div v-loading="loading" class="cap-list">
       <div v-for="cap in capabilities" :key="cap.key" class="panel cap-card">
+        <span class="cap-index mono">{{ cap.key.toUpperCase() }}</span>
         <div class="cap-head">
           <div>
             <div class="cap-title">{{ cap.title }}</div>
             <div class="muted cap-desc">{{ cap.desc }}</div>
           </div>
-          <el-tag :type="entry(cap.key)?.configured ? 'success' : 'info'">
-            {{ entry(cap.key)?.configured ? '已配置用户 Key' : '使用后端默认' }}
-          </el-tag>
+          <span class="config-chip" :class="entry(cap.key)?.configured ? 'on' : 'off'">
+            <span class="chip-dot"></span>{{ entry(cap.key)?.configured ? '已配置用户 Key' : '使用后端默认' }}
+          </span>
         </div>
 
         <div v-if="!cap.keyHidden" class="cap-row">
@@ -267,14 +269,46 @@ onMounted(() => { refresh() })
 
 <style scoped>
 .cap-list { display: flex; flex-direction: column; gap: 14px; }
-.cap-card { display: flex; flex-direction: column; gap: 12px; }
+.cap-card { display: flex; flex-direction: column; gap: 12px; position: relative; }
+.cap-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 20px; right: 20px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), transparent 75%);
+  border-radius: 2px;
+}
+.cap-index {
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: var(--accent-2);
+  margin-bottom: -4px;
+  font-weight: 700;
+}
 .cap-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .cap-title { font-weight: 700; font-size: 15px; }
 .cap-desc { font-size: 12px; margin-top: 2px; }
 .cap-masked { font-size: 13px; }
 .cap-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.model-row { padding-top: 10px; border-top: 1px dashed #e7ecf2; }
+.model-row { padding-top: 10px; border-top: 1px dashed var(--line); }
 .cap-actions { display: flex; gap: 10px; align-items: center; flex: 1; }
 .cap-actions .el-input { flex: 1; min-width: 220px; max-width: 420px; }
 .free-tag { margin-left: 8px; flex-shrink: 0; }
+.config-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  flex-shrink: 0;
+}
+.config-chip .chip-dot { width: 6px; height: 6px; border-radius: 50%; }
+.config-chip.on { color: var(--accent-2); border-color: rgba(45, 225, 194, 0.35); background: rgba(45, 225, 194, 0.08); }
+.config-chip.on .chip-dot { background: var(--accent-2); box-shadow: 0 0 8px var(--accent-2); }
+.config-chip.off { color: var(--muted); border-color: var(--line); background: rgba(255, 255, 255, 0.03); }
+.config-chip.off .chip-dot { background: #8a94a6; }
+.option-name { font-family: "JetBrains Mono", Consolas, monospace; }
 </style>

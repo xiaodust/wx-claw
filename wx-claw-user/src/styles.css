@@ -1,15 +1,172 @@
 :root {
   font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
-  color: #182230;
-  background: #f3f6fa;
+  color: #f2f4f8;
+  background: #0b0d10;
   font-synthesis: none;
+
+  /* 工业暗色主题 token */
+  --bg: #0b0d10;
+  --bg-soft: #0e1116;
+  --panel: #141821;
+  --panel-2: #171c26;
+  --line: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.18);
+  --fg: #f2f4f8;
+  --muted: #9aa3b2;
+  --accent: #ffb400;
+  --accent-2: #2de1c2;
+  --danger: #ff6b6b;
+  --radius: 14px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Element Plus 暗色变量 */
+  --el-color-primary: #ffb400;
+  --el-color-primary-dark-2: #d69a00;
+  --el-color-primary-light-3: rgba(255, 180, 0, 0.78);
+  --el-color-primary-light-5: rgba(255, 180, 0, 0.6);
+  --el-color-primary-light-7: rgba(255, 180, 0, 0.42);
+  --el-color-primary-light-8: rgba(255, 180, 0, 0.3);
+  --el-color-primary-light-9: rgba(255, 180, 0, 0.16);
+  --el-color-success: #2de1c2;
+  --el-color-warning: #ffb400;
+  --el-color-danger: #ff6b6b;
+  --el-color-info: #8a94a6;
+  --el-bg-color: #141821;
+  --el-bg-color-overlay: #181d27;
+  --el-bg-color-page: #0b0d10;
+  --el-fill-color: #1a1f29;
+  --el-fill-color-light: #171c25;
+  --el-fill-color-lighter: #141821;
+  --el-fill-color-extra-light: #12161e;
+  --el-fill-color-dark: #222a37;
+  --el-fill-color-darker: #2a3342;
+  --el-fill-color-blank: #141821;
+  --el-text-color-primary: #f2f4f8;
+  --el-text-color-regular: #cdd3dc;
+  --el-text-color-secondary: #9aa3b2;
+  --el-text-color-placeholder: #5b6472;
+  --el-text-color-disabled: #6b7482;
+  --el-border-color: #262c38;
+  --el-border-color-light: #222833;
+  --el-border-color-lighter: #1e2430;
+  --el-border-color-extra-light: #1a1f29;
+  --el-border-color-hover: #3a4252;
+  --el-mask-color: rgba(11, 13, 16, 0.72);
+  --el-border-radius-base: 10px;
+  --el-box-shadow-light: 0 12px 40px rgba(0, 0, 0, 0.5);
+  --el-box-shadow: 0 16px 56px rgba(0, 0, 0, 0.55);
+
+  /* el-table 暗色 */
+  --el-table-bg-color: transparent;
+  --el-table-tr-bg-color: transparent;
+  --el-table-header-bg-color: rgba(255, 255, 255, 0.035);
+  --el-table-header-text-color: #cdd3dc;
+  --el-table-text-color: #e8ebf0;
+  --el-table-border-color: rgba(255, 255, 255, 0.09);
+  --el-table-row-hover-bg-color: rgba(255, 180, 0, 0.06);
+  --el-table-expanded-cell-bg-color: transparent;
+
+  /* el-dialog / el-message-box / el-message / el-popper */
+  --el-dialog-bg-color: #171c26;
+  --el-message-bg-color: #181d27;
+  --el-messagebox-bg-color: #171c26;
+  --el-popper-bg-color: #181d27;
+  --el-menu-bg-color: transparent;
+  --el-menu-text-color: #9aa3b2;
+  --el-menu-active-color: #ffb400;
+  --el-menu-hover-bg-color: rgba(255, 255, 255, 0.05);
+  --el-menu-item-height: 52px;
 }
+
 * { box-sizing: border-box; }
+
 html { scroll-behavior: smooth; }
-body { margin: 0; min-width: 0; }
-.page-title { margin: 0; font-size: 24px; font-weight: 700; }
-.page-subtitle { margin: 6px 0 22px; color: #667085; font-size: 14px; }
-.panel { background: #fff; border: 1px solid #e7ecf2; border-radius: 14px; padding: 20px; box-shadow: 0 4px 18px rgba(16,24,40,.04); }
-.toolbar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
-.muted { color: #8492a6; }
+
+body {
+  margin: 0;
+  min-width: 0;
+  background:
+    radial-gradient(ellipse 70% 42% at 50% -8%, rgba(255, 180, 0, 0.08), transparent 70%),
+    linear-gradient(rgba(255, 255, 255, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.028) 1px, transparent 1px),
+    #0b0d10;
+  background-size: auto, 40px 40px, 40px 40px, auto;
+  color: var(--fg);
+}
+
+::selection { background: rgba(255, 180, 0, 0.35); }
+
+a { color: var(--accent); }
+
+.page-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+.page-subtitle { margin: 6px 0 22px; color: var(--muted); font-size: 13px; line-height: 1.7; }
+
+.panel {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 34%), var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.35);
+}
+
+.toolbar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; align-items: center; }
+.muted { color: var(--muted); }
 .mono { font-family: "JetBrains Mono", Consolas, monospace; }
+
+.page-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--accent-2);
+}
+.page-kicker::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+}
+
+/* Element Plus 组件细节修正 */
+.el-button {
+  font-weight: 600;
+}
+.el-button--primary {
+  --el-button-text-color: #14161a;
+  --el-button-hover-text-color: #14161a;
+  --el-button-active-text-color: #14161a;
+}
+.el-button--danger {
+  --el-button-hover-bg-color: rgba(255, 107, 107, 0.16);
+  --el-button-hover-border-color: rgba(255, 107, 107, 0.5);
+}
+.el-dialog { border: 1px solid var(--line); border-radius: 16px; }
+.el-dialog__title { font-weight: 800; color: var(--fg); }
+.el-overlay { backdrop-filter: blur(3px); }
+.el-tag { border-radius: 6px; font-weight: 600; }
+.el-table { --el-table-header-font-weight: 700; }
+.el-table th.el-table__cell { letter-spacing: 0.4px; font-size: 12px; text-transform: uppercase; }
+.el-descriptions__label { color: var(--muted) !important; }
+.el-descriptions__content { color: var(--fg); }
+.el-input__wrapper, .el-select__wrapper {
+  background: rgba(11, 13, 16, 0.72);
+  box-shadow: 0 0 0 1px var(--line) inset;
+}
+.el-input__wrapper.is-focus, .el-select__wrapper.is-focused {
+  box-shadow: 0 0 0 1px var(--accent) inset, 0 0 0 3px rgba(255, 180, 0, 0.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

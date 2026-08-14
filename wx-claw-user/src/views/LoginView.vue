@@ -24,9 +24,15 @@ function login() {
 
 <template>
   <div class="login-wrap">
+    <div class="bg-grid" aria-hidden="true"></div>
     <div class="panel login-card">
-      <h1 class="page-title">WX-Claw 用户控制台</h1>
-      <p class="page-subtitle">创建并管理你自己的微信 Bot，扫码连接后查看聊天记录</p>
+      <router-link class="brand" to="/">
+        <span class="brand-mark">WX</span>
+        <span class="brand-name">CLAW</span>
+      </router-link>
+      <p class="page-kicker">CONSOLE SIGN IN</p>
+      <h1 class="page-title">登录控制台</h1>
+      <p class="page-subtitle">输入租户 API Key，管理 Bot、会话与 AI 能力配置</p>
       <el-input
         v-model="apiKey"
         type="password"
@@ -48,12 +54,58 @@ function login() {
 </template>
 
 <style scoped>
-.login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-.login-card { width: 420px; }
-.login-btn { width: 100%; margin-top: 16px; }
+.login-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+}
+.bg-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(ellipse 70% 55% at 50% 0%, #000 30%, transparent 75%);
+  pointer-events: none;
+}
+.login-card {
+  width: 420px;
+  position: relative;
+  padding: 34px 32px;
+  border-radius: 16px;
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  text-decoration: none;
+  color: var(--fg);
+  margin-bottom: 22px;
+}
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--accent);
+  color: #14161a;
+  font-weight: 800;
+  font-size: 12px;
+  border-radius: 8px;
+}
+.brand-name { font-weight: 800; letter-spacing: 2px; font-size: 14px; }
+.login-card .page-title { font-size: 24px; }
+.login-card .page-subtitle { margin-bottom: 20px; }
+.login-btn { width: 100%; margin-top: 16px; font-weight: 800; }
 .login-hint { font-size: 12px; margin-top: 14px; line-height: 1.6; }
 .login-links { margin-top: 16px; display: flex; justify-content: center; gap: 8px; font-size: 13px; }
-.login-links a { color: #2563eb; text-decoration: none; }
+.login-links a { color: var(--accent); text-decoration: none; }
 .login-links a:hover { text-decoration: underline; }
-.divider { color: #c1c9d2; }
+.divider { color: var(--muted); }
 </style>
