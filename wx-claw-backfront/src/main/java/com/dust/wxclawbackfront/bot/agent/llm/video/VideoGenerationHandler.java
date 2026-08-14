@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.bot.agent.llm.video;
 
+import com.dust.wxclawbackfront.bot.agent.llm.TenantAiKeyProvider;
 import com.dust.wxclawbackfront.observability.llm.service.LlmInvocationRecorder;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -38,13 +39,12 @@ public class VideoGenerationHandler {
 
     // 火山方舟配置
     private final String arkBaseUrl;
-    private final String arkApiKey;
     private final String arkModel;
 
     // 阿里云 DashScope 配置
-    private final String dashscopeApiKey;
     private final String dashscopeT2vModel;
     private final String dashscopeI2vModel;
+    private final TenantAiKeyProvider keyProvider;
     private final LlmInvocationRecorder invocationRecorder;
 
     public VideoGenerationHandler(
@@ -58,12 +58,11 @@ public class VideoGenerationHandler {
             @Value("${wxclaw.ai.video-gen.poll-timeout-ms:300000}") long pollTimeoutMs,
             // 火山方舟
             @Value("${wxclaw.ai.video-gen.ark.base-url:https://ark.cn-beijing.volces.com/api/v3}") String arkBaseUrl,
-            @Value("${wxclaw.ai.video-gen.ark.api-key:${spring.ai.openai.api-key:}}") String arkApiKey,
             @Value("${wxclaw.ai.video-gen.ark.model:doubao-seedance-2-0-mini-260615}") String arkModel,
             // 阿里云 DashScope
-            @Value("${wxclaw.ai.video-gen.dashscope.api-key:}") String dashscopeApiKey,
             @Value("${wxclaw.ai.video-gen.dashscope.t2v-model:wan2.7-t2v-2026-06-12}") String dashscopeT2vModel,
-            @Value("${wxclaw.ai.video-gen.dashscope.i2v-model:wan2.7-i2v-2026-04-25}") String dashscopeI2vModel) {
+            @Value("${wxclaw.ai.video-gen.dashscope.i2v-model:wan2.7-i2v-2026-04-25}") String dashscopeI2vModel,
+            TenantAiKeyProvider keyProvider) {
         this.objectMapper = objectMapper;
         this.invocationRecorder = invocationRecorder;
         this.provider = provider;
@@ -73,11 +72,10 @@ public class VideoGenerationHandler {
         this.pollIntervalMs = pollIntervalMs;
         this.pollTimeoutMs = pollTimeoutMs;
         this.arkBaseUrl = arkBaseUrl;
-        this.arkApiKey = arkApiKey;
         this.arkModel = arkModel;
-        this.dashscopeApiKey = dashscopeApiKey;
         this.dashscopeT2vModel = dashscopeT2vModel;
         this.dashscopeI2vModel = dashscopeI2vModel;
+        this.keyProvider = keyProvider;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
@@ -197,10 +195,12 @@ public class VideoGenerationHandler {
 
     public boolean isEnabled() {
         if ("dashscope".equals(provider)) {
-            return dashscopeApiKey != null && !dashscopeApiKey.isBlank();
+            String key = keyProvider.videoDashscopeKey();
+            return key != null && !key.isBlank();
         }
         // 默认 ark
-        return arkApiKey != null && !arkApiKey.isBlank();
+        String key = keyProvider.videoKey();
+        return key != null && !key.isBlank();
     }
 
     // ==================== 任务创建（按 provider 分发） ====================
@@ -223,6 +223,7 @@ public class VideoGenerationHandler {
 
     private String createArkTask(String prompt, String imageUrl, String ratioVal, int durationVal, String resolutionVal) {
         try {
+            String key = keyProvider.videoKey();
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("model", arkModel);
 
@@ -254,7 +255,7 @@ public class VideoGenerationHandler {
                     .uri(URI.create(arkBaseUrl + "/contents/generations/tasks"))
                     .timeout(Duration.ofSeconds(30))
                     .header("Content-Type", "application/json")
-                    .header("Authorization", "Bearer " + arkApiKey)
+                    .header("Authorization", "Bearer " + key)
                     .POST(HttpRequest.BodyPublishers.ofString(body))
                     .build();
 
@@ -284,6 +285,7 @@ public class VideoGenerationHandler {
 
     private String createDashScopeTask(String prompt, String imageUrl, String ratioVal, int durationVal, String resolutionVal) {
         try {
+            String key = keyProvider.videoDashscopeKey();
             // 选择模型：图生视频用 i2v，文生视频用 t2v
             boolean isImageToVideo = imageUrl != null && !imageUrl.isBlank();
             String model = isImageToVideo ? dashscopeI2vModel : dashscopeT2vModel;
@@ -316,7 +318,7 @@ public class VideoGenerationHandler {
                     .uri(URI.create("https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis"))
                     .timeout(Duration.ofSeconds(30))
                     .header("Content-Type", "application/json")
-                    .header("Authorization", "Bearer " + dashscopeApiKey)
+                    .header("Authorization", "Bearer " + key)
                     .header("X-DashScope-Async", "enable")
                     .POST(HttpRequest.BodyPublishers.ofString(body))
                     .build();
@@ -355,6 +357,7 @@ public class VideoGenerationHandler {
 
     private VideoGenerationResult pollArkTask(String taskId) {
         String queryUrl = arkBaseUrl + "/contents/generations/tasks/" + taskId;
+        String key = keyProvider.videoKey();
         long deadline = System.currentTimeMillis() + pollTimeoutMs;
 
         while (System.currentTimeMillis() < deadline) {
@@ -364,7 +367,7 @@ public class VideoGenerationHandler {
                 HttpRequest request = HttpRequest.newBuilder()
                         .uri(URI.create(queryUrl))
                         .timeout(Duration.ofSeconds(15))
-                        .header("Authorization", "Bearer " + arkApiKey)
+                        .header("Authorization", "Bearer " + key)
                         .GET()
                         .build();
 
@@ -402,6 +405,7 @@ public class VideoGenerationHandler {
 
     private VideoGenerationResult pollDashScopeTask(String taskId) {
         String queryUrl = "https://dashscope.aliyuncs.com/api/v1/tasks/" + taskId;
+        String key = keyProvider.videoDashscopeKey();
         long deadline = System.currentTimeMillis() + pollTimeoutMs;
 
         while (System.currentTimeMillis() < deadline) {
@@ -411,7 +415,7 @@ public class VideoGenerationHandler {
                 HttpRequest request = HttpRequest.newBuilder()
                         .uri(URI.create(queryUrl))
                         .timeout(Duration.ofSeconds(15))
-                        .header("Authorization", "Bearer " + dashscopeApiKey)
+                        .header("Authorization", "Bearer " + key)
                         .GET()
                         .build();
 

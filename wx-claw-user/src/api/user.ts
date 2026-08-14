@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { AiConfig, Bot, Conversation, Message, QrInfo } from '../types/user'
+import type { AiConfigEntry, AiConfigs, Bot, Conversation, Message, QrInfo } from '../types/user'
 
 export function listBots(): Promise<Bot[]> {
   return api.get('/bots').then(r => r.data)
@@ -29,14 +29,14 @@ export function listMessages(botId: string, conversationId: string): Promise<Mes
   return api.get(`/bots/${botId}/conversations/${conversationId}/messages`).then(r => r.data)
 }
 
-export function getAiConfig(): Promise<AiConfig> {
+export function getAiConfigs(): Promise<AiConfigs> {
   return api.get('/ai-config').then(r => r.data)
 }
 
-export function saveAiConfig(apiKey: string): Promise<AiConfig> {
-  return api.put('/ai-config', { apiKey }).then(r => r.data)
+export function saveAiConfig(capability: string, apiKey: string): Promise<AiConfigEntry> {
+  return api.put(`/ai-config/${capability}`, { apiKey }).then(r => r.data)
 }
 
-export function clearAiConfig(): Promise<void> {
-  return api.delete('/ai-config').then(r => r.data)
+export function clearAiConfig(capability: string): Promise<void> {
+  return api.delete(`/ai-config/${capability}`).then(r => r.data)
 }

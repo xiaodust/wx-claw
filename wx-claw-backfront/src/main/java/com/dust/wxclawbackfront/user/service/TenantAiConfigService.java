@@ -6,11 +6,13 @@ import com.dust.wxclawbackfront.tenancy.entity.TenantAiConfig;
 import com.dust.wxclawbackfront.tenancy.repository.TenantAiConfigRepository;
 import com.dust.wxclawbackfront.user.api.dto.UserDtos;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
 
 /**
  * 用户自己的 LLM API Key 配置：保存/查询（脱敏）/清除。
@@ -25,40 +27,79 @@ public class TenantAiConfigService {
     private final TenantAiConfigRepository configRepository;
     private final TenantChatClientFactory chatClientFactory;
 
-    @Value("${spring.ai.openai.base-url:https://ark.cn-beijing.volces.com/api/v3}")
-    private String baseUrl;
+    private static final Map<String, Capability> CAPABILITIES = Map.of(
+            "chat", new Capability("文本对话/理解（火山方舟 OpenAI 兼容）",
+                    TenantAiConfig::getApiKey, TenantAiConfig::setApiKey),
+            "image", new Capability("图片生成（SiliconFlow）",
+                    TenantAiConfig::getImageApiKey, TenantAiConfig::setImageApiKey),
+            "video", new Capability("视频生成（火山方舟 Seedance）",
+                    TenantAiConfig::getVideoApiKey, TenantAiConfig::setVideoApiKey),
+            "videoDashscope", new Capability("视频生成（阿里云通义万相 DashScope）",
+                    TenantAiConfig::getVideoDashscopeApiKey, TenantAiConfig::setVideoDashscopeApiKey),
+            "tts", new Capability("语音合成（火山引擎 TTS）",
+                    TenantAiConfig::getTtsApiKey, TenantAiConfig::setTtsApiKey),
+            "search", new Capability("联网搜索（博查）",
+                    TenantAiConfig::getSearchApiKey, TenantAiConfig::setSearchApiKey));
 
-    public UserDtos.AiConfig current() {
-        String tenantId = tenantId();
-        Optional<TenantAiConfig> config = configRepository.findById(tenantId);
-        String apiKey = config.map(TenantAiConfig::getApiKey).orElse(null);
-        boolean configured = apiKey != null && !apiKey.isBlank();
-        return new UserDtos.AiConfig(
-                configured,
-                configured ? mask(apiKey) : null,
-                baseUrl,
-                config.map(TenantAiConfig::getUpdatedAt).orElse(null));
+    public UserDtos.AiConfigs current() {
+        Optional<TenantAiConfig> config = configRepository.findById(tenantId());
+        return new UserDtos.AiConfigs(
+                entry(config, "chat"),
+                entry(config, "image"),
+                entry(config, "video"),
+                entry(config, "videoDashscope"),
+                entry(config, "tts"),
+                entry(config, "search"));
     }
 
     @Transactional
-    public UserDtos.AiConfig save(String apiKey) {
+    public UserDtos.AiConfigEntry save(String capability, String apiKey) {
         if (apiKey == null || apiKey.isBlank()) {
             throw new IllegalArgumentException("API Key 不能为空");
         }
+        Capability cap = requireCapability(capability);
         String tenantId = tenantId();
         TenantAiConfig config = configRepository.findById(tenantId).orElseGet(TenantAiConfig::new);
         config.setTenantId(tenantId);
-        config.setApiKey(apiKey.trim());
+        cap.setter().accept(config, apiKey.trim());
         configRepository.save(config);
-        chatClientFactory.evict(tenantId);
-        return current();
+        if ("chat".equals(capability)) {
+            chatClientFactory.evict(tenantId);
+        }
+        return entry(Optional.of(config), capability);
     }
 
     @Transactional
-    public void clear() {
+    public void clear(String capability) {
+        Capability cap = requireCapability(capability);
         String tenantId = tenantId();
-        configRepository.deleteById(tenantId);
-        chatClientFactory.evict(tenantId);
+        Optional<TenantAiConfig> config = configRepository.findById(tenantId);
+        if (config.isEmpty()) {
+            return;
+        }
+        cap.setter().accept(config.get(), null);
+        configRepository.save(config.get());
+        if ("chat".equals(capability)) {
+            chatClientFactory.evict(tenantId);
+        }
+    }
+
+    private UserDtos.AiConfigEntry entry(Optional<TenantAiConfig> config, String capability) {
+        Capability cap = CAPABILITIES.get(capability);
+        String apiKey = config.map(cap.getter()).orElse(null);
+        boolean configured = apiKey != null && !apiKey.isBlank();
+        return new UserDtos.AiConfigEntry(
+                configured,
+                configured ? mask(apiKey) : null,
+                cap.provider());
+    }
+
+    private Capability requireCapability(String capability) {
+        Capability cap = CAPABILITIES.get(capability);
+        if (cap == null) {
+            throw new IllegalArgumentException("未知能力: " + capability);
+        }
+        return cap;
     }
 
     private String tenantId() {
@@ -74,5 +115,10 @@ public class TenantAiConfigService {
             return "***";
         }
         return trimmed.substring(0, 4) + "****" + trimmed.substring(trimmed.length() - 4);
+    }
+
+    private record Capability(String provider,
+                              Function<TenantAiConfig, String> getter,
+                              BiConsumer<TenantAiConfig, String> setter) {
     }
 }

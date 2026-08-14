@@ -1,8 +1,7 @@
 package com.dust.wxclawbackfront.bot.agent.llm.chat;
 
+import com.dust.wxclawbackfront.bot.agent.llm.TenantAiKeyProvider;
 import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
-import com.dust.wxclawbackfront.tenancy.entity.TenantAiConfig;
-import com.dust.wxclawbackfront.tenancy.repository.TenantAiConfigRepository;
 import com.openai.client.OpenAIClient;
 import io.micrometer.observation.ObservationRegistry;
 import lombok.extern.slf4j.Slf4j;
@@ -15,7 +14,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -30,7 +28,7 @@ import java.util.concurrent.ConcurrentMap;
 public class TenantChatClientFactory {
 
     private final ChatClient defaultClient;
-    private final TenantAiConfigRepository configRepository;
+    private final TenantAiKeyProvider keyProvider;
     private final ConcurrentMap<String, ChatClient> tenantClients = new ConcurrentHashMap<>();
 
     private final String baseUrl;
@@ -39,13 +37,13 @@ public class TenantChatClientFactory {
     private final int maxRetries;
 
     public TenantChatClientFactory(ChatClient.Builder chatClientBuilder,
-                                   TenantAiConfigRepository configRepository,
+                                   TenantAiKeyProvider keyProvider,
                                    @Value("${spring.ai.openai.base-url:https://ark.cn-beijing.volces.com/api/v3}") String baseUrl,
                                    @Value("${spring.ai.openai.chat.model:}") String model,
                                    @Value("${wxclaw.ai.chat.timeout:PT25S}") Duration timeout,
                                    @Value("${spring.ai.openai.max-retries:2}") int maxRetries) {
         this.defaultClient = chatClientBuilder.build();
-        this.configRepository = configRepository;
+        this.keyProvider = keyProvider;
         this.baseUrl = baseUrl;
         this.model = model;
         this.timeout = timeout == null ? Duration.ofSeconds(25) : timeout;
@@ -63,12 +61,8 @@ public class TenantChatClientFactory {
         if (tenantId == null || tenantId.isBlank()) {
             return defaultClient;
         }
-        Optional<TenantAiConfig> config = configRepository.findById(tenantId);
-        String apiKey = config.map(TenantAiConfig::getApiKey)
-                .map(String::trim)
-                .filter(key -> !key.isEmpty())
-                .orElse(null);
-        if (apiKey == null) {
+        String apiKey = keyProvider.chatKeyFor(tenantId);
+        if (apiKey == null || apiKey.isBlank()) {
             return defaultClient;
         }
         return tenantClients.computeIfAbsent(tenantId, id -> {

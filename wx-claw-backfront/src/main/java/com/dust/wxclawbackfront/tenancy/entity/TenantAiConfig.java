@@ -28,6 +28,26 @@ public class TenantAiConfig {
     @Column(name = "api_key", columnDefinition = "TEXT")
     private String apiKey;
 
+    /** 图片生成（SiliconFlow） */
+    @Column(name = "image_api_key", columnDefinition = "TEXT")
+    private String imageApiKey;
+
+    /** 视频生成（火山方舟 Seedance） */
+    @Column(name = "video_api_key", columnDefinition = "TEXT")
+    private String videoApiKey;
+
+    /** 视频生成（阿里云通义万相 DashScope） */
+    @Column(name = "video_dashscope_api_key", columnDefinition = "TEXT")
+    private String videoDashscopeApiKey;
+
+    /** 语音合成（火山引擎 TTS） */
+    @Column(name = "tts_api_key", columnDefinition = "TEXT")
+    private String ttsApiKey;
+
+    /** 联网搜索（博查） */
+    @Column(name = "search_api_key", columnDefinition = "TEXT")
+    private String searchApiKey;
+
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 

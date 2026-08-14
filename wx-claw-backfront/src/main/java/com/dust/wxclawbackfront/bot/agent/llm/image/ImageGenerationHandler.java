@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.bot.agent.llm.image;
 
+import com.dust.wxclawbackfront.bot.agent.llm.TenantAiKeyProvider;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.TextSanitizer;
 import com.dust.wxclawbackfront.observability.llm.service.LlmInvocationRecorder;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,7 +23,7 @@ public class ImageGenerationHandler {
 
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
-    private final String apiKey;
+    private final TenantAiKeyProvider keyProvider;
     private final String url;
     private final Duration timeout;
     private final String generationModel;
@@ -34,7 +35,7 @@ public class ImageGenerationHandler {
 
     public ImageGenerationHandler(ObjectMapper objectMapper,
                                   LlmInvocationRecorder invocationRecorder,
-                                  @Value("${wxclaw.ai.image.generate.api-key:${spring.ai.openai.api-key:}}") String apiKey,
+                                  TenantAiKeyProvider keyProvider,
                                   @Value("${wxclaw.ai.image.generate.url:https://api.siliconflow.cn/v1/images/generations}") String url,
                                   @Value("${wxclaw.ai.image.generate.timeout:PT35S}") Duration timeout,
                                   @Value("${wxclaw.ai.image.generate.model:Kwai-Kolors/Kolors}") String generationModel,
@@ -44,10 +45,10 @@ public class ImageGenerationHandler {
                                   @Value("${wxclaw.ai.image.generate.reply-text:已根据你的描述生成了一张图片，请查收。}") String replyText) {
         this.objectMapper = objectMapper;
         this.invocationRecorder = invocationRecorder;
+        this.keyProvider = keyProvider;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
-        this.apiKey = apiKey;
         this.url = url;
         this.timeout = timeout == null ? Duration.ofSeconds(35) : timeout;
         this.generationModel = generationModel;
@@ -71,7 +72,7 @@ public class ImageGenerationHandler {
         if (actualUrl == null || actualUrl.isBlank()) {
             actualUrl = "https://api.siliconflow.cn/v1/images/generations";
         }
-        String key = apiKey == null ? null : apiKey.trim();
+        String key = keyProvider.imageKey() == null ? null : keyProvider.imageKey().trim();
         if (key == null || key.isBlank()) {
             return new ImageGenerationResult(generationModel, null, null, null, null, null, null, null, "未配置生图 API Key");
         }

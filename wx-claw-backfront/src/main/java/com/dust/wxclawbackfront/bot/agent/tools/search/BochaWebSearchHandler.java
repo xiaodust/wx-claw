@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.bot.agent.tools.search;
 
+import com.dust.wxclawbackfront.bot.agent.llm.TenantAiKeyProvider;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.TextSanitizer;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,7 +21,7 @@ public class BochaWebSearchHandler {
 
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
-    private final String apiKey;
+    private final TenantAiKeyProvider keyProvider;
     private final String url;
     private final Duration timeout;
     private final int defaultCount;
@@ -28,7 +29,7 @@ public class BochaWebSearchHandler {
     private final String defaultFreshness;
 
     public BochaWebSearchHandler(ObjectMapper objectMapper,
-                                 @Value("${wxclaw.ai.web-search.bocha.api-key:}") String apiKey,
+                                 TenantAiKeyProvider keyProvider,
                                  @Value("${wxclaw.ai.web-search.bocha.url:https://api.bochaai.com/v1/web-search}") String url,
                                  @Value("${wxclaw.ai.web-search.bocha.timeout:PT15S}") Duration timeout,
                                  @Value("${wxclaw.ai.web-search.bocha.default-count:5}") int defaultCount,
@@ -36,7 +37,7 @@ public class BochaWebSearchHandler {
                                  @Value("${wxclaw.ai.web-search.bocha.default-freshness:noLimit}") String defaultFreshness) {
         this.objectMapper = objectMapper;
         this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-        this.apiKey = apiKey;
+        this.keyProvider = keyProvider;
         this.url = url;
         this.timeout = timeout == null ? Duration.ofSeconds(15) : timeout;
         this.defaultCount = defaultCount;
@@ -49,7 +50,7 @@ public class BochaWebSearchHandler {
         if (actualQuery == null || actualQuery.isBlank()) {
             return new BochaWebSearchResult(null, null, query, freshness, count, "搜索词不能为空", List.of());
         }
-        String key = apiKey == null ? null : apiKey.trim();
+        String key = keyProvider.searchKey() == null ? null : keyProvider.searchKey().trim();
         if (key == null || key.isBlank()) {
             return new BochaWebSearchResult(null, null, actualQuery, freshness, count, "未配置博查 API Key（wxclaw.ai.web-search.bocha.api-key）", List.of());
         }

@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.bot.agent.llm.voice;
 
+import com.dust.wxclawbackfront.bot.agent.llm.TenantAiKeyProvider;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.TextSanitizer;
 import com.dust.wxclawbackfront.observability.llm.service.LlmInvocationRecorder;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -31,7 +32,7 @@ public class VolcTtsHandler {
     private final Duration timeout;
     private final int maxAttempts;
 
-    private final String apiKey;
+    private final TenantAiKeyProvider keyProvider;
     private final String model;
     private final String outputFormat;
     private final Integer sampleRate;
@@ -49,7 +50,7 @@ public class VolcTtsHandler {
                           @Value("${wxclaw.ai.tts.url:https://openspeech.bytedance.com/api/v3/tts/create}") String url,
                           @Value("${wxclaw.ai.tts.timeout:PT90S}") Duration timeout,
                           @Value("${wxclaw.ai.tts.max-attempts:2}") int maxAttempts,
-                          @Value("${wxclaw.ai.tts.api-key:}") String apiKey,
+                          TenantAiKeyProvider keyProvider,
                           @Value("${wxclaw.ai.tts.model:seed-audio-1.0}") String model,
                           @Value("${wxclaw.ai.tts.output-format:mp3}") String outputFormat,
                           @Value("${wxclaw.ai.tts.sample-rate:24000}") Integer sampleRate,
@@ -67,7 +68,7 @@ public class VolcTtsHandler {
         this.url = url;
         this.timeout = timeout == null ? Duration.ofSeconds(90) : timeout;
         this.maxAttempts = maxAttempts <= 0 ? 2 : maxAttempts;
-        this.apiKey = apiKey;
+        this.keyProvider = keyProvider;
         this.model = model;
         this.outputFormat = outputFormat;
         this.sampleRate = sampleRate;
@@ -88,7 +89,7 @@ public class VolcTtsHandler {
         if (actualUrl == null || actualUrl.isBlank()) {
             return new VolcTtsResult(null, null, "未配置 wxclaw.ai.tts.url", null, null, null, null, null, null);
         }
-        String key = apiKey == null ? null : apiKey.trim();
+        String key = keyProvider.ttsKey() == null ? null : keyProvider.ttsKey().trim();
         if (key == null || key.isBlank()) {
             return new VolcTtsResult(null, null, "未配置 wxclaw.ai.tts.api-key", null, null, null, null, null, null);
         }

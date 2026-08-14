@@ -9,7 +9,6 @@ import com.dust.wxclawbackfront.user.api.dto.UserDtos;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
 
@@ -32,7 +31,6 @@ class TenantAiConfigServiceTest {
         repository = mock(TenantAiConfigRepository.class);
         factory = mock(TenantChatClientFactory.class);
         service = new TenantAiConfigService(repository, factory);
-        ReflectionTestUtils.setField(service, "baseUrl", "https://ark.cn-beijing.volces.com/api/v3");
         TenantContextHolder.set(TenantContext.ilink("tenant-a", "bot-a", "user-a", "req"));
     }
 
@@ -42,43 +40,74 @@ class TenantAiConfigServiceTest {
     }
 
     @Test
-    void currentReportsNotConfiguredByDefault() {
+    void currentReportsAllCapabilitiesUnconfigured() {
         when(repository.findById("tenant-a")).thenReturn(Optional.empty());
 
-        UserDtos.AiConfig config = service.current();
+        UserDtos.AiConfigs configs = service.current();
 
-        assertThat(config.configured()).isFalse();
-        assertThat(config.apiKeyMasked()).isNull();
+        assertThat(configs.chat().configured()).isFalse();
+        assertThat(configs.chat().apiKeyMasked()).isNull();
+        assertThat(configs.image().provider()).contains("SiliconFlow");
+        assertThat(configs.video().provider()).contains("Seedance");
+        assertThat(configs.tts().provider()).contains("TTS");
+        assertThat(configs.search().provider()).contains("博查");
     }
 
     @Test
-    void savePersistsKeyForCurrentTenantAndEvictsFactory() {
+    void saveChatPersistsKeyAndEvictsFactory() {
         TenantAiConfig saved = new TenantAiConfig();
         when(repository.findById("tenant-a")).thenReturn(Optional.of(saved));
         when(repository.save(any(TenantAiConfig.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        UserDtos.AiConfig config = service.save("  sk-abcdefgh1234  ");
+        UserDtos.AiConfigEntry entry = service.save("chat", "  sk-abcdefgh1234  ");
 
         assertThat(saved.getTenantId()).isEqualTo("tenant-a");
         assertThat(saved.getApiKey()).isEqualTo("sk-abcdefgh1234");
         verify(factory).evict("tenant-a");
-        assertThat(config.configured()).isTrue();
-        assertThat(config.apiKeyMasked()).isEqualTo("sk-a****1234");
+        assertThat(entry.configured()).isTrue();
+        assertThat(entry.apiKeyMasked()).isEqualTo("sk-a****1234");
+    }
+
+    @Test
+    void saveImageKeyDoesNotEvictChatFactory() {
+        TenantAiConfig saved = new TenantAiConfig();
+        when(repository.findById("tenant-a")).thenReturn(Optional.of(saved));
+        when(repository.save(any(TenantAiConfig.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        UserDtos.AiConfigEntry entry = service.save("image", "sk-img-1234");
+
+        assertThat(saved.getImageApiKey()).isEqualTo("sk-img-1234");
+        assertThat(entry.provider()).contains("SiliconFlow");
+        verify(factory, never()).evict(any());
     }
 
     @Test
     void saveRejectsBlankKey() {
-        assertThatThrownBy(() -> service.save("   "))
+        assertThatThrownBy(() -> service.save("chat", "   "))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("不能为空");
         verify(repository, never()).save(any());
     }
 
     @Test
-    void clearRemovesConfigAndEvictsFactory() {
-        service.clear();
+    void saveRejectsUnknownCapability() {
+        assertThatThrownBy(() -> service.save("unknown", "sk-x"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("未知能力");
+    }
 
-        verify(repository).deleteById("tenant-a");
-        verify(factory).evict("tenant-a");
+    @Test
+    void clearCapabilityNullsOnlyThatKey() {
+        TenantAiConfig saved = new TenantAiConfig();
+        saved.setApiKey("sk-chat");
+        saved.setTtsApiKey("sk-tts");
+        when(repository.findById("tenant-a")).thenReturn(Optional.of(saved));
+        when(repository.save(any(TenantAiConfig.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.clear("tts");
+
+        assertThat(saved.getTtsApiKey()).isNull();
+        assertThat(saved.getApiKey()).isEqualTo("sk-chat");
+        verify(factory, never()).evict(any());
     }
 }

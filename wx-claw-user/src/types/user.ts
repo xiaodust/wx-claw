@@ -20,11 +20,19 @@ export interface QrInfo {
   statusChangedAt: string | null
 }
 
-export interface AiConfig {
+export interface AiConfigEntry {
   configured: boolean
   apiKeyMasked: string | null
-  baseUrl: string | null
-  updatedAt: string | null
+  provider: string
+}
+
+export interface AiConfigs {
+  chat: AiConfigEntry
+  image: AiConfigEntry
+  video: AiConfigEntry
+  videoDashscope: AiConfigEntry
+  tts: AiConfigEntry
+  search: AiConfigEntry
 }
 
 export interface Conversation {

@@ -50,8 +50,16 @@ async function submitCreate() {
     const bot = await createBot(createName.value)
     createVisible.value = false
     ElMessage.success('Bot 已创建')
-    await refresh()
     openQr(bot)
+    refresh().catch(() => { /* 列表刷新失败不阻塞二维码弹窗 */ })
+  } catch (e: any) {
+    const status = e?.response?.status
+    const serverMsg = e?.response?.data?.message
+    const msg = serverMsg || e?.message || '未知错误'
+    const hint = status === 403 && serverMsg?.includes('Missing required scope')
+      ? '（登录的 API Key 缺少 userbot:write 权限，请使用 bootstrap key 或给凭据加权限）'
+      : ''
+    ElMessage.error(`创建失败 [HTTP ${status ?? '-'}]：${msg}${hint}`)
   } finally {
     creating.value = false
   }
@@ -81,6 +89,16 @@ async function pollQr() {
       // 轮询失败忽略，下一轮重试
     }
   }, 2000)
+}
+
+function qrStatusHint(): string {
+  const status = qrInfo.value?.status
+  if (!status || status === 'STARTING') return '正在生成二维码，请稍候…'
+  if (status === 'WAITING_QR') return '请使用微信扫码登录，连接后即可接收消息'
+  if (status === 'ONLINE') return '扫码成功，Bot 已上线'
+  if (status === 'RECONNECTING') return '连接异常，正在重连…'
+  if (status === 'ERROR') return '登录失败，请关闭后重试或查看后端日志'
+  return 'Bot 未在运行，请关闭后重新打开'
 }
 
 function stopQrPolling() {
@@ -171,14 +189,15 @@ onBeforeUnmount(() => { stopQrPolling() })
       <div v-if="qrBot" class="qr-body">
         <div class="qr-box">
           <img v-if="qrDataUrl" :src="qrDataUrl" alt="二维码" class="qr-img" />
-          <div v-else class="qr-empty">二维码生成中…</div>
+          <div v-else class="qr-empty">{{ qrStatusHint() }}</div>
         </div>
         <div class="qr-status">
           <el-tag :type="(STATUS_TAG[qrInfo?.status || 'UNKNOWN'] as any)">{{ qrInfo?.status || 'UNKNOWN' }}</el-tag>
-          <span class="muted">请使用微信扫码登录，连接后即可接收消息</span>
+          <span class="muted">{{ qrStatusHint() }}</span>
         </div>
       </div>
       <template #footer>
+        <el-button v-if="qrInfo?.status !== 'ONLINE'" @click="pollQr">重新获取</el-button>
         <el-button @click="closeQr">关闭</el-button>
       </template>
     </el-dialog>
