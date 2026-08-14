@@ -30,22 +30,22 @@ public class TenantAiConfigService {
     private final AiModelCatalog modelCatalog;
 
     private static final Map<String, Capability> CAPABILITIES = Map.of(
-            "chat", new Capability("对话（文本/图片理解；服务商可切换）",
+            "chat", new Capability(
                     TenantAiConfig::getApiKey, TenantAiConfig::setApiKey,
                     TenantAiConfig::getChatModel, TenantAiConfig::setChatModel),
-            "image", new Capability("图片生成（SiliconFlow）",
+            "image", new Capability(
                     TenantAiConfig::getImageApiKey, TenantAiConfig::setImageApiKey,
                     TenantAiConfig::getImageModel, TenantAiConfig::setImageModel),
-            "video", new Capability("视频生成（火山方舟 Seedance）",
+            "video", new Capability(
                     TenantAiConfig::getVideoApiKey, TenantAiConfig::setVideoApiKey,
                     TenantAiConfig::getVideoModel, TenantAiConfig::setVideoModel),
-            "videoDashscope", new Capability("视频生成（阿里云通义万相 DashScope）",
+            "videoDashscope", new Capability(
                     TenantAiConfig::getVideoDashscopeApiKey, TenantAiConfig::setVideoDashscopeApiKey,
                     config -> null, null),
-            "tts", new Capability("语音合成（火山引擎 TTS）",
+            "tts", new Capability(
                     TenantAiConfig::getTtsApiKey, TenantAiConfig::setTtsApiKey,
                     config -> null, null),
-            "search", new Capability("联网搜索（博查）",
+            "search", new Capability(
                     TenantAiConfig::getSearchApiKey, TenantAiConfig::setSearchApiKey,
                     config -> null, null));
 
@@ -89,6 +89,12 @@ public class TenantAiConfigService {
 
         if ("chat".equals(capability)) {
             applyChatModel(config, request);
+        } else if ("image".equals(capability)) {
+            applyMediaModel(config, request,
+                    modelCatalog::imageProvider, TenantAiConfig::setImageProvider, cap.modelSetter());
+        } else if ("video".equals(capability)) {
+            applyMediaModel(config, request,
+                    modelCatalog::videoProvider, TenantAiConfig::setVideoProvider, cap.modelSetter());
         } else {
             if (request.model() == null || request.model().isBlank()) {
                 throw new IllegalArgumentException("模型不能为空");
@@ -121,6 +127,10 @@ public class TenantAiConfigService {
             config.get().setChatProvider(null);
             config.get().setChatBaseUrl(null);
             chatClientFactory.evict(tenantId);
+        } else if ("image".equals(capability)) {
+            config.get().setImageProvider(null);
+        } else if ("video".equals(capability)) {
+            config.get().setVideoProvider(null);
         }
         configRepository.save(config.get());
     }
@@ -151,8 +161,36 @@ public class TenantAiConfigService {
         return new UserDtos.AiConfigEntry(
                 configured,
                 configured ? mask(apiKey) : null,
-                cap.provider(),
+                providerId(config, capability),
                 config.map(cap.modelGetter()).orElse(null));
+    }
+
+    private String providerId(Optional<TenantAiConfig> config, String capability) {
+        return switch (capability) {
+            case "chat" -> config.map(TenantAiConfig::getChatProvider).orElse("ark");
+            case "image" -> config.map(TenantAiConfig::getImageProvider).orElse("siliconflow");
+            case "video" -> config.map(TenantAiConfig::getVideoProvider).orElse("ark");
+            case "videoDashscope" -> "dashscope";
+            case "tts" -> "tts";
+            case "search" -> "search";
+            default -> "";
+        };
+    }
+
+    private void applyMediaModel(TenantAiConfig config, UserDtos.UpdateModelRequest request,
+                                 Function<String, AiModelCatalog.MediaProvider> providerLookup,
+                                 BiConsumer<TenantAiConfig, String> providerSetter,
+                                 BiConsumer<TenantAiConfig, String> modelSetter) {
+        if (request.provider() != null && !request.provider().isBlank()) {
+            String provider = request.provider().trim();
+            if (providerLookup.apply(provider) == null) {
+                throw new IllegalArgumentException("未知服务商: " + provider);
+            }
+            providerSetter.accept(config, provider);
+        }
+        if (request.model() != null && !request.model().isBlank()) {
+            modelSetter.accept(config, request.model().trim());
+        }
     }
 
     private void applyChatModel(TenantAiConfig config, UserDtos.UpdateModelRequest request) {
@@ -200,8 +238,7 @@ public class TenantAiConfigService {
         return trimmed.substring(0, 4) + "****" + trimmed.substring(trimmed.length() - 4);
     }
 
-    private record Capability(String provider,
-                              Function<TenantAiConfig, String> getter,
+    private record Capability(Function<TenantAiConfig, String> getter,
                               BiConsumer<TenantAiConfig, String> setter,
                               Function<TenantAiConfig, String> modelGetter,
                               BiConsumer<TenantAiConfig, String> modelSetter) {

@@ -19,8 +19,8 @@ import java.util.Map;
 
 /**
  * 视频生成服务
- * 支持火山方舟 Seedance 和阿里云通义万相（DashScope）双平台
- * 通过 wxclaw.ai.video-gen.provider 切换：ark / dashscope
+ * 支持火山方舟 Seedance、OpenAI Sora、阿里云通义万相（DashScope）三平台
+ * 服务商按租户配置解析（TenantAiKeyProvider.videoProvider），未配置回退后端默认（ark）
  */
 @Slf4j
 @Service
@@ -30,7 +30,6 @@ public class VideoGenerationHandler {
     private final ObjectMapper objectMapper;
 
     // 通用配置
-    private final String provider;
     private final String ratio;
     private final int duration;
     private final String resolution;
@@ -50,7 +49,6 @@ public class VideoGenerationHandler {
     public VideoGenerationHandler(
             ObjectMapper objectMapper,
             LlmInvocationRecorder invocationRecorder,
-            @Value("${wxclaw.ai.video-gen.provider:ark}") String provider,
             @Value("${wxclaw.ai.video-gen.ratio:16:9}") String ratio,
             @Value("${wxclaw.ai.video-gen.duration:5}") int duration,
             @Value("${wxclaw.ai.video-gen.resolution:720p}") String resolution,
@@ -65,7 +63,6 @@ public class VideoGenerationHandler {
             TenantAiKeyProvider keyProvider) {
         this.objectMapper = objectMapper;
         this.invocationRecorder = invocationRecorder;
-        this.provider = provider;
         this.ratio = ratio;
         this.duration = duration;
         this.resolution = resolution;
@@ -81,7 +78,7 @@ public class VideoGenerationHandler {
                 .build();
 
         log.info("视频生成服务初始化: provider={}, arkModel={}, dashscopeT2v={}, dashscopeI2v={}",
-                provider, arkModel, dashscopeT2vModel, dashscopeI2vModel);
+                keyProvider.videoProvider(), arkModel, dashscopeT2vModel, dashscopeI2vModel);
     }
 
     // ==================== 公开接口 ====================
@@ -101,6 +98,7 @@ public class VideoGenerationHandler {
         String ratioToUse = customRatio != null ? customRatio : ratio;
         int durationToUse = customDuration != null ? customDuration : duration;
         String resolutionToUse = customResolution != null ? customResolution : resolution;
+        String provider = effectiveProvider();
         String model = "dashscope".equalsIgnoreCase(provider) ? dashscopeT2vModel : keyProvider.videoModel();
         LlmInvocationRecorder.InvocationHandle handle = invocationRecorder.start(
                 "VIDEO_GENERATION", provider, model,
@@ -137,6 +135,7 @@ public class VideoGenerationHandler {
         String ratioToUse = customRatio != null ? customRatio : ratio;
         int durationToUse = customDuration != null ? customDuration : duration;
         String resolutionToUse = customResolution != null ? customResolution : resolution;
+        String provider = effectiveProvider();
         String model = "dashscope".equalsIgnoreCase(provider) ? dashscopeI2vModel : keyProvider.videoModel();
         LlmInvocationRecorder.InvocationHandle handle = invocationRecorder.start(
                 "VIDEO_GENERATION", provider, model,
@@ -194,27 +193,41 @@ public class VideoGenerationHandler {
     }
 
     public boolean isEnabled() {
-        if ("dashscope".equals(provider)) {
+        String provider = effectiveProvider();
+        if ("dashscope".equalsIgnoreCase(provider)) {
             String key = keyProvider.videoDashscopeKey();
             return key != null && !key.isBlank();
         }
-        // 默认 ark
+        // ark / openai
         String key = keyProvider.videoKey();
         return key != null && !key.isBlank();
+    }
+
+    private String effectiveProvider() {
+        String provider = keyProvider.videoProvider();
+        return provider == null ? "ark" : provider;
     }
 
     // ==================== 任务创建（按 provider 分发） ====================
 
     private String createTextToVideoTask(String prompt, String ratioVal, int durationVal, String resolutionVal) {
-        if ("dashscope".equals(provider)) {
+        String provider = effectiveProvider();
+        if ("dashscope".equalsIgnoreCase(provider)) {
             return createDashScopeTask(prompt, null, ratioVal, durationVal, resolutionVal);
+        }
+        if ("openai".equalsIgnoreCase(provider)) {
+            return createOpenAiVideoTask(prompt, null, ratioVal, durationVal, resolutionVal);
         }
         return createArkTask(prompt, null, ratioVal, durationVal, resolutionVal);
     }
 
     private String createImageToVideoTask(String imageUrl, String prompt, String ratioVal, int durationVal, String resolutionVal) {
-        if ("dashscope".equals(provider)) {
+        String provider = effectiveProvider();
+        if ("dashscope".equalsIgnoreCase(provider)) {
             return createDashScopeTask(prompt, imageUrl, ratioVal, durationVal, resolutionVal);
+        }
+        if ("openai".equalsIgnoreCase(provider)) {
+            return createOpenAiVideoTask(prompt, imageUrl, ratioVal, durationVal, resolutionVal);
         }
         return createArkTask(prompt, imageUrl, ratioVal, durationVal, resolutionVal);
     }
@@ -349,10 +362,158 @@ public class VideoGenerationHandler {
     // ==================== 轮询任务状态（按 provider 分发） ====================
 
     private VideoGenerationResult pollTask(String taskId) {
-        if ("dashscope".equals(provider)) {
+        String provider = effectiveProvider();
+        if ("dashscope".equalsIgnoreCase(provider)) {
             return pollDashScopeTask(taskId);
         }
+        if ("openai".equalsIgnoreCase(provider)) {
+            return pollOpenAiVideoTask(taskId);
+        }
         return pollArkTask(taskId);
+    }
+
+    // ==================== OpenAI Sora ====================
+
+    private String createOpenAiVideoTask(String prompt, String imageUrl, String ratioVal,
+                                         int durationVal, String resolutionVal) {
+        try {
+            String key = keyProvider.videoKey();
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("model", keyProvider.videoModel());
+            payload.put("prompt", prompt);
+
+            if (imageUrl != null && !imageUrl.isBlank()) {
+                payload.put("input_reference", Map.of("image_url", imageUrl));
+            }
+
+            String size = openAiSize(resolutionVal);
+            if (size != null) {
+                payload.put("size", size);
+            }
+            if (durationVal >= 5 && durationVal <= 15) {
+                payload.put("seconds", durationVal);
+            }
+
+            String body = objectMapper.writeValueAsString(payload);
+            log.info("[OpenAI] 创建视频生成任务: model={}, prompt={}", keyProvider.videoModel(), truncate(prompt));
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(keyProvider.videoBaseUrlFor("openai") + "/videos"))
+                    .timeout(Duration.ofSeconds(30))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + key)
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() / 100 != 2) {
+                log.error("[OpenAI] 创建视频任务失败: HTTP {}, body={}", response.statusCode(), response.body());
+                return null;
+            }
+
+            JsonNode root = objectMapper.readTree(response.body());
+            JsonNode idNode = root.get("id");
+            if (idNode != null && !idNode.isMissingNode()) {
+                return idNode.asText();
+            }
+
+            log.error("[OpenAI] 创建视频任务响应缺少id: {}", response.body());
+            return null;
+
+        } catch (Exception ex) {
+            log.error("[OpenAI] 创建视频任务异常: {}", ex.getMessage(), ex);
+            return null;
+        }
+    }
+
+    private VideoGenerationResult pollOpenAiVideoTask(String taskId) {
+        String queryUrl = keyProvider.videoBaseUrlFor("openai") + "/videos/" + taskId;
+        String key = keyProvider.videoKey();
+        long deadline = System.currentTimeMillis() + pollTimeoutMs;
+
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(pollIntervalMs);
+
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(queryUrl))
+                        .timeout(Duration.ofSeconds(15))
+                        .header("Authorization", "Bearer " + key)
+                        .GET()
+                        .build();
+
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+                if (response.statusCode() / 100 != 2) {
+                    log.error("[OpenAI] 查询视频任务失败: HTTP {}", response.statusCode());
+                    continue;
+                }
+
+                JsonNode root = objectMapper.readTree(response.body());
+                String status = root.has("status") ? root.get("status").asText() : "unknown";
+
+                if ("completed".equals(status)) {
+                    log.info("[OpenAI] 视频生成成功: taskId={}", taskId);
+                    return extractOpenAiVideoResult(root);
+                } else if ("failed".equals(status) || "cancelled".equals(status)) {
+                    String error = root.has("error") ? root.get("error").toString() : "任务" + status;
+                    log.error("[OpenAI] 视频生成失败: taskId={}, error={}", taskId, error);
+                    return VideoGenerationResult.failure("视频生成失败: " + error);
+                }
+
+                log.debug("[OpenAI] 视频生成中: taskId={}, status={}", taskId, status);
+
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                return VideoGenerationResult.failure("轮询被中断");
+            } catch (Exception ex) {
+                log.warn("[OpenAI] 轮询视频任务异常: {}", ex.getMessage());
+            }
+        }
+
+        return VideoGenerationResult.failure("视频生成超时（" + (pollTimeoutMs / 1000) + "秒）");
+    }
+
+    private VideoGenerationResult extractOpenAiVideoResult(JsonNode root) {
+        try {
+            // 官方格式：output 数组，每项含 url；兼容层可能直接给 video_url
+            JsonNode output = root.get("output");
+            if (output != null && output.isArray() && !output.isEmpty()) {
+                JsonNode firstOutput = output.get(0);
+                if (firstOutput != null) {
+                    String videoUrl = firstOutput.has("url") ? firstOutput.get("url").asText() : null;
+                    if (videoUrl != null && !videoUrl.isBlank()) {
+                        return downloadOrReturnUrl(videoUrl);
+                    }
+                }
+            }
+
+            JsonNode videoUrlNode = root.has("video_url") ? root.get("video_url") : null;
+            if (videoUrlNode != null && !videoUrlNode.isMissingNode() && !videoUrlNode.asText().isBlank()) {
+                return downloadOrReturnUrl(videoUrlNode.asText());
+            }
+
+            return VideoGenerationResult.failure("无法从 OpenAI 结果中提取视频URL: " + root);
+
+        } catch (Exception ex) {
+            log.error("[OpenAI] 提取视频结果异常: {}", ex.getMessage(), ex);
+            return VideoGenerationResult.failure("提取视频结果失败: " + ex.getMessage());
+        }
+    }
+
+    private static String openAiSize(String resolution) {
+        if (resolution == null) {
+            return null;
+        }
+        String r = resolution.trim().toLowerCase();
+        if (r.contains("1080")) {
+            return "1920x1080";
+        }
+        if (r.contains("720")) {
+            return "1280x720";
+        }
+        return null;
     }
 
     private VideoGenerationResult pollArkTask(String taskId) {

@@ -202,16 +202,24 @@ wxclaw:
       enabled: true
 
   ai:
-    # 图片生成配置（SiliconFlow API - Kolors 模型）
+    # 图片生成配置：默认 SiliconFlow（Kolors），可按服务商切换
     image:
       generate:
-        use-siliconflow: true
-        url: https://api.siliconflow.cn/v1/images/generations
+        # siliconflow / ark / openai（baseUrl 由模型目录按服务商提供）
+        provider: ${IMAGE_GEN_PROVIDER:siliconflow}
         api-key: ${SILICONFLOW_API_KEY:your-siliconflow-api-key}
         model: Kwai-Kolors/Kolors
         image-size: 1024x1024
         num-inference-steps: 20
         guidance-scale: 7.5
+
+    # 视频生成配置：默认火山方舟 Seedance，可切换 openai（Sora）/ dashscope
+    video-gen:
+      provider: ${VIDEO_GEN_PROVIDER:ark}
+      openai:
+        api-key: ${OPENAI_VIDEO_API_KEY:}
+        model: ${OPENAI_VIDEO_MODEL:sora-2}
+        base-url: ${OPENAI_VIDEO_BASE_URL:https://api.openai.com/v1}
 
     # TTS 语音合成配置
     tts:
@@ -367,6 +375,11 @@ wxclaw:
 # AI_CHAT_MODEL        - 聊天模型名称
 # AI_IMAGE_MODEL       - 图片理解模型名称
 # SILICONFLOW_API_KEY  - SiliconFlow 图片生成 API 密钥
+# IMAGE_GEN_PROVIDER   - 图片生成服务商（siliconflow/ark/openai）
+# VIDEO_GEN_PROVIDER   - 视频生成服务商（ark/openai/dashscope）
+# OPENAI_VIDEO_API_KEY - OpenAI Sora 视频生成 API 密钥（用户未配置时回退）
+# OPENAI_VIDEO_MODEL   - OpenAI Sora 默认模型（sora-2）
+# OPENAI_VIDEO_BASE_URL- OpenAI 视频 API 地址
 # MAIL_HOST            - 邮件服务器地址
 # MAIL_PORT            - 邮件服务器端口
 # MAIL_USERNAME        - 邮箱账号

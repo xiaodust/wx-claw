@@ -50,12 +50,12 @@ class TenantAiConfigServiceTest {
 
         assertThat(configs.chat().configured()).isFalse();
         assertThat(configs.chat().apiKeyMasked()).isNull();
-        assertThat(configs.image().provider()).contains("SiliconFlow");
-        assertThat(configs.chat().provider()).contains("对话");
-        assertThat(configs.video().provider()).contains("Seedance");
-        assertThat(configs.videoDashscope().provider()).contains("通义万相");
-        assertThat(configs.tts().provider()).contains("TTS");
-        assertThat(configs.search().provider()).contains("博查");
+        assertThat(configs.image().provider()).isEqualTo("siliconflow");
+        assertThat(configs.chat().provider()).isEqualTo("ark");
+        assertThat(configs.video().provider()).isEqualTo("ark");
+        assertThat(configs.videoDashscope().provider()).isEqualTo("dashscope");
+        assertThat(configs.tts().provider()).isEqualTo("tts");
+        assertThat(configs.search().provider()).isEqualTo("search");
     }
 
     @Test
@@ -83,7 +83,7 @@ class TenantAiConfigServiceTest {
         UserDtos.AiConfigEntry entry = service.save("image", "sk-img-1234");
 
         assertThat(saved.getImageApiKey()).isEqualTo("sk-img-1234");
-        assertThat(entry.provider()).contains("SiliconFlow");
+        assertThat(entry.provider()).isEqualTo("siliconflow");
         verify(factory, never()).evict(any());
     }
 
@@ -96,7 +96,7 @@ class TenantAiConfigServiceTest {
         UserDtos.AiConfigEntry entry = service.save("video", "sk-video-1234");
 
         assertThat(saved.getVideoApiKey()).isEqualTo("sk-video-1234");
-        assertThat(entry.provider()).contains("Seedance");
+        assertThat(entry.provider()).isEqualTo("ark");
         verify(factory, never()).evict(any());
     }
 
@@ -177,5 +177,67 @@ class TenantAiConfigServiceTest {
         assertThat(saved.getChatProvider()).isNull();
         assertThat(saved.getChatBaseUrl()).isNull();
         verify(factory).evict("tenant-a");
+    }
+
+    @Test
+    void saveImageModelSetsProviderAndModel() {
+        TenantAiConfig saved = new TenantAiConfig();
+        when(repository.findById("tenant-a")).thenReturn(Optional.of(saved));
+        when(repository.save(any(TenantAiConfig.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        UserDtos.AiConfigEntry entry = service.saveModel("image",
+                new UserDtos.UpdateModelRequest("gpt-image-1", "openai", null));
+
+        assertThat(saved.getImageProvider()).isEqualTo("openai");
+        assertThat(saved.getImageModel()).isEqualTo("gpt-image-1");
+        assertThat(entry.provider()).isEqualTo("openai");
+        assertThat(entry.model()).isEqualTo("gpt-image-1");
+        verify(factory, never()).evict(any());
+    }
+
+    @Test
+    void saveVideoModelSetsProviderAndModel() {
+        TenantAiConfig saved = new TenantAiConfig();
+        when(repository.findById("tenant-a")).thenReturn(Optional.of(saved));
+        when(repository.save(any(TenantAiConfig.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        UserDtos.AiConfigEntry entry = service.saveModel("video",
+                new UserDtos.UpdateModelRequest("sora-2", "openai", null));
+
+        assertThat(saved.getVideoProvider()).isEqualTo("openai");
+        assertThat(saved.getVideoModel()).isEqualTo("sora-2");
+        assertThat(entry.provider()).isEqualTo("openai");
+        assertThat(entry.model()).isEqualTo("sora-2");
+        verify(factory, never()).evict(any());
+    }
+
+    @Test
+    void saveImageModelRejectsUnknownProvider() {
+        assertThatThrownBy(() -> service.saveModel("image",
+                new UserDtos.UpdateModelRequest("x", "unknown", null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("未知服务商");
+    }
+
+    @Test
+    void saveVideoModelRejectsUnknownProvider() {
+        assertThatThrownBy(() -> service.saveModel("video",
+                new UserDtos.UpdateModelRequest("x", "unknown", null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("未知服务商");
+    }
+
+    @Test
+    void clearImageModelResetsProvider() {
+        TenantAiConfig saved = new TenantAiConfig();
+        saved.setImageProvider("openai");
+        saved.setImageModel("gpt-image-1");
+        when(repository.findById("tenant-a")).thenReturn(Optional.of(saved));
+        when(repository.save(any(TenantAiConfig.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.clearModel("image");
+
+        assertThat(saved.getImageModel()).isNull();
+        assertThat(saved.getImageProvider()).isNull();
     }
 }

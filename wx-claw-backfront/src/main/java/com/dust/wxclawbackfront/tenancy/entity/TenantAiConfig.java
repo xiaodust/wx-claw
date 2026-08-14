@@ -40,9 +40,13 @@ public class TenantAiConfig {
     @Column(name = "chat_model", length = 128)
     private String chatModel;
 
-    /** 图片生成（SiliconFlow） */
+    /** 图片生成 API Key（按所选服务商 siliconflow/ark/openai 使用） */
     @Column(name = "image_api_key", columnDefinition = "TEXT")
     private String imageApiKey;
+
+    /** 图片生成服务商：siliconflow / ark / openai */
+    @Column(name = "image_provider", length = 32)
+    private String imageProvider;
 
     /** 图片生成模型 */
     @Column(name = "image_model", length = 128)
@@ -56,9 +60,13 @@ public class TenantAiConfig {
     @Column(name = "tts_api_key", columnDefinition = "TEXT")
     private String ttsApiKey;
 
-    /** 视频生成（火山方舟 Seedance）模型 */
+    /** 视频生成模型（按所选服务商 ark/openai 使用） */
     @Column(name = "video_model", length = 128)
     private String videoModel;
+
+    /** 视频生成服务商：ark / openai（dashscope 走独立配置） */
+    @Column(name = "video_provider", length = 32)
+    private String videoProvider;
 
     /** 视频生成（火山方舟 Seedance）专用 Key；未配置时复用对话 Ark Key */
     @Column(name = "video_api_key", columnDefinition = "TEXT")

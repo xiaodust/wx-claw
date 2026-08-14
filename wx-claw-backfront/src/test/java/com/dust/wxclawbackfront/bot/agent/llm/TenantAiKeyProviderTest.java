@@ -28,10 +28,15 @@ class TenantAiKeyProviderTest {
         ReflectionTestUtils.setField(provider, "defaultChatBaseUrl", "https://ark.cn-beijing.volces.com/api/v3");
         ReflectionTestUtils.setField(provider, "defaultChatModel", "doubao-seed-2-1-turbo-260628");
         ReflectionTestUtils.setField(provider, "defaultImageKey", "sk-default-image");
+        ReflectionTestUtils.setField(provider, "defaultImageProvider", "siliconflow");
         ReflectionTestUtils.setField(provider, "defaultImageModel", "Kwai-Kolors/Kolors");
         ReflectionTestUtils.setField(provider, "defaultVideoDashscopeKey", "sk-default-dash");
         ReflectionTestUtils.setField(provider, "defaultVideoModel", "doubao-seedance-2-0-mini-260615");
+        ReflectionTestUtils.setField(provider, "defaultVideoProvider", "ark");
         ReflectionTestUtils.setField(provider, "defaultVideoKey", "sk-default-video");
+        ReflectionTestUtils.setField(provider, "defaultOpenaiVideoKey", "sk-default-openai-video");
+        ReflectionTestUtils.setField(provider, "defaultOpenaiVideoModel", "sora-2");
+        ReflectionTestUtils.setField(provider, "defaultOpenaiVideoBaseUrl", "https://api.openai.com/v1");
         ReflectionTestUtils.setField(provider, "defaultTtsKey", "sk-default-tts");
         ReflectionTestUtils.setField(provider, "defaultSearchKey", "sk-default-search");
     }
@@ -78,8 +83,12 @@ class TenantAiKeyProviderTest {
         assertThat(provider.chatProvider()).isEqualTo("ark");
         assertThat(provider.chatBaseUrl()).isEqualTo("https://ark.cn-beijing.volces.com/api/v3");
         assertThat(provider.chatModel()).isEqualTo("doubao-seed-2-1-turbo-260628");
+        assertThat(provider.imageProvider()).isEqualTo("siliconflow");
         assertThat(provider.imageModel()).isEqualTo("Kwai-Kolors/Kolors");
+        assertThat(provider.videoProvider()).isEqualTo("ark");
         assertThat(provider.videoModel()).isEqualTo("doubao-seedance-2-0-mini-260615");
+        assertThat(provider.imageBaseUrlFor("openai")).isEqualTo("https://api.openai.com/v1");
+        assertThat(provider.videoBaseUrlFor("openai")).isEqualTo("https://api.openai.com/v1");
     }
 
     @Test
@@ -138,5 +147,47 @@ class TenantAiKeyProviderTest {
         TenantContextHolder.set(TenantContext.ilink("tenant-a", "bot-a", "user-a", "req"));
 
         assertThat(provider.videoKey()).isEqualTo("sk-default-video");
+    }
+
+    @Test
+    void imageProviderFollowsTenantOverride() {
+        TenantAiConfig config = new TenantAiConfig();
+        config.setTenantId("tenant-a");
+        config.setImageProvider("ark");
+        config.setImageModel("doubao-seedream-4-0-250828");
+        when(repository.findById("tenant-a")).thenReturn(Optional.of(config));
+        TenantContextHolder.set(TenantContext.ilink("tenant-a", "bot-a", "user-a", "req"));
+
+        assertThat(provider.imageProvider()).isEqualTo("ark");
+        assertThat(provider.imageModel()).isEqualTo("doubao-seedream-4-0-250828");
+        assertThat(provider.imageBaseUrlFor("ark")).isEqualTo("https://ark.cn-beijing.volces.com/api/v3");
+    }
+
+    @Test
+    void videoProviderFollowsTenantOverride() {
+        TenantAiConfig config = new TenantAiConfig();
+        config.setTenantId("tenant-a");
+        config.setVideoProvider("openai");
+        config.setVideoModel("sora-2-pro");
+        config.setVideoApiKey("sk-openai-video");
+        when(repository.findById("tenant-a")).thenReturn(Optional.of(config));
+        TenantContextHolder.set(TenantContext.ilink("tenant-a", "bot-a", "user-a", "req"));
+
+        assertThat(provider.videoProvider()).isEqualTo("openai");
+        assertThat(provider.videoModel()).isEqualTo("sora-2-pro");
+        assertThat(provider.videoKey()).isEqualTo("sk-openai-video");
+        assertThat(provider.videoBaseUrlFor("openai")).isEqualTo("https://api.openai.com/v1");
+    }
+
+    @Test
+    void openaiVideoFallsBackToOpenaiDefaultKeyAndModel() {
+        TenantAiConfig config = new TenantAiConfig();
+        config.setTenantId("tenant-a");
+        config.setVideoProvider("openai");
+        when(repository.findById("tenant-a")).thenReturn(Optional.of(config));
+        TenantContextHolder.set(TenantContext.ilink("tenant-a", "bot-a", "user-a", "req"));
+
+        assertThat(provider.videoKey()).isEqualTo("sk-default-openai-video");
+        assertThat(provider.videoModel()).isEqualTo("sora-2");
     }
 }

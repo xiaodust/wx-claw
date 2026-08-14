@@ -48,10 +48,17 @@ export interface ChatProviderOption {
   models: ModelOption[]
 }
 
+export interface MediaProviderOption {
+  id: string
+  name: string
+  baseUrl: string
+  models: ModelOption[]
+}
+
 export interface ModelCatalog {
   chatProviders: ChatProviderOption[]
-  imageModels: ModelOption[]
-  videoModels: ModelOption[]
+  imageProviders: MediaProviderOption[]
+  videoProviders: MediaProviderOption[]
 }
 
 export interface Conversation {

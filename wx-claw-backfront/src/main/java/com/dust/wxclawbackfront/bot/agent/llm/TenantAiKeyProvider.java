@@ -35,6 +35,9 @@ public class TenantAiKeyProvider {
     @Value("${wxclaw.ai.image.generate.api-key:${spring.ai.openai.api-key:}}")
     private String defaultImageKey;
 
+    @Value("${wxclaw.ai.image.generate.provider:siliconflow}")
+    private String defaultImageProvider;
+
     @Value("${wxclaw.ai.image.generate.model:Kwai-Kolors/Kolors}")
     private String defaultImageModel;
 
@@ -46,6 +49,18 @@ public class TenantAiKeyProvider {
 
     @Value("${wxclaw.ai.video-gen.ark.api-key:${spring.ai.openai.api-key:}}")
     private String defaultVideoKey;
+
+    @Value("${wxclaw.ai.video-gen.provider:ark}")
+    private String defaultVideoProvider;
+
+    @Value("${wxclaw.ai.video-gen.openai.api-key:}")
+    private String defaultOpenaiVideoKey;
+
+    @Value("${wxclaw.ai.video-gen.openai.model:sora-2}")
+    private String defaultOpenaiVideoModel;
+
+    @Value("${wxclaw.ai.video-gen.openai.base-url:https://api.openai.com/v1}")
+    private String defaultOpenaiVideoBaseUrl;
 
     @Value("${wxclaw.ai.tts.api-key:}")
     private String defaultTtsKey;
@@ -93,38 +108,78 @@ public class TenantAiKeyProvider {
         return resolve(tenantId, TenantAiConfig::getChatModel, defaultChatModel);
     }
 
-    /** 图片生成（SiliconFlow）。 */
+    /** 图片生成 Key（按用户所选服务商 siliconflow/ark/openai 使用）。 */
     public String imageKey() {
         return resolve(currentTenantId(), TenantAiConfig::getImageApiKey, defaultImageKey);
     }
 
-    /** 图片生成模型（SiliconFlow）。 */
+    /** 图片生成服务商。 */
+    public String imageProvider() {
+        return imageProviderFor(currentTenantId());
+    }
+
+    public String imageProviderFor(String tenantId) {
+        return resolve(tenantId, TenantAiConfig::getImageProvider, defaultImageProvider);
+    }
+
+    /** 图片生成服务商对应 baseUrl。 */
+    public String imageBaseUrlFor(String providerId) {
+        return modelCatalog.imageBaseUrl(providerId, "https://api.siliconflow.cn/v1");
+    }
+
+    /** 图片生成模型（按用户所选服务商）。 */
     public String imageModel() {
         return resolve(currentTenantId(), TenantAiConfig::getImageModel, defaultImageModel);
     }
 
+    /** 视频生成服务商：租户配置优先，未配置回退后端默认（ark）。 */
+    public String videoProvider() {
+        return videoProviderFor(currentTenantId());
+    }
+
+    public String videoProviderFor(String tenantId) {
+        return resolve(tenantId, TenantAiConfig::getVideoProvider, defaultVideoProvider);
+    }
+
+    /** 视频生成服务商对应 baseUrl。 */
+    public String videoBaseUrlFor(String providerId) {
+        if ("openai".equalsIgnoreCase(providerId)) {
+            return defaultOpenaiVideoBaseUrl;
+        }
+        return modelCatalog.videoBaseUrl(providerId, defaultChatBaseUrl);
+    }
+
     /**
-     * 视频生成（火山方舟 Seedance）Key：
+     * 视频生成 Key（ark/openai）：
      * <ol>
      *   <li>用户配置的 video_api_key 优先；</li>
-     *   <li>未配置且对话服务商为 ark 时，复用对话 Ark Key；</li>
+     *   <li>服务商为 openai 时回退后端默认 OpenAI 视频 Key；</li>
+     *   <li>服务商为 ark 且对话服务商为 ark 时，复用对话 Ark Key；</li>
      *   <li>否则回退后端默认 Ark Key。</li>
      * </ol>
      */
     public String videoKey() {
+        String provider = videoProvider();
         String tenantKey = resolve(currentTenantId(), TenantAiConfig::getVideoApiKey, null);
         if (tenantKey != null && !tenantKey.isBlank()) {
             return tenantKey;
         }
-        if ("ark".equalsIgnoreCase(chatProvider())) {
+        if ("openai".equalsIgnoreCase(provider)) {
+            return defaultOpenaiVideoKey;
+        }
+        if ("ark".equalsIgnoreCase(provider) && "ark".equalsIgnoreCase(chatProvider())) {
             return chatKey();
         }
         return defaultVideoKey;
     }
 
-    /** 视频生成模型（火山方舟 Seedance）。 */
+    /** 视频生成模型：租户配置优先；openai 服务商回退 sora，否则回退 Seedance。 */
     public String videoModel() {
-        return resolve(currentTenantId(), TenantAiConfig::getVideoModel, defaultVideoModel);
+        String tenantModel = resolve(currentTenantId(), TenantAiConfig::getVideoModel, null);
+        if (tenantModel != null && !tenantModel.isBlank()) {
+            return tenantModel;
+        }
+        return "openai".equalsIgnoreCase(videoProvider()) ? defaultOpenaiVideoModel : defaultVideoModel;
     }
 
     /** 视频生成（阿里云通义万相 DashScope）。 */

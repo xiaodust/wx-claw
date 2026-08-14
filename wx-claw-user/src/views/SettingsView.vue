@@ -9,6 +9,7 @@ const catalog = ref<ModelCatalog | null>(null)
 const inputs = reactive<Record<string, string>>({})
 const modelInputs = reactive<Record<string, string>>({})
 const customModelMode = reactive<Record<string, boolean>>({})
+const capProviders = reactive<Record<string, string>>({ chat: 'ark', image: 'siliconflow', video: 'ark' })
 const provider = ref('ark')
 const customBaseUrl = ref('')
 const loading = ref(false)
@@ -26,8 +27,8 @@ interface CapabilityDef {
 
 const capabilities: CapabilityDef[] = [
   { key: 'chat', title: '对话 API Key（多服务商）', desc: '文本对话与图片理解；选择服务商后模型列表与接入地址随之切换', modelLabel: '对话模型', modelCatalog: 'chat' },
-  { key: 'image', title: '图片生成', desc: 'SiliconFlow（Kolors 免费，其余模型按量计费）', modelLabel: '生成模型', modelCatalog: 'image' },
-  { key: 'video', title: '视频生成（Seedance）', desc: '火山方舟视频模型；不填 Key 时：对话为火山方舟则复用对话 Key，否则用后端默认', modelLabel: '视频模型', modelCatalog: 'video' },
+  { key: 'image', title: '图片生成', desc: 'SiliconFlow / 火山方舟 / OpenAI；Kolors 免费，其余模型按量计费', modelLabel: '生成模型', modelCatalog: 'image' },
+  { key: 'video', title: '视频生成', desc: '火山方舟 Seedance / OpenAI Sora；不填 Key 时：ark 服务商复用对话 Key，否则用后端默认', modelLabel: '视频模型', modelCatalog: 'video' },
   { key: 'videoDashscope', title: '视频生成（阿里云）', desc: '通义万相 DashScope（模型使用后端默认）' },
   { key: 'tts', title: '语音合成', desc: '火山引擎 TTS（模型使用后端默认）' },
   { key: 'search', title: '联网搜索', desc: '博查 Bocha（无模型概念）' },
@@ -35,8 +36,6 @@ const capabilities: CapabilityDef[] = [
 
 const chatModels = computed<ModelOption[]>(() =>
   catalog.value?.chatProviders.find(p => p.id === provider.value)?.models || [])
-const selectedProvider = computed(() =>
-  catalog.value?.chatProviders.find(p => p.id === provider.value))
 
 function entry(key: string): AiConfigEntry | null {
   return configs.value?.[key as keyof AiConfigs] ?? null
@@ -45,9 +44,28 @@ function entry(key: string): AiConfigEntry | null {
 function modelOptions(key: string): ModelOption[] {
   const cap = capabilities.find(c => c.key === key)
   if (!cap?.modelCatalog || !catalog.value) return []
-  if (cap.modelCatalog === 'image') return catalog.value.imageModels
-  if (cap.modelCatalog === 'video') return catalog.value.videoModels
+  if (cap.modelCatalog === 'image') {
+    return catalog.value.imageProviders.find(p => p.id === capProviders[key])?.models || []
+  }
+  if (cap.modelCatalog === 'video') {
+    return catalog.value.videoProviders.find(p => p.id === capProviders[key])?.models || []
+  }
   return chatModels.value
+}
+
+function providerOptions(key: string) {
+  const cap = capabilities.find(c => c.key === key)
+  if (!cap?.modelCatalog || !catalog.value) return []
+  if (cap.modelCatalog === 'image') return catalog.value.imageProviders
+  if (cap.modelCatalog === 'video') return catalog.value.videoProviders
+  return catalog.value.chatProviders
+}
+
+function onProviderChange(key: string) {
+  if (key === 'chat') {
+    provider.value = capProviders.chat
+  }
+  modelInputs[key] = ''
 }
 
 function toggleCustomModel(key: string) {
@@ -62,6 +80,10 @@ async function refresh() {
   try {
     configs.value = await getAiConfigs()
     catalog.value = await getModelCatalog()
+    capProviders.chat = entry('chat')?.provider || 'ark'
+    provider.value = capProviders.chat
+    capProviders.image = entry('image')?.provider || 'siliconflow'
+    capProviders.video = entry('video')?.provider || 'ark'
   } finally {
     loading.value = false
   }
@@ -108,15 +130,13 @@ async function saveModelCap(key: string) {
     return
   }
   const payload: { model: string; provider?: string; baseUrl?: string } = { model }
-  if (key === 'chat') {
-    payload.provider = provider.value
-    if (provider.value === 'custom') {
-      if (!customBaseUrl.value.trim()) {
-        ElMessage.warning('自定义服务商需要填写 baseUrl')
-        return
-      }
-      payload.baseUrl = customBaseUrl.value.trim()
+  payload.provider = key === 'chat' ? provider.value : capProviders[key]
+  if (key === 'chat' && provider.value === 'custom') {
+    if (!customBaseUrl.value.trim()) {
+      ElMessage.warning('自定义服务商需要填写 baseUrl')
+      return
     }
+    payload.baseUrl = customBaseUrl.value.trim()
   }
   savingModel.value = key
   try {
@@ -153,7 +173,7 @@ onMounted(() => { refresh() })
   <div>
     <h1 class="page-title">API Key 与模型设置</h1>
     <p class="page-subtitle">
-      按能力配置你自己的 API Key 与模型；模型列表与服务商对应（聊天能力选择服务商后，只显示该服务商的模型）。
+      按能力配置你自己的 API Key 与模型；模型列表与服务商对应（选择服务商后，只显示该服务商的模型）。
       模型支持下拉选择，也可以切换到"自定义"直接输入目录外的模型名。
       未配置的能力自动回退到后端默认。
     </p>
@@ -183,16 +203,16 @@ onMounted(() => { refresh() })
         </div>
 
         <template v-if="cap.modelCatalog">
-          <div v-if="cap.key === 'chat'" class="cap-row model-row">
+          <div class="cap-row model-row">
             <span class="muted">服务商：</span>
-            <el-select v-model="provider" style="width: 220px;">
-              <el-option v-for="p in catalog?.chatProviders || []" :key="p.id" :label="p.name" :value="p.id" />
+            <el-select v-model="capProviders[cap.key]" style="width: 240px;" @change="onProviderChange(cap.key)">
+              <el-option v-for="p in providerOptions(cap.key)" :key="p.id" :label="p.name" :value="p.id" />
             </el-select>
-            <template v-if="provider === 'custom'">
+            <template v-if="cap.key === 'chat' && capProviders[cap.key] === 'custom'">
               <span class="muted">baseUrl：</span>
               <el-input v-model="customBaseUrl" placeholder="https://your-endpoint/v1" style="width: 320px;" />
             </template>
-            <span v-else class="muted mono">{{ selectedProvider?.baseUrl }}</span>
+            <span v-else class="muted mono">{{ providerOptions(cap.key).find(p => p.id === capProviders[cap.key])?.baseUrl }}</span>
           </div>
           <div class="cap-row model-row">
             <span class="muted">{{ cap.modelLabel }}：</span>
