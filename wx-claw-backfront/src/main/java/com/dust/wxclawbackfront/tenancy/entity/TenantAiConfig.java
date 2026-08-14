@@ -32,10 +32,6 @@ public class TenantAiConfig {
     @Column(name = "image_api_key", columnDefinition = "TEXT")
     private String imageApiKey;
 
-    /** 视频生成（火山方舟 Seedance） */
-    @Column(name = "video_api_key", columnDefinition = "TEXT")
-    private String videoApiKey;
-
     /** 视频生成（阿里云通义万相 DashScope） */
     @Column(name = "video_dashscope_api_key", columnDefinition = "TEXT")
     private String videoDashscopeApiKey;

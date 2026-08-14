@@ -10,9 +10,8 @@ const loading = ref(false)
 const saving = ref<string | null>(null)
 
 const capabilities = [
-  { key: 'chat', title: '文本对话/理解', desc: '火山方舟 OpenAI 兼容：对话、图片理解、向量记忆默认' },
+  { key: 'chat', title: '火山方舟 API Key', desc: '一个 Key 通用：文本对话、图片理解、视频生成（Seedance）、向量记忆' },
   { key: 'image', title: '图片生成', desc: 'SiliconFlow（Kolors）' },
-  { key: 'video', title: '视频生成', desc: '火山方舟 Seedance' },
   { key: 'videoDashscope', title: '视频生成（阿里云）', desc: '通义万相 DashScope' },
   { key: 'tts', title: '语音合成', desc: '火山引擎 TTS' },
   { key: 'search', title: '联网搜索', desc: '博查 Bocha' },

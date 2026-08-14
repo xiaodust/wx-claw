@@ -28,9 +28,6 @@ public class TenantAiKeyProvider {
     @Value("${wxclaw.ai.image.generate.api-key:${spring.ai.openai.api-key:}}")
     private String defaultImageKey;
 
-    @Value("${wxclaw.ai.video-gen.ark.api-key:${spring.ai.openai.api-key:}}")
-    private String defaultVideoKey;
-
     @Value("${wxclaw.ai.video-gen.dashscope.api-key:}")
     private String defaultVideoDashscopeKey;
 
@@ -54,9 +51,12 @@ public class TenantAiKeyProvider {
         return resolve(currentTenantId(), TenantAiConfig::getImageApiKey, defaultImageKey);
     }
 
-    /** 视频生成（火山方舟 Seedance）。 */
+    /**
+     * 视频生成（火山方舟 Seedance）：与对话共用同一个 Ark API Key，
+     * 无需用户单独配置。
+     */
     public String videoKey() {
-        return resolve(currentTenantId(), TenantAiConfig::getVideoApiKey, defaultVideoKey);
+        return chatKey();
     }
 
     /** 视频生成（阿里云通义万相 DashScope）。 */

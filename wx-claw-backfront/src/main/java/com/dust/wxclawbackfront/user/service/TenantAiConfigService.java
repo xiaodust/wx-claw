@@ -28,12 +28,10 @@ public class TenantAiConfigService {
     private final TenantChatClientFactory chatClientFactory;
 
     private static final Map<String, Capability> CAPABILITIES = Map.of(
-            "chat", new Capability("文本对话/理解（火山方舟 OpenAI 兼容）",
+            "chat", new Capability("火山方舟（文本对话/图片理解/视频 Seedance/向量记忆）",
                     TenantAiConfig::getApiKey, TenantAiConfig::setApiKey),
             "image", new Capability("图片生成（SiliconFlow）",
                     TenantAiConfig::getImageApiKey, TenantAiConfig::setImageApiKey),
-            "video", new Capability("视频生成（火山方舟 Seedance）",
-                    TenantAiConfig::getVideoApiKey, TenantAiConfig::setVideoApiKey),
             "videoDashscope", new Capability("视频生成（阿里云通义万相 DashScope）",
                     TenantAiConfig::getVideoDashscopeApiKey, TenantAiConfig::setVideoDashscopeApiKey),
             "tts", new Capability("语音合成（火山引擎 TTS）",
@@ -46,7 +44,6 @@ public class TenantAiConfigService {
         return new UserDtos.AiConfigs(
                 entry(config, "chat"),
                 entry(config, "image"),
-                entry(config, "video"),
                 entry(config, "videoDashscope"),
                 entry(config, "tts"),
                 entry(config, "search"));

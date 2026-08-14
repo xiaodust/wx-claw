@@ -26,7 +26,6 @@ class TenantAiKeyProviderTest {
         provider = new TenantAiKeyProvider(repository);
         ReflectionTestUtils.setField(provider, "defaultChatKey", "sk-default-chat");
         ReflectionTestUtils.setField(provider, "defaultImageKey", "sk-default-image");
-        ReflectionTestUtils.setField(provider, "defaultVideoKey", "sk-default-video");
         ReflectionTestUtils.setField(provider, "defaultVideoDashscopeKey", "sk-default-dash");
         ReflectionTestUtils.setField(provider, "defaultTtsKey", "sk-default-tts");
         ReflectionTestUtils.setField(provider, "defaultSearchKey", "sk-default-search");
@@ -67,7 +66,7 @@ class TenantAiKeyProviderTest {
 
         assertThat(provider.chatKey()).isEqualTo("sk-default-chat");
         assertThat(provider.imageKey()).isEqualTo("sk-default-image");
-        assertThat(provider.videoKey()).isEqualTo("sk-default-video");
+        assertThat(provider.videoKey()).isEqualTo("sk-default-chat");
         assertThat(provider.videoDashscopeKey()).isEqualTo("sk-default-dash");
         assertThat(provider.ttsKey()).isEqualTo("sk-default-tts");
         assertThat(provider.searchKey()).isEqualTo("sk-default-search");

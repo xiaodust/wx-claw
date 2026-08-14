@@ -29,7 +29,6 @@ export interface AiConfigEntry {
 export interface AiConfigs {
   chat: AiConfigEntry
   image: AiConfigEntry
-  video: AiConfigEntry
   videoDashscope: AiConfigEntry
   tts: AiConfigEntry
   search: AiConfigEntry

@@ -48,7 +48,8 @@ class TenantAiConfigServiceTest {
         assertThat(configs.chat().configured()).isFalse();
         assertThat(configs.chat().apiKeyMasked()).isNull();
         assertThat(configs.image().provider()).contains("SiliconFlow");
-        assertThat(configs.video().provider()).contains("Seedance");
+        assertThat(configs.chat().provider()).contains("火山方舟");
+        assertThat(configs.videoDashscope().provider()).contains("通义万相");
         assertThat(configs.tts().provider()).contains("TTS");
         assertThat(configs.search().provider()).contains("博查");
     }

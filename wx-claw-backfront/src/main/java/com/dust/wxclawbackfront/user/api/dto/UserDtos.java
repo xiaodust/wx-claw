@@ -22,7 +22,7 @@ public final class UserDtos {
     public record AiConfigEntry(boolean configured, String apiKeyMasked, String provider) {
     }
 
-    public record AiConfigs(AiConfigEntry chat, AiConfigEntry image, AiConfigEntry video,
+    public record AiConfigs(AiConfigEntry chat, AiConfigEntry image,
                             AiConfigEntry videoDashscope, AiConfigEntry tts, AiConfigEntry search) {
     }
 
