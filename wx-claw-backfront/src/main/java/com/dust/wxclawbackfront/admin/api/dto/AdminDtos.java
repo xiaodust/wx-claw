@@ -33,6 +33,9 @@ public final class AdminDtos {
                                              LocalDateTime expiresAt, String remark) {
     }
 
+    public record ChangeAdminPasswordRequest(String oldPassword, String newPassword) {
+    }
+
     public record BotStatus(String tenantId, String botId, String displayName, String channel,
                             String configuredStatus, String runtimeStatus, Instant connectedAt,
                             Instant statusChangedAt, Instant lastPollAt, Instant lastMessageAt,

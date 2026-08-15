@@ -1,6 +1,7 @@
 package com.dust.wxclawbackfront.tenancy.service;
 
 import com.dust.wxclawbackfront.tenancy.TenantContext;
+import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.AdminLoginResult;
 import com.dust.wxclawbackfront.tenancy.entity.AdminAccount;
 import com.dust.wxclawbackfront.tenancy.entity.AdminSession;
@@ -14,6 +15,7 @@ import org.springframework.http.HttpStatus;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -122,6 +124,57 @@ class AdminAuthServiceTest {
                 .isInstanceOf(TenantRegistrationException.class)
                 .satisfies(ex -> assertThat(((TenantRegistrationException) ex).status())
                         .isEqualTo(HttpStatus.TOO_MANY_REQUESTS));
+    }
+
+    @Test
+    void changePasswordUpdatesHashAndRevokesSessions() {
+        AdminAccount account = account("ops");
+        when(accountRepository.findByUsername("ops")).thenReturn(Optional.of(account));
+        when(secretHasher.matches("old-pass-123", "hash")).thenReturn(true);
+        when(secretHasher.hash("new-pass-456")).thenReturn("new-hash");
+        when(accountRepository.save(any(AdminAccount.class))).thenAnswer(inv -> inv.getArgument(0));
+        TenantContextHolder.set(new TenantContext("platform", "ADMIN", null, "admin:ops", null,
+                Set.of("PLATFORM_ADMIN"), Set.of("*"), "req"));
+
+        service.changePassword("old-pass-123", "new-pass-456");
+
+        assertThat(account.getPasswordHash()).isEqualTo("new-hash");
+        verify(sessionRepository).deleteByAdminAccountId(1L);
+        TenantContextHolder.clear();
+    }
+
+    @Test
+    void changePasswordRejectsWrongOldPassword() {
+        AdminAccount account = account("ops");
+        when(accountRepository.findByUsername("ops")).thenReturn(Optional.of(account));
+        when(secretHasher.matches("wrong-pass", "hash")).thenReturn(false);
+        TenantContextHolder.set(new TenantContext("platform", "ADMIN", null, "admin:ops", null,
+                Set.of(), Set.of(), "req"));
+
+        assertThatThrownBy(() -> service.changePassword("wrong-pass", "new-pass-456"))
+                .isInstanceOf(TenantRegistrationException.class)
+                .satisfies(ex -> {
+                    TenantRegistrationException tre = (TenantRegistrationException) ex;
+                    assertThat(tre.errorCode()).isEqualTo("INVALID_CREDENTIALS");
+                    assertThat(tre.status()).isEqualTo(HttpStatus.UNAUTHORIZED);
+                });
+        verify(sessionRepository, never()).deleteByAdminAccountId(any());
+        TenantContextHolder.clear();
+    }
+
+    @Test
+    void changePasswordRejectsApiKeyContext() {
+        TenantContextHolder.set(new TenantContext("default", "REST", null, "api:default", null,
+                Set.of(), Set.of(), "req"));
+
+        assertThatThrownBy(() -> service.changePassword("old-pass-123", "new-pass-456"))
+                .isInstanceOf(TenantRegistrationException.class)
+                .satisfies(ex -> {
+                    TenantRegistrationException tre = (TenantRegistrationException) ex;
+                    assertThat(tre.errorCode()).isEqualTo("VALIDATION_ERROR");
+                    assertThat(tre.getMessage()).contains("管理员账号登录");
+                });
+        TenantContextHolder.clear();
     }
 
     private AdminAccount account(String username) {

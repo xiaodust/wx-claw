@@ -11,3 +11,4 @@ export const getInvocation = (id:string) => api.get<InvocationDetail>(`/invocati
 export const getInviteCodes = () => api.get<InviteCode[]>('/invite-codes').then(r => r.data)
 export const generateInviteCodes = (payload: GenerateInviteCodesRequest) => api.post<{ codes:string[] }>('/invite-codes', payload).then(r => r.data)
 export const disableInviteCode = (code:string) => api.delete(`/invite-codes/${encodeURIComponent(code)}`).then(r => r.data)
+export const changeAdminPassword = (oldPassword:string, newPassword:string) => api.post('/account/password', { oldPassword, newPassword }).then(r => r.data)

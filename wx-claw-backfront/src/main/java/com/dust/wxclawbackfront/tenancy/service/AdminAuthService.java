@@ -112,6 +112,41 @@ public class AdminAuthService {
                 null, ADMIN_ROLES, SUPER_ADMIN_SCOPES, UUID.randomUUID().toString());
     }
 
+    /** 管理员修改密码：校验旧密码后更新哈希，并吊销该管理员全部会话。 */
+    @Transactional
+    public void changePassword(String oldPassword, String newPassword) {
+        TenantContext context = TenantContextHolder.require();
+        String username = adminUsername(context);
+        AdminAccount account = username == null
+                ? null
+                : accountRepository.findByUsername(username).orElse(null);
+        boolean passwordOk = account != null && oldPassword != null
+                && secretHasher.matches(oldPassword, account.getPasswordHash());
+        if (account == null || !"ACTIVE".equals(account.getStatus()) || !passwordOk) {
+            throw new TenantRegistrationException(
+                    username == null ? "VALIDATION_ERROR" : "INVALID_CREDENTIALS",
+                    username == null ? "请使用管理员账号登录后修改密码" : "当前密码不正确",
+                    username == null ? HttpStatus.BAD_REQUEST : HttpStatus.UNAUTHORIZED);
+        }
+        String password = newPassword == null ? "" : newPassword.trim();
+        if (password.length() < 8 || password.length() > 128) {
+            throw new TenantRegistrationException("VALIDATION_ERROR", "新密码长度需为 8-128 位",
+                    HttpStatus.BAD_REQUEST);
+        }
+        account.setPasswordHash(secretHasher.hash(password));
+        accountRepository.save(account);
+        long revoked = sessionRepository.deleteByAdminAccountId(account.getId());
+        log.info("管理员修改密码成功: accountId={}, 吊销会话={}", account.getId(), revoked);
+    }
+
+    private String adminUsername(TenantContext context) {
+        String internalUserId = context == null ? null : context.internalUserId();
+        if (internalUserId == null || !internalUserId.startsWith("admin:")) {
+            return null;
+        }
+        return internalUserId.substring("admin:".length());
+    }
+
     private String newSessionToken() {
         byte[] bytes = new byte[32];
         secureRandom.nextBytes(bytes);
