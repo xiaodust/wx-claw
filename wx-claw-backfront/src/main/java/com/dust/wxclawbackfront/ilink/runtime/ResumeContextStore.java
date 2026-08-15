@@ -114,7 +114,7 @@ public class ResumeContextStore {
                     }
                     return legacy;
                 }
-                log.info("ResumeContext 不存在（DB），将从空状态启动: tenantId={}, botId={}",
+                log.debug("ResumeContext 不存在（DB），将从空状态启动: tenantId={}, botId={}",
                         key.tenantId(), key.botId());
                 return null;
             } catch (Exception e) {
