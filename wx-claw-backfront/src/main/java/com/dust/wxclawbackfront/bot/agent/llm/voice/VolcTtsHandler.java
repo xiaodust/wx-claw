@@ -91,7 +91,7 @@ public class VolcTtsHandler {
         }
         String key = keyProvider.ttsKey() == null ? null : keyProvider.ttsKey().trim();
         if (key == null || key.isBlank()) {
-            return new VolcTtsResult(null, null, "未配置 wxclaw.ai.tts.api-key", null, null, null, null, null, null);
+            return new VolcTtsResult(null, null, "语音合成未配置 API Key，请在用户控制台「设置」页配置", null, null, null, null, null, null);
         }
         String actualModel = model == null ? null : model.trim();
         if (actualModel == null || actualModel.isBlank()) {
@@ -289,7 +289,7 @@ public class VolcTtsHandler {
             return hint;
         }
         if (statusCode == 401) {
-            return "API Key 无效或未配置，请在豆包语音控制台核对 API Key（设置页「语音合成」或后端 wxclaw.ai.tts.api-key）";
+            return "API Key 无效或未配置，请在豆包语音控制台核对 API Key（设置页「语音合成」）";
         }
         String body = responseText == null ? "" : responseText.trim();
         if (body.length() > 200) {

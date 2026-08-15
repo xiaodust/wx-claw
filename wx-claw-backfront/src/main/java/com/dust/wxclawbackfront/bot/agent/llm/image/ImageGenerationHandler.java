@@ -79,7 +79,7 @@ public class ImageGenerationHandler {
                 ? "" : "/") + "images/generations";
         String key = keyProvider.imageKey() == null ? null : keyProvider.imageKey().trim();
         if (key == null || key.isBlank()) {
-            return new ImageGenerationResult(generationModel, null, null, null, null, null, null, null, "未配置生图 API Key");
+            return new ImageGenerationResult(generationModel, null, null, null, null, null, null, null, "图片生成未配置 API Key，请在用户控制台「设置」页配置");
         }
 
         Map<String, Object> auditRequest = new LinkedHashMap<>();

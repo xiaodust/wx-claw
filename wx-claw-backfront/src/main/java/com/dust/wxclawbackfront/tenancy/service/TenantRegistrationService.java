@@ -1,15 +1,10 @@
 package com.dust.wxclawbackfront.tenancy.service;
 
-import com.dust.wxclawbackfront.tenancy.TenantContext;
-import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.RegisterTenantRequest;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.RegisteredTenant;
 import com.dust.wxclawbackfront.tenancy.entity.Tenant;
-import com.dust.wxclawbackfront.tenancy.entity.TenantApiCredential;
 import com.dust.wxclawbackfront.tenancy.repository.TenantAccountRepository;
-import com.dust.wxclawbackfront.tenancy.repository.TenantApiCredentialRepository;
 import com.dust.wxclawbackfront.tenancy.repository.TenantRepository;
-import com.dust.wxclawbackfront.tenancy.security.ApiSecretHasher;
 import com.dust.wxclawbackfront.tenancy.security.PublicAuthRateLimiter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,16 +14,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.util.HexFormat;
-import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
  * 租户自助注册：创建租户并签发首个控制台 API Key。
  *
- * <p>安全约束：租户编码必须全局唯一；API Key 的 secret 部分只以 PBKDF2 哈希落库，
- * 原始 Key 仅在响应中返回一次，禁止写入日志；写租户私有实体前建立独立租户上下文，
- * 结束后恢复或清理，避免污染请求线程。</p>
+ * <p>安全约束：租户编码与用户名全局唯一；注册不签发 API Key（控制台使用用户名密码登录），
+ * 邀请码与邮箱验证码原子消费，任一步失败整体回滚。</p>
  */
 @Slf4j
 @Service
@@ -37,15 +30,10 @@ public class TenantRegistrationService {
     private static final Pattern TENANT_CODE_PATTERN = Pattern.compile("^[a-z0-9][a-z0-9-]{0,31}$");
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
     private static final Pattern USERNAME_PATTERN = Pattern.compile("^[a-z0-9_-]{3,32}$");
-    private static final String CONSOLE_SCOPES =
-            "userbot:read,userbot:write,conversation:read,aiconfig:read,aiconfig:write,"
-                    + "account:read,account:write";
 
     private final TenantRepository tenantRepository;
-    private final TenantApiCredentialRepository credentialRepository;
     private final TenantAccountRepository accountRepository;
     private final TenantAuthService authService;
-    private final ApiSecretHasher secretHasher;
     private final PublicAuthRateLimiter rateLimiter;
     private final InviteCodeService inviteCodeService;
     private final EmailVerificationService emailVerificationService;
@@ -53,19 +41,15 @@ public class TenantRegistrationService {
     private final boolean requireInvite;
 
     public TenantRegistrationService(TenantRepository tenantRepository,
-                                     TenantApiCredentialRepository credentialRepository,
                                      TenantAccountRepository accountRepository,
                                      TenantAuthService authService,
-                                     ApiSecretHasher secretHasher,
                                      PublicAuthRateLimiter rateLimiter,
                                      InviteCodeService inviteCodeService,
                                      EmailVerificationService emailVerificationService,
                                      @Value("${wxclaw.api.registration.require-invite:true}") boolean requireInvite) {
         this.tenantRepository = tenantRepository;
-        this.credentialRepository = credentialRepository;
         this.accountRepository = accountRepository;
         this.authService = authService;
-        this.secretHasher = secretHasher;
         this.rateLimiter = rateLimiter;
         this.inviteCodeService = inviteCodeService;
         this.emailVerificationService = emailVerificationService;
@@ -110,36 +94,13 @@ public class TenantRegistrationService {
         tenant.setPlanCode("FREE");
         tenantRepository.save(tenant);
 
-        // 与启动引导一致：创建租户私有实体前建立租户上下文，结束后恢复原上下文。
-        TenantContext previous = TenantContextHolder.getNullable();
-        TenantContextHolder.set(new TenantContext(tenantId, "REST", null, "api:register", null,
-                Set.of("TENANT_ADMIN"), Set.of("*"), UUID.randomUUID().toString()));
-        String secret;
-        TenantApiCredential credential;
-        try {
-            secret = randomHex(32);
-            credential = new TenantApiCredential();
-            credential.setCredentialId(uniqueCredentialId());
-            credential.setName("控制台 API Key");
-            credential.setSecretHash(secretHasher.hash(secret));
-            credential.setScopes(CONSOLE_SCOPES);
-            credential.setStatus("ACTIVE");
-            credentialRepository.save(credential);
-            log.info("租户注册成功: tenantId={}, tenantCode={}, credentialId={}", tenantId, tenantCode, credential.getCredentialId());
-        } finally {
-            if (previous == null) {
-                TenantContextHolder.clear();
-            } else {
-                TenantContextHolder.set(previous);
-            }
-        }
-        // 账号与会话在凭据之后创建；注册成功即返回会话 token，前端可一键进入控制台。
+        log.info("租户注册成功: tenantId={}, tenantCode={}", tenantId, tenantCode);
+        // 注册成功即签发会话 token，前端可一键进入控制台。
         TenantAuthService.AccountIssue accountIssue = username == null
                 ? null
                 : authService.createAccountAndIssueSession(tenantId, username, request.password().trim(), contactEmail);
         return new RegisteredTenant(tenantId, tenantCode, tenantName, tenant.getStatus(),
-                tenant.getCreatedAt(), credential.getCredentialId(),
-                credential.getCredentialId() + "." + secret, CONSOLE_SCOPES,
+                tenant.getCreatedAt(),
                 accountIssue == null ? null : accountIssue.username(),
                 accountIssue == null ? null : accountIssue.sessionToken(),
                 accountIssue == null ? null : accountIssue.expiresAt());
@@ -212,16 +173,6 @@ public class TenantRegistrationService {
             throw new TenantRegistrationException("VALIDATION_ERROR",
                     "密码长度需为 8-128 位", HttpStatus.BAD_REQUEST);
         }
-    }
-
-    private String uniqueCredentialId() {
-        for (int i = 0; i < 5; i++) {
-            String candidate = "tk_" + randomHex(8);
-            if (credentialRepository.findByCredentialId(candidate).isEmpty()) {
-                return candidate;
-            }
-        }
-        throw new TenantRegistrationException("CONFLICT", "凭据创建失败，请稍后重试", HttpStatus.CONFLICT);
     }
 
     private String randomHex(int bytes) {

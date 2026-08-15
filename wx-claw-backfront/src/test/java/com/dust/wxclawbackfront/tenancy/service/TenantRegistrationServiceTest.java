@@ -4,11 +4,8 @@ import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.RegisterTenantRequest;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.RegisteredTenant;
 import com.dust.wxclawbackfront.tenancy.entity.Tenant;
-import com.dust.wxclawbackfront.tenancy.entity.TenantApiCredential;
 import com.dust.wxclawbackfront.tenancy.repository.TenantAccountRepository;
-import com.dust.wxclawbackfront.tenancy.repository.TenantApiCredentialRepository;
 import com.dust.wxclawbackfront.tenancy.repository.TenantRepository;
-import com.dust.wxclawbackfront.tenancy.security.ApiSecretHasher;
 import com.dust.wxclawbackfront.tenancy.security.PublicAuthRateLimiter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,19 +30,17 @@ import static org.mockito.Mockito.when;
 class TenantRegistrationServiceTest {
 
     private final TenantRepository tenantRepository = mock(TenantRepository.class);
-    private final TenantApiCredentialRepository credentialRepository = mock(TenantApiCredentialRepository.class);
     private final TenantAccountRepository accountRepository = mock(TenantAccountRepository.class);
     private final TenantAuthService authService = mock(TenantAuthService.class);
-    private final ApiSecretHasher secretHasher = mock(ApiSecretHasher.class);
     private final PublicAuthRateLimiter rateLimiter = mock(PublicAuthRateLimiter.class);
     private final InviteCodeService inviteCodeService = mock(InviteCodeService.class);
     private final EmailVerificationService emailVerificationService = mock(EmailVerificationService.class);
     private final TenantRegistrationService service = new TenantRegistrationService(
-            tenantRepository, credentialRepository, accountRepository, authService, secretHasher,
-            rateLimiter, inviteCodeService, emailVerificationService, false);
+            tenantRepository, accountRepository, authService, rateLimiter,
+            inviteCodeService, emailVerificationService, false);
     private final TenantRegistrationService inviteRequiredService = new TenantRegistrationService(
-            tenantRepository, credentialRepository, accountRepository, authService, secretHasher,
-            rateLimiter, inviteCodeService, emailVerificationService, true);
+            tenantRepository, accountRepository, authService, rateLimiter,
+            inviteCodeService, emailVerificationService, true);
 
     @BeforeEach
     void setUp() {
@@ -63,11 +58,9 @@ class TenantRegistrationServiceTest {
     }
 
     @Test
-    void registersActiveTenantWithConsoleScopedKeyAndAccountSession() {
+    void registersActiveTenantWithAccountAndSession() {
         when(tenantRepository.findByTenantCode(anyString())).thenReturn(Optional.empty());
-        when(credentialRepository.findByCredentialId(anyString())).thenReturn(Optional.empty());
         when(accountRepository.existsByUsername("ops")).thenReturn(false);
-        when(secretHasher.hash(anyString())).thenAnswer(inv -> "hashed:" + inv.getArgument(0));
         when(authService.createAccountAndIssueSession(anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(new TenantAuthService.AccountIssue("ops", "sess_test", LocalDateTime.now().plusDays(7)));
 
@@ -83,17 +76,6 @@ class TenantRegistrationServiceTest {
         assertThat(tenant.getPlanCode()).isEqualTo("FREE");
         assertThat(tenant.getTenantCode()).startsWith("t");
 
-        ArgumentCaptor<TenantApiCredential> credentialCaptor = ArgumentCaptor.forClass(TenantApiCredential.class);
-        verify(credentialRepository).save(credentialCaptor.capture());
-        TenantApiCredential credential = credentialCaptor.getValue();
-        assertThat(credential.getCredentialId()).startsWith("tk_");
-        assertThat(credential.getSecretHash()).startsWith("hashed:");
-        assertThat(credential.getScopes())
-                .contains("userbot:read", "userbot:write", "conversation:read",
-                        "aiconfig:read", "aiconfig:write", "account:read", "account:write");
-        assertThat(credential.getStatus()).isEqualTo("ACTIVE");
-
-        assertThat(result.apiKey()).startsWith(credential.getCredentialId() + ".");
         assertThat(result.username()).isEqualTo("ops");
         assertThat(result.sessionToken()).isEqualTo("sess_test");
         verify(authService).createAccountAndIssueSession(anyString(), eq("ops"), eq("secret-1234"), eq("ops@example.com"));
@@ -105,8 +87,6 @@ class TenantRegistrationServiceTest {
     @Test
     void skipsAccountWhenUsernameNotProvided() {
         when(tenantRepository.findByTenantCode(anyString())).thenReturn(Optional.empty());
-        when(credentialRepository.findByCredentialId(anyString())).thenReturn(Optional.empty());
-        when(secretHasher.hash(anyString())).thenReturn("hash");
 
         RegisteredTenant result = service.register(
                 req("老租户", null, "a@b.com", null, null, null, "123456"), "1.2.3.4");
@@ -119,8 +99,6 @@ class TenantRegistrationServiceTest {
     @Test
     void usesProvidedTenantCodeWhenUnique() {
         when(tenantRepository.findByTenantCode("my-org")).thenReturn(Optional.empty());
-        when(credentialRepository.findByCredentialId(anyString())).thenReturn(Optional.empty());
-        when(secretHasher.hash(anyString())).thenReturn("hash");
 
         RegisteredTenant result = service.register(
                 req("我的租户", "My-Org ", "a@b.com", null, null, null, "123456"), "127.0.0.1");
@@ -235,8 +213,6 @@ class TenantRegistrationServiceTest {
     @Test
     void consumesInviteCodeWhenRequired() {
         when(tenantRepository.findByTenantCode(anyString())).thenReturn(Optional.empty());
-        when(credentialRepository.findByCredentialId(anyString())).thenReturn(Optional.empty());
-        when(secretHasher.hash(anyString())).thenReturn("hash");
         when(inviteCodeService.consume("welcome-2026")).thenReturn(true);
 
         RegisteredTenant result = inviteRequiredService.register(
@@ -263,8 +239,6 @@ class TenantRegistrationServiceTest {
     @Test
     void skipsInviteCheckWhenNotRequired() {
         when(tenantRepository.findByTenantCode(anyString())).thenReturn(Optional.empty());
-        when(credentialRepository.findByCredentialId(anyString())).thenReturn(Optional.empty());
-        when(secretHasher.hash(anyString())).thenReturn("hash");
 
         service.register(req("租户", null, "a@b.com", null, null, null, "123456"), "1.2.3.4");
 

@@ -13,7 +13,6 @@ const fieldErrors = reactive<Record<string, string>>({})
 const submitting = ref(false)
 const serverError = ref('')
 const result = ref<RegisterTenantResult | null>(null)
-const copied = ref(false)
 const sendingCode = ref(false)
 const countdown = ref(0)
 let countdownTimer: number | undefined
@@ -128,22 +127,15 @@ async function sendCode() {
   }
 }
 
-async function copyKey() {
-  if (!result.value) return
-  try {
-    await navigator.clipboard.writeText(result.value.apiKey)
-    copied.value = true
-    window.setTimeout(() => { copied.value = false }, 2000)
-  } catch {
-    // 剪贴板被拒绝时提示用户手动选择复制
-    copied.value = false
-  }
-}
-
 function enterConsole() {
   if (!result.value) return
-  authStore.login(result.value.sessionToken || result.value.apiKey)
-  router.push('/bots')
+  const token = result.value.sessionToken
+  if (token) {
+    authStore.login(token)
+    router.push('/bots')
+  } else {
+    router.push('/login')
+  }
 }
 </script>
 
@@ -312,25 +304,7 @@ function enterConsole() {
         <div class="alert-box ok-box">
           <b>账号已就绪</b>：控制台支持用户名 + 密码登录，不再依赖一次性 API Key。
         </div>
-
-        <div class="key-block">
-          <div class="key-head">
-            <span>接口 API Key</span>
-            <span class="key-warn mono">仅显示一次</span>
-          </div>
-          <code class="key-value">{{ result.apiKey }}</code>
-          <div class="key-actions">
-            <button class="btn copy-btn" type="button" @click="copyKey">
-              {{ copied ? '已复制 ✓' : '复制 Key' }}
-            </button>
-            <button class="btn ghost-btn" type="button" @click="enterConsole">进入控制台 →</button>
-          </div>
-        </div>
-
-        <div class="alert-box">
-          <b>请立即保存 API Key</b>：它只展示这一次，用于接口调用；关闭页面后无法再次查看。
-          控制台登录请使用你刚设置的用户名和密码。
-        </div>
+        <button class="submit-btn" type="button" @click="enterConsole">进入控制台 →</button>
       </div>
     </main>
 

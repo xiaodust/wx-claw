@@ -1,57 +1,66 @@
 package com.dust.wxclawbackfront.bot.agent.llm.chat;
 
 import com.dust.wxclawbackfront.bot.agent.llm.TenantAiKeyProvider;
+import com.dust.wxclawbackfront.exception.WxClawException;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 
 import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class TenantChatClientFactoryTest {
 
+    static class FactoryStub extends TenantChatClientFactory {
+        private final ChatClient client;
+
+        FactoryStub(TenantAiKeyProvider keyProvider, ChatClient client) {
+            super(keyProvider, "http://localhost", "test-model", Duration.ofSeconds(5), 2);
+            this.client = client;
+        }
+
+        @Override
+        protected ChatClient buildClient(String apiKey, String baseUrl, String model) {
+            return client;
+        }
+    }
+
     @Test
-    void fallsBackToDefaultClientWithoutTenantKey() {
-        ChatClient defaultClient = mock(ChatClient.class);
-        ChatClient.Builder builder = mock(ChatClient.Builder.class);
-        when(builder.build()).thenReturn(defaultClient);
+    void throwsWhenTenantKeyMissing() {
         TenantAiKeyProvider keyProvider = mock(TenantAiKeyProvider.class);
         when(keyProvider.chatKeyFor("tenant-a")).thenReturn(null);
-        when(keyProvider.chatKeyFor("tenant-b")).thenReturn("  ");
+        when(keyProvider.chatKeyFor("tenant-b")).thenReturn("   ");
 
-        FactoryStub factory = new FactoryStub(builder, keyProvider, defaultClient);
+        FactoryStub factory = new FactoryStub(keyProvider, mock(ChatClient.class));
 
-        assertThat(factory.clientFor("tenant-a")).isSameAs(defaultClient);
-        assertThat(factory.clientFor("tenant-b")).isSameAs(defaultClient);
-        assertThat(factory.clientFor(null)).isSameAs(defaultClient);
+        assertThatThrownBy(() -> factory.clientFor("tenant-a"))
+                .isInstanceOf(WxClawException.class)
+                .hasMessageContaining("未配置 API Key");
+        assertThatThrownBy(() -> factory.clientFor("tenant-b"))
+                .isInstanceOf(WxClawException.class);
     }
 
     @Test
     void cachesPerTenantClientAndEvicts() {
-        ChatClient defaultClient = mock(ChatClient.class);
-        ChatClient tenantClient = mock(ChatClient.class);
-        ChatClient.Builder builder = mock(ChatClient.Builder.class);
-        when(builder.build()).thenReturn(defaultClient);
         TenantAiKeyProvider keyProvider = mock(TenantAiKeyProvider.class);
         when(keyProvider.chatKeyFor("tenant-a")).thenReturn("sk-user-key");
+        ChatClient client = mock(ChatClient.class);
 
-        FactoryStub factory = new FactoryStub(builder, keyProvider, tenantClient);
+        FactoryStub factory = new FactoryStub(keyProvider, client);
 
-        assertThat(factory.clientFor("tenant-a")).isSameAs(tenantClient);
-        assertThat(factory.clientFor("tenant-a")).isSameAs(tenantClient);
+        assertThat(factory.clientFor("tenant-a")).isSameAs(client);
+        assertThat(factory.clientFor("tenant-a")).isSameAs(client);
         factory.evict("tenant-a");
-        assertThat(factory.clientFor("tenant-a")).isSameAs(tenantClient);
+        assertThat(factory.clientFor("tenant-a")).isSameAs(client);
     }
 
     @Test
     void buildClientProvidesBothSyncAndAsyncClients() {
-        ChatClient.Builder builder = mock(ChatClient.Builder.class);
-        when(builder.build()).thenReturn(mock(ChatClient.class));
-
         TenantChatClientFactory factory = new TenantChatClientFactory(
-                builder, mock(TenantAiKeyProvider.class), "http://localhost", "test-model",
+                mock(TenantAiKeyProvider.class), "http://localhost", "test-model",
                 Duration.ofSeconds(5), 2);
 
         // OpenAiChatModel 构建时会同时创建 sync/async client；
@@ -59,21 +68,5 @@ class TenantChatClientFactoryTest {
         ChatClient client = factory.buildClient("sk-test-key", "http://localhost", "test-model");
 
         assertThat(client).isNotNull();
-    }
-
-    private static final class FactoryStub extends TenantChatClientFactory {
-        private final ChatClient tenantClient;
-
-        private FactoryStub(ChatClient.Builder builder, TenantAiKeyProvider keyProvider,
-                            ChatClient tenantClient) {
-            super(builder, keyProvider, "http://localhost", "test-model",
-                    Duration.ofSeconds(5), 2);
-            this.tenantClient = tenantClient;
-        }
-
-        @Override
-        protected ChatClient buildClient(String apiKey, String baseUrl, String model) {
-            return tenantClient;
-        }
     }
 }

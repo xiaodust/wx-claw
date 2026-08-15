@@ -5,8 +5,8 @@ import java.time.LocalDateTime;
 /**
  * 租户自助注册（公开 API）的请求/响应契约。
  *
- * <p>注册是租户进入系统的唯一自助入口，返回的 apiKey 只在注册成功时展示一次，
- * 数据库仅保存其 PBKDF2 哈希，响应之后服务端无法再还原原始 Key。</p>
+ * <p>注册是租户进入系统的唯一自助入口：控制台使用用户名密码登录，
+ * 注册不再签发 API Key（API Key 仅由 Bootstrap/管理端凭据体系负责）。</p>
  */
 public final class PublicTenantDtos {
     private PublicTenantDtos() {
@@ -21,8 +21,8 @@ public final class PublicTenantDtos {
     }
 
     public record RegisteredTenant(String tenantId, String tenantCode, String tenantName, String status,
-                                   LocalDateTime createdAt, String credentialId, String apiKey, String scopes,
-                                   String username, String sessionToken, LocalDateTime sessionExpiresAt) {
+                                   LocalDateTime createdAt, String username, String sessionToken,
+                                   LocalDateTime sessionExpiresAt) {
     }
 
     public record LoginRequest(String username, String password) {

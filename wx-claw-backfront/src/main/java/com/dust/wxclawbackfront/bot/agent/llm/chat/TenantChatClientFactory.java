@@ -1,6 +1,7 @@
 package com.dust.wxclawbackfront.bot.agent.llm.chat;
 
 import com.dust.wxclawbackfront.bot.agent.llm.TenantAiKeyProvider;
+import com.dust.wxclawbackfront.exception.WxClawException;
 import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import com.openai.client.OpenAIClient;
 import com.openai.client.OpenAIClientAsync;
@@ -19,8 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 /**
- * 按租户解析 {@link ChatClient}：用户配置了自己的 API Key 时使用独立 client（缓存），
- * 否则回退到后端默认 client。
+ * 按租户解析 {@link ChatClient}：租户必须配置自己的 API Key，否则拒绝调用。
  *
  * <p>Key 更新后调用 {@link #evict(String)} 清除缓存，使新 Key 立即生效。</p>
  */
@@ -28,7 +28,6 @@ import java.util.concurrent.ConcurrentMap;
 @Service
 public class TenantChatClientFactory {
 
-    private final ChatClient defaultClient;
     private final TenantAiKeyProvider keyProvider;
     private final ConcurrentMap<String, ChatClient> tenantClients = new ConcurrentHashMap<>();
 
@@ -37,13 +36,11 @@ public class TenantChatClientFactory {
     private final Duration timeout;
     private final int maxRetries;
 
-    public TenantChatClientFactory(ChatClient.Builder chatClientBuilder,
-                                   TenantAiKeyProvider keyProvider,
+    public TenantChatClientFactory(TenantAiKeyProvider keyProvider,
                                    @Value("${spring.ai.openai.base-url:https://ark.cn-beijing.volces.com/api/v3}") String baseUrl,
                                    @Value("${spring.ai.openai.chat.model:}") String model,
                                    @Value("${wxclaw.ai.chat.timeout:PT25S}") Duration timeout,
                                    @Value("${spring.ai.openai.max-retries:2}") int maxRetries) {
-        this.defaultClient = chatClientBuilder.build();
         this.keyProvider = keyProvider;
         this.baseUrl = baseUrl;
         this.model = model;
@@ -59,12 +56,10 @@ public class TenantChatClientFactory {
     }
 
     public ChatClient clientFor(String tenantId) {
-        if (tenantId == null || tenantId.isBlank()) {
-            return defaultClient;
-        }
         String apiKey = keyProvider.chatKeyFor(tenantId);
         if (apiKey == null || apiKey.isBlank()) {
-            return defaultClient;
+            throw new WxClawException("AI_CONFIG_MISSING",
+                    "对话功能未配置 API Key，请在用户控制台「设置」页配置对话 API Key 后重试");
         }
         return tenantClients.computeIfAbsent(tenantId, id -> {
             log.info("为租户 {} 构建独立 LLM client", id);

@@ -52,7 +52,7 @@ public class BochaWebSearchHandler {
         }
         String key = keyProvider.searchKey() == null ? null : keyProvider.searchKey().trim();
         if (key == null || key.isBlank()) {
-            return new BochaWebSearchResult(null, null, actualQuery, freshness, count, "未配置博查 API Key（wxclaw.ai.web-search.bocha.api-key）", List.of());
+            return new BochaWebSearchResult(null, null, actualQuery, freshness, count, "联网搜索未配置 API Key，请在用户控制台「设置」页配置", List.of());
         }
         String endpoint = url == null ? null : url.trim();
         if (endpoint == null || endpoint.isBlank()) {

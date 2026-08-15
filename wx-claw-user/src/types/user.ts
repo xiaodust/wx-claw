@@ -104,9 +104,6 @@ export interface RegisterTenantResult {
   tenantName: string
   status: string
   createdAt: string | null
-  credentialId: string
-  apiKey: string
-  scopes: string
   username: string | null
   sessionToken: string | null
   sessionExpiresAt: string | null
