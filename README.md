@@ -403,6 +403,73 @@ npm run build
 
 模型调用审计默认最多保存每个请求或响应 2 MB，密钥、Token 和 Base64 媒体会在持久化前自动脱敏。
 
+
+## Docker 部署
+
+### 本地 Docker 运行
+
+```powershell
+copy .env.example .env
+docker compose up -d --build
+```
+
+访问：
+
+- 管理端：http://localhost:3000
+- 用户端：http://localhost:3001
+
+后端和 MySQL 不直接暴露公网，只通过前端 Nginx 反代 `/api`。
+
+### 关键环境变量
+
+```env
+MYSQL_ROOT_PASSWORD=强密码
+DB_USERNAME=wxclaw
+DB_PASSWORD=强密码
+AI_KEY_ENCRYPTION_KEY=长随机值
+API_BOOTSTRAP_KEY=长随机值
+ADMIN_PASSWORD=强密码
+CORS_ALLOWED_ORIGINS=https://admin.example.com,https://app.example.com
+PASSWORD_RESET_BASE_URL=https://app.example.com
+COOKIE_SECURE=true
+TRUST_FORWARDED_HEADERS=true
+MAIL_HOST=smtp.example.com
+MAIL_PORT=587
+MAIL_USERNAME=no-reply@example.com
+MAIL_PASSWORD=邮箱授权码
+SENIVERSE_KEY=
+JOB_HELPER_ENABLED=false
+JOB_HELPER_MCP_ENABLED=false
+```
+
+生产环境必须设置 `COOKIE_SECURE=true` 和 `TRUST_FORWARDED_HEADERS=true`。
+
+### 使用 cpolar 临时公网访问
+
+```powershell
+D:\\cpolar.exe authtoken 你的token
+D:\\cpolar.exe http 3000 -inspect-addr 127.0.0.1:4042 -log stdout
+D:\\cpolar.exe http 3001 -inspect-addr 127.0.0.1:4043 -log stdout
+```
+
+将 cpolar 返回的 HTTPS 地址填入 `.env`：
+
+```env
+CORS_ALLOWED_ORIGINS=https://管理端公网地址,https://用户端公网地址
+PASSWORD_RESET_BASE_URL=https://用户端公网地址
+```
+
+然后重启：
+
+```powershell
+docker compose up -d
+```
+
+### 用户发件邮箱配置
+
+AI 通过 `send_email` 工具发邮件时，使用当前租户在前端设置页配置的 SMTP 邮箱。
+后端 `.env` 中的系统邮箱仅用于登录验证码和密码重置。
+
 ## 配置说明
 
 ### 环境变量
