@@ -28,6 +28,13 @@ public final class PublicTenantDtos {
     public record LoginRequest(String username, String password) {
     }
 
+    public record AdminLoginRequest(String username, String password) {
+    }
+
+    public record AdminLoginResult(String sessionToken, LocalDateTime expiresAt,
+                                   String username, String role) {
+    }
+
     public record ForgotPasswordRequest(String usernameOrEmail) {
     }
 

@@ -1,8 +1,10 @@
 package com.dust.wxclawbackfront.tenancy;
 
 import com.dust.wxclawbackfront.tenancy.entity.Tenant;
+import com.dust.wxclawbackfront.tenancy.entity.AdminAccount;
 import com.dust.wxclawbackfront.tenancy.entity.TenantApiCredential;
 import com.dust.wxclawbackfront.tenancy.entity.TenantInviteCode;
+import com.dust.wxclawbackfront.tenancy.repository.AdminAccountRepository;
 import com.dust.wxclawbackfront.tenancy.repository.TenantApiCredentialRepository;
 import com.dust.wxclawbackfront.tenancy.repository.TenantBotRepository;
 import com.dust.wxclawbackfront.tenancy.repository.TenantInviteCodeRepository;
@@ -40,6 +42,7 @@ public class TenantBootstrapInitializer implements ApplicationRunner {
     private final TenantApiCredentialRepository credentialRepository;
     private final TenantBotRepository tenantBotRepository;
     private final TenantInviteCodeRepository inviteCodeRepository;
+    private final AdminAccountRepository adminAccountRepository;
     private final ApiSecretHasher secretHasher;
 
     @Value("${wxclaw.tenancy.default-tenant-id:default}")
@@ -53,6 +56,12 @@ public class TenantBootstrapInitializer implements ApplicationRunner {
 
     @Value("${wxclaw.api.registration.invite-codes:}")
     private List<String> bootstrapInviteCodes;
+
+    @Value("${wxclaw.api.admin.bootstrap-username:admin}")
+    private String adminUsername;
+
+    @Value("${wxclaw.api.admin.bootstrap-password:}")
+    private String adminPassword;
 
     @Value("${wxclaw.ilink.bot-ids:${wxclaw.ilink.default-bot-id:default}}")
     private List<String> botIds;
@@ -117,6 +126,23 @@ public class TenantBootstrapInitializer implements ApplicationRunner {
                     invite.setCreatedBy("bootstrap");
                     inviteCodeRepository.save(invite);
                 }
+            }
+            // 平台管理员账号：首次启动创建；未配置 ADMIN_PASSWORD 时自动生成并打印一次。
+            if (!adminAccountRepository.existsByUsername(adminUsername.trim().toLowerCase())) {
+                String password = adminPassword;
+                if (password == null || password.isBlank()) {
+                    byte[] bytes = new byte[12];
+                    secureRandom.nextBytes(bytes);
+                    password = HexFormat.of().formatHex(bytes);
+                    log.warn("未配置 ADMIN_PASSWORD，已自动生成管理端初始密码（仅本次展示，请立即修改）: username={}, password={}",
+                            adminUsername.trim().toLowerCase(), password);
+                }
+                AdminAccount account = new AdminAccount();
+                account.setUsername(adminUsername.trim().toLowerCase());
+                account.setPasswordHash(secretHasher.hash(password));
+                account.setRole("SUPER_ADMIN");
+                account.setStatus("ACTIVE");
+                adminAccountRepository.save(account);
             }
         } finally {
             // ApplicationRunner 运行在线程池外也必须清理，避免污染后续启动逻辑。

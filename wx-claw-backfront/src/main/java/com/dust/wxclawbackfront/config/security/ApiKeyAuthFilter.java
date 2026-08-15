@@ -2,6 +2,7 @@ package com.dust.wxclawbackfront.config.security;
 
 import com.dust.wxclawbackfront.tenancy.TenantContext;
 import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
+import com.dust.wxclawbackfront.tenancy.service.AdminAuthService;
 import com.dust.wxclawbackfront.tenancy.service.TenantAuthService;
 import com.dust.wxclawbackfront.tenancy.security.TenantApiKeyAuthenticator;
 import jakarta.servlet.FilterChain;
@@ -29,10 +30,14 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
 
     private final TenantApiKeyAuthenticator authenticator;
     private final TenantAuthService sessionAuthenticator;
+    private final AdminAuthService adminAuthenticator;
 
-    public ApiKeyAuthFilter(TenantApiKeyAuthenticator authenticator, TenantAuthService sessionAuthenticator) {
+    public ApiKeyAuthFilter(TenantApiKeyAuthenticator authenticator,
+                            TenantAuthService sessionAuthenticator,
+                            AdminAuthService adminAuthenticator) {
         this.authenticator = authenticator;
         this.sessionAuthenticator = sessionAuthenticator;
+        this.adminAuthenticator = adminAuthenticator;
     }
 
     @Override
@@ -56,8 +61,14 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
 
         String requestApiKey = request.getHeader("X-API-Key");
 
-        // 优先按 API Key 认证；失败时回退到控制台会话 token（sess_ 前缀）。
-        TenantContext context = authenticator.authenticate(requestApiKey);
+        // 管理端路径优先识别管理员会话（asess_ 前缀）；其余路径按 API Key -> 租户会话 依次尝试。
+        TenantContext context = null;
+        if (path.startsWith("/api/admin/")) {
+            context = adminAuthenticator.authenticateSession(requestApiKey);
+        }
+        if (context == null) {
+            context = authenticator.authenticate(requestApiKey);
+        }
         if (context == null) {
             context = sessionAuthenticator.authenticateSession(requestApiKey);
         }

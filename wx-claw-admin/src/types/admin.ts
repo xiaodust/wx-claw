@@ -7,3 +7,4 @@ export interface InvocationDetail extends InvocationSummary { parentInvocationId
 export interface PageResult<T> { content:T[]; totalElements:number; totalPages:number; number:number; size:number }
 export interface InviteCode { id:number; code:string; status:string; quota:number|null; usedCount:number; expiresAt:string|null; remark?:string; createdBy?:string; createdAt:string }
 export interface GenerateInviteCodesRequest { count:number; quota?:number|null; expiresAt?:string|null; remark?:string }
+export interface AdminLoginResult { sessionToken:string; expiresAt:string; username:string; role:string }

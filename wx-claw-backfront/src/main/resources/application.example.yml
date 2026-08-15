@@ -123,6 +123,13 @@ wxclaw:
       max-per-email: 3
       window: PT1H
       cleanup-ms: 600000
+    # 平台管理员账号（管理端账号密码登录）
+    admin:
+      bootstrap-username: ${ADMIN_USERNAME:admin}
+      bootstrap-password: ${ADMIN_PASSWORD:}
+    admin-login:
+      max-per-user-and-ip: 5
+      max-per-ip: 20
     # 控制台账号登录限流
     login:
       max-per-user-and-ip: 10

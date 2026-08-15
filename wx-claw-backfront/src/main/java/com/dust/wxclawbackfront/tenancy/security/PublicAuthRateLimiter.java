@@ -34,6 +34,8 @@ public class PublicAuthRateLimiter {
     private final int resetPerIp;
     private final int emailCodePerEmailAndIp;
     private final int emailCodePerIp;
+    private final int adminLoginPerUserAndIp;
+    private final int adminLoginPerIp;
     private final Duration window;
 
     public PublicAuthRateLimiter(
@@ -45,7 +47,9 @@ public class PublicAuthRateLimiter {
             @Value("${wxclaw.api.password-reset.max-per-user-and-ip:5}") int resetPerUserAndIp,
             @Value("${wxclaw.api.password-reset.max-per-ip:20}") int resetPerIp,
             @Value("${wxclaw.api.email-code.max-per-email-and-ip:5}") int emailCodePerEmailAndIp,
-            @Value("${wxclaw.api.email-code.max-per-ip:20}") int emailCodePerIp) {
+            @Value("${wxclaw.api.email-code.max-per-ip:20}") int emailCodePerIp,
+            @Value("${wxclaw.api.admin-login.max-per-user-and-ip:5}") int adminLoginPerUserAndIp,
+            @Value("${wxclaw.api.admin-login.max-per-ip:20}") int adminLoginPerIp) {
         this.maxPerIp = Math.max(1, maxPerIp);
         this.maxPerEmail = Math.max(1, maxPerEmail);
         this.loginPerUserAndIp = Math.max(1, loginPerUserAndIp);
@@ -54,6 +58,8 @@ public class PublicAuthRateLimiter {
         this.resetPerIp = Math.max(1, resetPerIp);
         this.emailCodePerEmailAndIp = Math.max(1, emailCodePerEmailAndIp);
         this.emailCodePerIp = Math.max(1, emailCodePerIp);
+        this.adminLoginPerUserAndIp = Math.max(1, adminLoginPerUserAndIp);
+        this.adminLoginPerIp = Math.max(1, adminLoginPerIp);
         this.window = window == null || window.isZero() || window.isNegative() ? Duration.ofHours(1) : window;
     }
 
@@ -81,6 +87,12 @@ public class PublicAuthRateLimiter {
                 + ":" + (email == null ? "?" : email)
                 + ":" + (clientIp == null ? "unknown" : clientIp), emailCodePerEmailAndIp);
         checkKey("code:ip:" + (clientIp == null ? "unknown" : clientIp), emailCodePerIp);
+    }
+
+    public void checkAdminLogin(String username, String clientIp) {
+        checkKey("admin:login:user+ip:" + (username == null ? "?" : username.toLowerCase())
+                + ":" + (clientIp == null ? "unknown" : clientIp), adminLoginPerUserAndIp);
+        checkKey("admin:login:ip:" + (clientIp == null ? "unknown" : clientIp), adminLoginPerIp);
     }
 
     private void checkKey(String key, int max) {

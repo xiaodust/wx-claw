@@ -1,6 +1,8 @@
 package com.dust.wxclawbackfront.tenancy.api;
 
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.ApiError;
+import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.AdminLoginRequest;
+import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.AdminLoginResult;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.AuthResult;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.EmailCodeRequest;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.ForgotPasswordRequest;
@@ -9,6 +11,7 @@ import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.OperationResult;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.ResetPasswordRequest;
 import com.dust.wxclawbackfront.tenancy.service.PasswordResetService;
 import com.dust.wxclawbackfront.tenancy.service.EmailVerificationService;
+import com.dust.wxclawbackfront.tenancy.service.AdminAuthService;
 import com.dust.wxclawbackfront.tenancy.service.TenantAuthService;
 import com.dust.wxclawbackfront.tenancy.service.TenantRegistrationException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -31,6 +34,7 @@ public class PublicAuthController {
     private final TenantAuthService authService;
     private final PasswordResetService passwordResetService;
     private final EmailVerificationService emailVerificationService;
+    private final AdminAuthService adminAuthService;
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody(required = false) LoginRequest request,
@@ -42,6 +46,24 @@ public class PublicAuthController {
                         HttpStatus.BAD_REQUEST);
             }
             AuthResult result = authService.login(request.username(), request.password(), clientIp(httpRequest));
+            return ResponseEntity.ok(result);
+        } catch (TenantRegistrationException ex) {
+            return ResponseEntity.status(ex.status())
+                    .body(new ApiError(ex.errorCode(), ex.getMessage()));
+        }
+    }
+
+    @PostMapping("/admin-login")
+    public ResponseEntity<?> adminLogin(@RequestBody(required = false) AdminLoginRequest request,
+                                        HttpServletRequest httpRequest) {
+        try {
+            if (request == null || request.username() == null || request.username().isBlank()
+                    || request.password() == null || request.password().isBlank()) {
+                throw new TenantRegistrationException("VALIDATION_ERROR", "请输入管理员用户名和密码",
+                        HttpStatus.BAD_REQUEST);
+            }
+            AdminLoginResult result = adminAuthService.login(
+                    request.username(), request.password(), clientIp(httpRequest));
             return ResponseEntity.ok(result);
         } catch (TenantRegistrationException ex) {
             return ResponseEntity.status(ex.status())

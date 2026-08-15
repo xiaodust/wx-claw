@@ -382,7 +382,10 @@ npm install
 npm run dev
 ```
 
-浏览器访问 `http://localhost:3000`，使用 `<credentialId>.<secret>` 格式的管理 API Key 登录。当前 Bootstrap 凭据的 `*` scope 可以访问管理端；正式创建凭据时建议只授予 `admin:read`，跨租户管理员授予 `platform:admin`。
+浏览器访问 `http://localhost:3000`，支持两种登录方式：
+
+- **管理员账号**：用户名密码登录（默认用户名 `admin`，密码由 `ADMIN_PASSWORD` 提供；未配置时首次启动自动生成并打印到日志）
+- **API Key**：`<credentialId>.<secret>` 格式的管理 Key（Bootstrap 凭据 `*` scope 可访问管理端）
 
 ### 8. 初始化注册链路
 
@@ -416,6 +419,8 @@ npm run build
 | `AI_BASE_URL`         | AI 模型 API 地址       |
 | `API_CREDENTIAL_ID`   | Bootstrap 凭据 ID（默认 default） |
 | `API_BOOTSTRAP_KEY`   | Bootstrap API Key（首个管理凭据） |
+| `ADMIN_USERNAME`      | 管理端初始账号用户名（默认 admin） |
+| `ADMIN_PASSWORD`      | 管理端初始账号密码（不配置则启动时自动生成） |
 | `REGISTRATION_REQUIRE_INVITE` | 注册是否需要邀请码（默认 true） |
 | `REGISTRATION_INVITE_CODES`   | 启动时预置的邀请码（逗号分隔） |
 | `PASSWORD_RESET_BASE_URL`     | 密码重置邮件中的前端地址（默认 http://localhost:3001） |
