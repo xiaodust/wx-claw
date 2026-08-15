@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.tenancy.service;
 
+import com.dust.wxclawbackfront.config.security.PasswordPolicy;
 import com.dust.wxclawbackfront.tenancy.TenantContext;
 import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.AuthResult;
@@ -39,7 +40,7 @@ class TenantAuthServiceTest {
     private final EmailVerificationService emailVerificationService = mock(EmailVerificationService.class);
     private final TenantAuthService service = new TenantAuthService(
             accountRepository, sessionRepository, tenantRepository, secretHasher, rateLimiter,
-            emailVerificationService);
+            emailVerificationService, new PasswordPolicy());
 
     @AfterEach
     void tearDown() {

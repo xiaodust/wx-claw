@@ -25,7 +25,7 @@ async function submit() {
         return
       }
       const result = await adminLogin(account.username.trim(), account.password)
-      auth.login(result.sessionToken)
+      auth.login()
     } else {
       if (!key.value.trim()) {
         errorMsg.value = '请输入 API Key'

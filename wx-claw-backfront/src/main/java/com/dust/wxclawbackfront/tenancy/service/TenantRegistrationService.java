@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.tenancy.service;
 
+import com.dust.wxclawbackfront.config.security.PasswordPolicy;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.RegisterTenantRequest;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.RegisteredTenant;
 import com.dust.wxclawbackfront.tenancy.entity.Tenant;
@@ -37,22 +38,25 @@ public class TenantRegistrationService {
     private final PublicAuthRateLimiter rateLimiter;
     private final InviteCodeService inviteCodeService;
     private final EmailVerificationService emailVerificationService;
+    private final PasswordPolicy passwordPolicy;
     private final SecureRandom secureRandom = new SecureRandom();
     private final boolean requireInvite;
 
     public TenantRegistrationService(TenantRepository tenantRepository,
                                      TenantAccountRepository accountRepository,
                                      TenantAuthService authService,
-                                     PublicAuthRateLimiter rateLimiter,
-                                     InviteCodeService inviteCodeService,
-                                     EmailVerificationService emailVerificationService,
-                                     @Value("${wxclaw.api.registration.require-invite:true}") boolean requireInvite) {
+                                      PublicAuthRateLimiter rateLimiter,
+                                      InviteCodeService inviteCodeService,
+                                      EmailVerificationService emailVerificationService,
+                                      PasswordPolicy passwordPolicy,
+                                      @Value("${wxclaw.api.registration.require-invite:true}") boolean requireInvite) {
         this.tenantRepository = tenantRepository;
         this.accountRepository = accountRepository;
         this.authService = authService;
         this.rateLimiter = rateLimiter;
         this.inviteCodeService = inviteCodeService;
         this.emailVerificationService = emailVerificationService;
+        this.passwordPolicy = passwordPolicy;
         this.requireInvite = requireInvite;
     }
 
@@ -169,7 +173,8 @@ public class TenantRegistrationService {
     }
 
     private void validatePassword(String password) {
-        if (password == null || password.trim().length() < 8 || password.trim().length() > 128) {
+        passwordPolicy.validate(password);
+        if (password == null || password.trim().length() < 8 || password.trim().length() > 64) {
             throw new TenantRegistrationException("VALIDATION_ERROR",
                     "密码长度需为 8-128 位", HttpStatus.BAD_REQUEST);
         }

@@ -48,7 +48,7 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/wx_claw_bot?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&connectTimeout=30000&socketTimeout=60000&tcpKeepAlive=true}
     username: ${DB_USERNAME:wxclaw}
-    password: ${DB_PASSWORD:wxclaw-local}
+    password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
@@ -146,19 +146,28 @@ wxclaw:
       max-per-user-and-ip: 5
       max-per-ip: 20
       # 邮件不可用时把重置链接写入日志（开发兜底；生产建议关掉并配置 SMTP）
-      log-link-when-mail-unavailable: true
+      log-link-when-mail-unavailable: false
       cleanup-ms: 1800000
     # 邮箱验证码（注册时验证邮箱归属）
     email-code:
       ttl: PT10M
       max-per-email-and-ip: 5
       max-per-ip: 20
-      log-code-when-mail-unavailable: true
+      log-code-when-mail-unavailable: false
       log-code-always: false
       cleanup-ms: 1800000
     cors:
       # 管理端 3000 + 用户控制台 3001
       allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001,http://127.0.0.1:3001}
+
+  security:
+    trust-forwarded-headers: ${TRUST_FORWARDED_HEADERS:false}
+    allow-private-url: false
+    ai-key-encryption-key: ${AI_KEY_ENCRYPTION_KEY:}
+    log-generated-bootstrap-secrets: false
+    max-json-body-bytes: 1048576
+    cookie-secure: ${COOKIE_SECURE:false}
+    cookie-same-site: ${COOKIE_SAME_SITE:Lax}
 
   admin:
     audit:
@@ -306,11 +315,13 @@ wxclaw:
 
     # 聊天配置
     chat:
-      max-tokens: 768
+      max-tokens: 3072
       timeout: PT25S
       hard-timeout: PT60S
       max-tool-calls: 8
       max-repeated-tool-calls: 2
+    plan:
+      max-tokens: 4096
     context:
       max-chars: 7000
       max-message-chars: 800
@@ -347,7 +358,7 @@ wxclaw:
 
   # 文件上传配置
   upload:
-    max-file-size-mb: 50
+    max-file-size-mb: 10
 
   knowledge:
     # Original uploads retained for exact file retrieval, separate from RAG chunks.
@@ -356,6 +367,7 @@ wxclaw:
     cleanup-enabled: true
     cleanup-cron: 0 15 4 * * ?
     file-retention-days: 90
+    max-download-bytes: 10485760
 
   # 邮件功能配置
   mail:

@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.tenancy.service;
 
+import com.dust.wxclawbackfront.config.security.PasswordPolicy;
 import com.dust.wxclawbackfront.tenancy.TenantContext;
 import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.AuthResult;
@@ -62,6 +63,7 @@ public class TenantAuthService {
     private final ApiSecretHasher secretHasher;
     private final PublicAuthRateLimiter rateLimiter;
     private final EmailVerificationService emailVerificationService;
+    private final PasswordPolicy passwordPolicy;
 
     private final SecureRandom secureRandom = new SecureRandom();
     private final ConcurrentMap<Long, Instant> lastUsedWrites = new ConcurrentHashMap<>();
@@ -160,7 +162,8 @@ public class TenantAuthService {
                     HttpStatus.UNAUTHORIZED);
         }
         String password = newPassword == null ? "" : newPassword.trim();
-        if (password.length() < 8 || password.length() > 128) {
+        passwordPolicy.validate(password);
+        if (password.length() < 8 || password.length() > 64) {
             throw new TenantRegistrationException("VALIDATION_ERROR", "新密码长度需为 8-128 位",
                     HttpStatus.BAD_REQUEST);
         }
@@ -199,7 +202,8 @@ public class TenantAuthService {
         String normalizedUsername = normalizeUsername(username);
         String normalizedEmail = normalizeEmail(contactEmail);
         String pwd = password == null ? "" : password.trim();
-        if (pwd.length() < 8 || pwd.length() > 128) {
+        passwordPolicy.validate(pwd);
+        if (pwd.length() < 8 || pwd.length() > 64) {
             throw new TenantRegistrationException("VALIDATION_ERROR", "密码长度需为 8-128 位",
                     HttpStatus.BAD_REQUEST);
         }

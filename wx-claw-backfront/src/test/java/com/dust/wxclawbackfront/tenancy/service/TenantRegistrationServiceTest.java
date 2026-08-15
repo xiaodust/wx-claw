@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.tenancy.service;
 
+import com.dust.wxclawbackfront.config.security.PasswordPolicy;
 import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.RegisterTenantRequest;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.RegisteredTenant;
@@ -37,10 +38,10 @@ class TenantRegistrationServiceTest {
     private final EmailVerificationService emailVerificationService = mock(EmailVerificationService.class);
     private final TenantRegistrationService service = new TenantRegistrationService(
             tenantRepository, accountRepository, authService, rateLimiter,
-            inviteCodeService, emailVerificationService, false);
+            inviteCodeService, emailVerificationService, new PasswordPolicy(), false);
     private final TenantRegistrationService inviteRequiredService = new TenantRegistrationService(
             tenantRepository, accountRepository, authService, rateLimiter,
-            inviteCodeService, emailVerificationService, true);
+            inviteCodeService, emailVerificationService, new PasswordPolicy(), true);
 
     @BeforeEach
     void setUp() {

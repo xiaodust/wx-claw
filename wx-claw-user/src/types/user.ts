@@ -158,3 +158,20 @@ export interface SetupAccountResult {
   sessionToken: string
   sessionExpiresAt: string
 }
+
+export interface MailConfig {
+  smtpHost: string | null
+  smtpPort: number
+  username: string | null
+  fromAddress: string | null
+  enabled: boolean
+  configured: boolean
+}
+
+export interface SaveMailConfigRequest {
+  smtpHost: string
+  smtpPort: number
+  username: string
+  password: string
+  fromAddress: string
+}

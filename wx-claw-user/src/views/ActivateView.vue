@@ -84,8 +84,8 @@ async function submit() {
     setupError.value = '请输入邮箱验证码'
     return
   }
-  if (setupForm.password.length < 8 || setupForm.password.length > 128) {
-    setupError.value = '密码长度需为 8-128 位'
+  if (setupForm.password.length < 8 || setupForm.password.length > 64) {
+    setupError.value = '密码长度需为 8-64 位'
     return
   }
   if (setupForm.password !== setupForm.confirmPassword) {
@@ -100,7 +100,7 @@ async function submit() {
       emailCode: setupForm.emailCode.trim(),
       password: setupForm.password,
     })
-    authStore.login(result.sessionToken)
+    authStore.login()
     router.push('/bots')
   } catch (e: unknown) {
     const status = (e as { response?: { status?: number } })?.response?.status
@@ -166,11 +166,11 @@ async function submit() {
         </label>
         <label class="field">
           <span class="field-label">登录密码</span>
-          <el-input v-model="setupForm.password" type="password" show-password maxlength="128" placeholder="至少 8 位" />
+          <el-input v-model="setupForm.password" type="password" show-password maxlength="64" placeholder="至少 8 位" />
         </label>
         <label class="field">
           <span class="field-label">确认密码</span>
-          <el-input v-model="setupForm.confirmPassword" type="password" show-password maxlength="128" placeholder="再次输入密码" @keyup.enter="submit" />
+          <el-input v-model="setupForm.confirmPassword" type="password" show-password maxlength="64" placeholder="再次输入密码" @keyup.enter="submit" />
         </label>
         <p v-if="setupError" class="error-box" role="alert">{{ setupError }}</p>
         <el-button type="primary" class="submit-btn" :loading="settingUp" @click="submit">激活并进入控制台</el-button>

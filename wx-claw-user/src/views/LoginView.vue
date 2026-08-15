@@ -22,7 +22,7 @@ async function login() {
   errorMsg.value = ''
   try {
     const result = await loginTenant({ username, password: account.password })
-    authStore.login(result.sessionToken)
+    authStore.login()
     router.push('/bots')
   } catch (e: unknown) {
     const status = (e as { response?: { status?: number } })?.response?.status

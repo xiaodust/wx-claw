@@ -131,7 +131,7 @@ function enterConsole() {
   if (!result.value) return
   const token = result.value.sessionToken
   if (token) {
-    authStore.login(token)
+    authStore.login()
     router.push('/bots')
   } else {
     router.push('/login')

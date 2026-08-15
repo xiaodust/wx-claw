@@ -3,6 +3,7 @@ package com.dust.wxclawbackfront.bot.agent.llm.chat;
 import org.springframework.ai.openai.OpenAiChatOptions;
 
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -12,6 +13,7 @@ import java.util.Map;
 public class LlmOptionsBuilder {
 
     private final OpenAiChatOptions.Builder optionsBuilder = OpenAiChatOptions.builder();
+    private final Map<String, Object> extraBody = new LinkedHashMap<>();
 
     private LlmOptionsBuilder() {
     }
@@ -38,8 +40,16 @@ public class LlmOptionsBuilder {
      */
     public LlmOptionsBuilder thinkingType(String thinkingType) {
         if (thinkingType != null && !thinkingType.isBlank()) {
-            optionsBuilder.extraBody(Map.of("thinking", Map.of("type", thinkingType.trim())));
+            extraBody.put("thinking", Map.of("type", thinkingType.trim()));
         }
+        return this;
+    }
+
+    /**
+     * 请求模型只输出 JSON 对象。
+     */
+    public LlmOptionsBuilder jsonObjectMode() {
+        extraBody.put("response_format", Map.of("type", "json_object"));
         return this;
     }
 
@@ -67,6 +77,7 @@ public class LlmOptionsBuilder {
      * 构建 OpenAiChatOptions
      */
     public OpenAiChatOptions build() {
+        applyExtraBody();
         return optionsBuilder.build();
     }
 
@@ -74,6 +85,13 @@ public class LlmOptionsBuilder {
      * 获取内部的 Builder（用于需要传给 ChatClient.options() 的场景）
      */
     public OpenAiChatOptions.Builder buildBuilder() {
+        applyExtraBody();
         return optionsBuilder;
+    }
+
+    private void applyExtraBody() {
+        if (!extraBody.isEmpty()) {
+            optionsBuilder.extraBody(extraBody);
+        }
     }
 }

@@ -2,10 +2,10 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { changePassword, clearAiConfig, clearModel, getAccountInfo, getAiConfigs, getModelCatalog, saveAiConfig, saveModel, setupAccount } from '../api/user'
+import { changePassword, clearAiConfig, clearMailConfig, clearModel, getAccountInfo, getAiConfigs, getMailConfig, getModelCatalog, saveAiConfig, saveMailConfig, saveModel, setupAccount } from '../api/user'
 import { sendEmailCode } from '../api/public'
 import { useAuthStore } from '../stores/auth'
-import type { AccountInfo, AiConfigEntry, AiConfigs, ModelCatalog, ModelOption } from '../types/user'
+import type { AccountInfo, AiConfigEntry, AiConfigs, MailConfig, ModelCatalog, ModelOption } from '../types/user'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -30,6 +30,10 @@ const settingUp = ref(false)
 const setupCodeSending = ref(false)
 const setupCodeCountdown = ref(0)
 let setupCodeTimer: number | undefined
+const mailConfig = ref<MailConfig | null>(null)
+const mailForm = reactive({ smtpHost: '', smtpPort: 587, username: '', password: '', fromAddress: '' })
+const savingMail = ref(false)
+const mailError = ref('')
 const emailPattern = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 const usernamePattern = /^[a-z0-9_-]{3,32}$/
 
@@ -212,13 +216,66 @@ async function clearModelCap(key: string) {
   }
 }
 
-onMounted(() => { refresh(); loadAccount() })
+onMounted(() => { refresh(); loadAccount(); loadMailConfig() })
 
 async function loadAccount() {
   try {
     accountInfo.value = await getAccountInfo()
   } catch {
     accountInfo.value = null
+  }
+}
+
+async function loadMailConfig() {
+  try {
+    mailConfig.value = await getMailConfig()
+    if (mailConfig.value) {
+      mailForm.smtpHost = mailConfig.value.smtpHost || ''
+      mailForm.smtpPort = mailConfig.value.smtpPort || 587
+      mailForm.username = mailConfig.value.username || ''
+      mailForm.fromAddress = mailConfig.value.fromAddress || ''
+    }
+  } catch {
+    mailConfig.value = null
+  }
+}
+
+async function submitMailConfig() {
+  if (!mailForm.smtpHost || !mailForm.username || !mailForm.password || !mailForm.fromAddress) {
+    mailError.value = '请完整填写 SMTP 配置和授权码'
+    return
+  }
+  savingMail.value = true
+  mailError.value = ''
+  try {
+    mailConfig.value = await saveMailConfig({
+      smtpHost: mailForm.smtpHost.trim(),
+      smtpPort: Number(mailForm.smtpPort),
+      username: mailForm.username.trim(),
+      password: mailForm.password,
+      fromAddress: mailForm.fromAddress.trim(),
+    })
+    mailForm.password = ''
+    ElMessage.success('发件邮箱已保存')
+  } catch (e: any) {
+    mailError.value = e?.response?.data?.message || '保存失败'
+  } finally {
+    savingMail.value = false
+  }
+}
+
+async function removeMailConfig() {
+  try {
+    await clearMailConfig()
+    mailConfig.value = null
+    mailForm.smtpHost = ''
+    mailForm.smtpPort = 587
+    mailForm.username = ''
+    mailForm.password = ''
+    mailForm.fromAddress = ''
+    ElMessage.success('发件邮箱已清除')
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '清除失败')
   }
 }
 
@@ -262,8 +319,8 @@ async function submitSetup() {
     setupError.value = '请输入邮箱验证码'
     return
   }
-  if (setupForm.password.length < 8 || setupForm.password.length > 128) {
-    setupError.value = '密码长度需为 8-128 位'
+  if (setupForm.password.length < 8 || setupForm.password.length > 64) {
+    setupError.value = '密码长度需为 8-64 位'
     return
   }
   if (setupForm.password !== setupForm.confirmPassword) {
@@ -279,7 +336,7 @@ async function submitSetup() {
       password: setupForm.password,
     })
     // 切到刚签发的会话，账号密码登录即刻生效
-    authStore.login(result.sessionToken)
+    authStore.login()
     ElMessage.success('账号已完善，现在可以使用用户名和密码登录')
     setupForm.username = ''
     setupForm.contactEmail = ''
@@ -303,8 +360,8 @@ async function submitPasswordChange() {
     pwdError.value = '请输入旧密码和新密码'
     return
   }
-  if (pwdForm.newPassword.length < 8 || pwdForm.newPassword.length > 128) {
-    pwdError.value = '新密码长度需为 8-128 位'
+  if (pwdForm.newPassword.length < 8 || pwdForm.newPassword.length > 64) {
+    pwdError.value = '新密码长度需为 8-64 位'
     return
   }
   if (pwdForm.newPassword !== pwdForm.confirmPassword) {
@@ -395,6 +452,24 @@ async function submitPasswordChange() {
       </div>
     </div>
 
+    <div class="panel pwd-card">
+      <p class="page-kicker">SEND EMAIL AS</p>
+      <h3 class="pwd-title">发件邮箱配置</h3>
+      <p class="muted pwd-desc">用于 AI 按你的要求发邮件。登录验证码仍使用系统邮箱。</p>
+      <div class="setup-grid">
+        <el-input v-model="mailForm.smtpHost" maxlength="255" placeholder="SMTP 服务器，如 smtp.qq.com" />
+        <el-input-number v-model="mailForm.smtpPort" :min="1" :max="65535" />
+        <el-input v-model="mailForm.username" maxlength="255" placeholder="发件邮箱账号" />
+        <el-input v-model="mailForm.password" type="password" show-password placeholder="邮箱授权码 / SMTP 密码" />
+        <el-input v-model="mailForm.fromAddress" maxlength="255" placeholder="发件人地址，如 user@example.com" />
+        <div class="cap-actions">
+          <el-button type="primary" :loading="savingMail" @click="submitMailConfig">保存发件邮箱</el-button>
+          <el-button v-if="mailConfig?.configured" type="danger" plain @click="removeMailConfig">清除</el-button>
+        </div>
+      </div>
+      <p v-if="mailError" class="pwd-error" role="alert">{{ mailError }}</p>
+    </div>
+
     <div v-if="accountInfo && !accountInfo.hasAccount" class="panel pwd-card setup-card">
       <p class="page-kicker">ACCOUNT SETUP</p>
       <h3 class="pwd-title">完善账号信息</h3>
@@ -410,8 +485,8 @@ async function submitPasswordChange() {
           </el-button>
         </div>
         <el-input v-model="setupForm.emailCode" maxlength="6" placeholder="邮箱验证码" />
-        <el-input v-model="setupForm.password" type="password" show-password maxlength="128" placeholder="登录密码（至少 8 位）" />
-        <el-input v-model="setupForm.confirmPassword" type="password" show-password maxlength="128" placeholder="确认密码" @keyup.enter="submitSetup" />
+        <el-input v-model="setupForm.password" type="password" show-password maxlength="64" placeholder="登录密码（至少 8 位）" />
+        <el-input v-model="setupForm.confirmPassword" type="password" show-password maxlength="64" placeholder="确认密码" @keyup.enter="submitSetup" />
         <el-button type="primary" :loading="settingUp" @click="submitSetup">保存账号</el-button>
       </div>
       <p v-if="setupError" class="pwd-error" role="alert">{{ setupError }}</p>

@@ -2,6 +2,8 @@ package com.dust.wxclawbackfront.user.service;
 
 import com.dust.wxclawbackfront.bot.agent.llm.AiModelCatalog;
 import com.dust.wxclawbackfront.bot.agent.llm.chat.TenantChatClientFactory;
+import com.dust.wxclawbackfront.config.security.TenantAiKeyCipher;
+import com.dust.wxclawbackfront.config.security.UrlSafetyValidator;
 import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import com.dust.wxclawbackfront.tenancy.entity.TenantAiConfig;
 import com.dust.wxclawbackfront.tenancy.repository.TenantAiConfigRepository;
@@ -28,6 +30,8 @@ public class TenantAiConfigService {
     private final TenantAiConfigRepository configRepository;
     private final TenantChatClientFactory chatClientFactory;
     private final AiModelCatalog modelCatalog;
+    private final UrlSafetyValidator urlSafetyValidator;
+    private final TenantAiKeyCipher keyCipher;
 
     private static final Map<String, Capability> CAPABILITIES = Map.of(
             "chat", new Capability(
@@ -69,10 +73,11 @@ public class TenantAiConfigService {
         String tenantId = tenantId();
         TenantAiConfig config = configRepository.findById(tenantId).orElseGet(TenantAiConfig::new);
         config.setTenantId(tenantId);
+        String encryptedApiKey = keyCipher.encrypt(apiKey.trim());
         if ("video".equals(capability) && "dashscope".equalsIgnoreCase(providerId(Optional.of(config), capability))) {
-            config.setVideoDashscopeApiKey(apiKey.trim());
+            config.setVideoDashscopeApiKey(encryptedApiKey);
         } else {
-            cap.setter().accept(config, apiKey.trim());
+            cap.setter().accept(config, encryptedApiKey);
         }
         configRepository.save(config);
         if ("chat".equals(capability)) {
@@ -168,9 +173,9 @@ public class TenantAiConfigService {
         String provider = providerId(config, capability);
         String apiKey;
         if ("video".equals(capability) && "dashscope".equalsIgnoreCase(provider)) {
-            apiKey = config.map(TenantAiConfig::getVideoDashscopeApiKey).orElse(null);
+            apiKey = keyCipher.decrypt(config.map(TenantAiConfig::getVideoDashscopeApiKey).orElse(null));
         } else {
-            apiKey = config.map(cap.getter()).orElse(null);
+            apiKey = keyCipher.decrypt(config.map(cap.getter()).orElse(null));
         }
         boolean configured = apiKey != null && !apiKey.isBlank();
         return new UserDtos.AiConfigEntry(
@@ -220,7 +225,9 @@ public class TenantAiConfigService {
                 if (request.baseUrl() == null || request.baseUrl().isBlank()) {
                     throw new IllegalArgumentException("自定义服务商必须填写 baseUrl");
                 }
-                config.setChatBaseUrl(request.baseUrl().trim());
+                String baseUrl = request.baseUrl().trim();
+                urlSafetyValidator.validateCustomBaseUrl(baseUrl);
+                config.setChatBaseUrl(baseUrl);
             } else {
                 config.setChatBaseUrl(chatProvider.baseUrl());
             }

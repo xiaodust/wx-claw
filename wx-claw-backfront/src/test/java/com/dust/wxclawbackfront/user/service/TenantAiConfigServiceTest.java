@@ -2,6 +2,8 @@ package com.dust.wxclawbackfront.user.service;
 
 import com.dust.wxclawbackfront.bot.agent.llm.AiModelCatalog;
 import com.dust.wxclawbackfront.bot.agent.llm.chat.TenantChatClientFactory;
+import com.dust.wxclawbackfront.config.security.TenantAiKeyCipher;
+import com.dust.wxclawbackfront.config.security.UrlSafetyValidator;
 import com.dust.wxclawbackfront.tenancy.TenantContext;
 import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import com.dust.wxclawbackfront.tenancy.entity.TenantAiConfig;
@@ -27,13 +29,16 @@ class TenantAiConfigServiceTest {
     private TenantChatClientFactory factory;
     private AiModelCatalog modelCatalog;
     private TenantAiConfigService service;
+    private TenantAiKeyCipher keyCipher;
 
     @BeforeEach
     void setUp() {
         repository = mock(TenantAiConfigRepository.class);
         factory = mock(TenantChatClientFactory.class);
         modelCatalog = new AiModelCatalog();
-        service = new TenantAiConfigService(repository, factory, modelCatalog);
+        keyCipher = new TenantAiKeyCipher("test-key");
+        service = new TenantAiConfigService(repository, factory, modelCatalog,
+                new UrlSafetyValidator(false), keyCipher);
         TenantContextHolder.set(TenantContext.ilink("tenant-a", "bot-a", "user-a", "req"));
     }
 
@@ -67,7 +72,7 @@ class TenantAiConfigServiceTest {
         UserDtos.AiConfigEntry entry = service.save("chat", "  sk-abcdefgh1234  ");
 
         assertThat(saved.getTenantId()).isEqualTo("tenant-a");
-        assertThat(saved.getApiKey()).isEqualTo("sk-abcdefgh1234");
+        assertThat(keyCipher.decrypt(saved.getApiKey())).isEqualTo("sk-abcdefgh1234");
         verify(factory).evict("tenant-a");
         assertThat(entry.configured()).isTrue();
         assertThat(entry.apiKeyMasked()).isEqualTo("sk-a****1234");
@@ -82,7 +87,7 @@ class TenantAiConfigServiceTest {
 
         UserDtos.AiConfigEntry entry = service.save("image", "sk-img-1234");
 
-        assertThat(saved.getImageApiKey()).isEqualTo("sk-img-1234");
+        assertThat(keyCipher.decrypt(saved.getImageApiKey())).isEqualTo("sk-img-1234");
         assertThat(entry.provider()).isEqualTo("siliconflow");
         verify(factory, never()).evict(any());
     }
@@ -95,7 +100,7 @@ class TenantAiConfigServiceTest {
 
         UserDtos.AiConfigEntry entry = service.save("video", "sk-video-1234");
 
-        assertThat(saved.getVideoApiKey()).isEqualTo("sk-video-1234");
+        assertThat(keyCipher.decrypt(saved.getVideoApiKey())).isEqualTo("sk-video-1234");
         assertThat(entry.provider()).isEqualTo("ark");
         verify(factory, never()).evict(any());
     }
@@ -110,7 +115,7 @@ class TenantAiConfigServiceTest {
         UserDtos.AiConfigEntry entry = service.save("video", "sk-dash-1234");
 
         assertThat(saved.getVideoApiKey()).isNull();
-        assertThat(saved.getVideoDashscopeApiKey()).isEqualTo("sk-dash-1234");
+        assertThat(keyCipher.decrypt(saved.getVideoDashscopeApiKey())).isEqualTo("sk-dash-1234");
         assertThat(entry.configured()).isTrue();
         assertThat(entry.provider()).isEqualTo("dashscope");
         verify(factory, never()).evict(any());

@@ -13,7 +13,8 @@ const accountInfo = ref<AccountInfo | null>(null)
 
 const chipLabel = computed(() => {
   if (accountInfo.value?.username) return accountInfo.value.username
-  const key = authStore.token
+  const key = ''
+  return 'console'
   return key.includes('.') ? key.split('.')[0] : '—'
 })
 

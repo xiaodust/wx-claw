@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.bot.agent.llm;
 
+import com.dust.wxclawbackfront.config.security.TenantAiKeyCipher;
 import com.dust.wxclawbackfront.tenancy.TenantContext;
 import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import com.dust.wxclawbackfront.tenancy.entity.TenantAiConfig;
@@ -25,6 +26,7 @@ public class TenantAiKeyProvider {
 
     private final TenantAiConfigRepository configRepository;
     private final AiModelCatalog modelCatalog;
+    private final TenantAiKeyCipher keyCipher;
 
     @Value("${spring.ai.openai.api-key:}")
     private String defaultChatKey;
@@ -226,13 +228,14 @@ public class TenantAiKeyProvider {
 
     private String resolve(String tenantId, Function<TenantAiConfig, String> getter, String fallback) {
         if (tenantId == null || tenantId.isBlank()) {
-            return fallback;
+            return keyCipher.decrypt(fallback);
         }
-        return configRepository.findById(tenantId)
+        String configured = configRepository.findById(tenantId)
                 .map(getter)
                 .map(String::trim)
                 .filter(key -> !key.isEmpty())
                 .orElse(fallback);
+        return keyCipher.decrypt(configured);
     }
 
     private String currentTenantId() {

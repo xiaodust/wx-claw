@@ -1,0 +1,61 @@
+services:
+  mysql:
+    image: mysql:8.0.39
+    environment:
+      MYSQL_DATABASE: wx_claw_bot
+      MYSQL_USER: ${DB_USERNAME:-wxclaw}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./wx-claw-backfront
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/wx_claw_bot?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      DB_USERNAME: ${DB_USERNAME:-wxclaw}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      AI_KEY_ENCRYPTION_KEY: ${AI_KEY_ENCRYPTION_KEY:?AI_KEY_ENCRYPTION_KEY is required}
+      API_BOOTSTRAP_KEY: ${API_BOOTSTRAP_KEY:?API_BOOTSTRAP_KEY is required}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001}
+      PASSWORD_RESET_BASE_URL: ${PASSWORD_RESET_BASE_URL:-http://localhost:3001}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      TRUST_FORWARDED_HEADERS: ${TRUST_FORWARDED_HEADERS:-false}
+      SENIVERSE_KEY: ${SENIVERSE_KEY:-}
+      MAIL_HOST: ${MAIL_HOST:-smtp.qq.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      JOB_HELPER_BASE_URL: ${JOB_HELPER_BASE_URL:-http://host.docker.internal:8081}
+      RAGFLOW_BASE_URL: ${RAGFLOW_BASE_URL:-http://host.docker.internal:9380}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    expose:
+      - "8080"
+
+  admin:
+    build:
+      context: ./wx-claw-admin
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+  user:
+    build:
+      context: ./wx-claw-user
+    depends_on:
+      - backend
+    ports:
+      - "3001:80"
+
+volumes:
+  mysql-data:

@@ -7,6 +7,8 @@ import com.dust.wxclawbackfront.bot.agent.prompt.PromptLoader;
 import com.dust.wxclawbackfront.exception.AgentPlanningException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -42,6 +44,26 @@ public class AgentOrchestrator {
 
     @Value("${wxclaw.agent.plan.max-history-chars:6000}")
     private int maxPlanningHistoryChars = 6000;
+
+    private boolean looksLikeImageGeneration(String message) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        boolean imageWord = message.contains("图片")
+                || message.contains("图")
+                || message.contains("image")
+                || message.contains("画");
+        boolean generationWord = message.contains("生成")
+                || message.contains("画")
+                || message.contains("一张")
+                || message.contains("发一张")
+                || message.contains("来一张")
+                || message.contains("做一张")
+                || message.contains("整一张")
+                || message.contains("create")
+                || message.contains("generate");
+        return imageWord && generationWord;
+    }
 
     /**
      * Agent 执行入口
@@ -96,7 +118,9 @@ public class AgentOrchestrator {
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
             try {
                 String response = plainTextLlmService.chat(prompt, "PLAN");
-                String json = extractJson(response);
+                log.info("规划模型原始响应: {}", response);
+                String json = normalizePlanJson(extractJson(response));
+                log.info("规划模型提取后的JSON: {}", json);
 
                 PlanValidator.ValidationResult validation = planValidator.validate(json);
                 if (validation.isValid()) {
@@ -126,14 +150,9 @@ public class AgentOrchestrator {
     }
 
     private TaskPlan fallbackPlan(String userMessage) {
-        // 规划失败后的安全兜底：一律按普通对话处理，不再依赖关键词猜测意图
         return TaskPlan.chat();
     }
 
-    /**
-     * 构建任务规划 prompt
-     * 只描述高层动作，底层工具由 chat 模型自行调用
-     */
     String buildPlanningPrompt(String userMessage, AgentContext context) {
         String historyText = buildPlanningHistory(context);
 
@@ -206,8 +225,7 @@ public class AgentOrchestrator {
                         .stepNumber(stepNode.has("step") ? stepNode.get("step").asInt() : steps.size() + 1)
                         .toolName(stepNode.has("tool") ? stepNode.get("tool").asText() : "chat")
                         .params(params)
-                        .dependsOn(stepNode.has("depends_on") && !stepNode.get("depends_on").isNull()
-                                ? stepNode.get("depends_on").asInt() : null)
+                        .dependsOn(resolveDependency(stepNode.get("depends_on")))
                         .description(stepNode.has("description") ? stepNode.get("description").asText() : null)
                         .build();
                 steps.add(step);
@@ -293,13 +311,34 @@ public class AgentOrchestrator {
         }
     }
 
+    private Integer resolveDependency(JsonNode dependencyNode) {
+        if (dependencyNode == null || dependencyNode.isNull()) {
+            return null;
+        }
+        if (dependencyNode.isArray()) {
+            if (dependencyNode.isEmpty()) {
+                return null;
+            }
+            return resolveDependency(dependencyNode.get(0));
+        }
+        return dependencyNode.asInt();
+    }
+
     private String extractJson(String response) {
         if (response == null) {
             return "{}";
         }
-        String trimmed = response.trim();
+        String trimmed = response.trim()
+                .replaceFirst("^```(?:json)?\\s*", "")
+                .replaceFirst("\\s*```$", "")
+                .trim();
         if (trimmed.startsWith("{")) {
             return trimmed;
+        }
+        int arrayStart = trimmed.indexOf("[");
+        int arrayEnd = trimmed.lastIndexOf("]");
+        if (arrayStart >= 0 && arrayEnd > arrayStart) {
+            return trimmed.substring(arrayStart, arrayEnd + 1);
         }
         int start = trimmed.indexOf("{");
         int end = trimmed.lastIndexOf("}");
@@ -307,5 +346,72 @@ public class AgentOrchestrator {
             return trimmed.substring(start, end + 1);
         }
         return "{}";
+    }
+
+    /**
+     * 兼容模型返回单个 step 对象而不是 steps 数组的情况。
+     */
+    private String normalizePlanJson(String json) {
+        try {
+            JsonNode node = objectMapper.readTree(json);
+            return normalizePlanNode(node);
+        } catch (Exception ignored) {
+            List<JsonNode> nodes = extractObjectSequence(json);
+            if (!nodes.isEmpty()) {
+                return wrapSteps(nodes);
+            }
+        }
+        return "{}";
+    }
+
+    private String normalizePlanNode(JsonNode node) {
+        try {
+            if (node.isObject() && node.has("steps")) {
+                return objectMapper.writeValueAsString(node);
+            }
+            if (node.isObject() && (node.has("tool") || node.has("step"))) {
+                return wrapSteps(List.of(node));
+            }
+            if (node.isArray()) {
+                return wrapSteps(objectMapper.convertValue(node, List.class).stream()
+                        .map(objectMapper::valueToTree)
+                        .toList());
+            }
+        } catch (Exception ignored) {
+            return "{}";
+        }
+        return "{}";
+    }
+
+    private List<JsonNode> extractObjectSequence(String text) {
+        List<JsonNode> nodes = new ArrayList<>();
+        String cleaned = text == null ? "" : text.trim();
+        if (cleaned.startsWith("[") && cleaned.endsWith("]")) {
+            cleaned = cleaned.substring(1, cleaned.length() - 1);
+        }
+        String[] parts = cleaned.split("(?<=\\})\\s*,\\s*(?=\\{)");
+        for (String part : parts) {
+            String candidate = part.trim();
+            if (candidate.isBlank()) {
+                continue;
+            }
+            try {
+                nodes.add(objectMapper.readTree(candidate));
+            } catch (Exception ignored) {
+                // ignore non-JSON fragments
+            }
+        }
+        return nodes;
+    }
+
+    private String wrapSteps(List<JsonNode> nodes) {
+        try {
+            ObjectNode root = objectMapper.createObjectNode();
+            ArrayNode steps = root.putArray("steps");
+            nodes.forEach(steps::add);
+            return objectMapper.writeValueAsString(root);
+        } catch (Exception ignored) {
+            return "{}";
+        }
     }
 }

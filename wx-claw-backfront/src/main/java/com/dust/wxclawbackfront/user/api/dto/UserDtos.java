@@ -44,6 +44,14 @@ public final class UserDtos {
     public record SetupAccountResult(String username, String sessionToken, LocalDateTime sessionExpiresAt) {
     }
 
+    public record MailConfig(String smtpHost, int smtpPort, String username,
+                             String fromAddress, boolean enabled, boolean configured) {
+    }
+
+    public record SaveMailConfigRequest(String smtpHost, int smtpPort, String username,
+                                        String password, String fromAddress) {
+    }
+
     public record Conversation(String id, String sessionId, String botId, boolean active,
                                int messageCount, LocalDateTime lastMessageTime,
                                LocalDateTime createdTime, LocalDateTime updatedTime) {

@@ -25,7 +25,7 @@ class JobHelperMcpClientLiveTest {
                 .builder(System.getenv().getOrDefault("JOB_HELPER_MCP_URL", "http://127.0.0.1:18081"))
                 .endpoint("/mcp")
                 .requestBuilder(HttpRequest.newBuilder().header("X-API-Key",
-                        System.getenv().getOrDefault("JOB_HELPER_MCP_API_KEY", "xiaodust910")))
+                        System.getenv().getOrDefault("JOB_HELPER_MCP_API_KEY", "")))
                 .build();
         McpSyncClient sdkClient = McpClient.sync(transport)
                 .requestTimeout(Duration.ofSeconds(30))

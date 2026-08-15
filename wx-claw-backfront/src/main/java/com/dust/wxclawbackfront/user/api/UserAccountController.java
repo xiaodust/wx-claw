@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.user.api;
 
+import com.dust.wxclawbackfront.config.security.SessionCookieService;
 import com.dust.wxclawbackfront.tenancy.TenantAccessGuard;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.OperationResult;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos;
@@ -10,6 +11,7 @@ import com.dust.wxclawbackfront.user.api.dto.UserDtos.AccountInfo;
 import com.dust.wxclawbackfront.user.api.dto.UserDtos.ChangePasswordRequest;
 import com.dust.wxclawbackfront.user.api.dto.UserDtos.SetupAccountRequest;
 import com.dust.wxclawbackfront.user.api.dto.UserDtos.SetupAccountResult;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -29,6 +31,7 @@ public class UserAccountController {
 
     private final TenantAuthService authService;
     private final TenantAccessGuard accessGuard;
+    private final SessionCookieService sessionCookieService;
 
     @GetMapping
     public AccountInfo account() {
@@ -39,7 +42,8 @@ public class UserAccountController {
     }
 
     @PostMapping("/setup")
-    public ResponseEntity<?> setupAccount(@RequestBody(required = false) SetupAccountRequest request) {
+    public ResponseEntity<?> setupAccount(@RequestBody(required = false) SetupAccountRequest request,
+                                          HttpServletResponse response) {
         accessGuard.requireScope("account:write");
         try {
             if (request == null || request.username() == null || request.username().isBlank()
@@ -51,6 +55,7 @@ public class UserAccountController {
             }
             TenantAuthService.AccountIssue issue = authService.setupAccount(
                     request.username(), request.password(), request.contactEmail(), request.emailCode());
+            sessionCookieService.setSessionCookie(response, issue.sessionToken(), issue.expiresAt());
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(new SetupAccountResult(issue.username(), issue.sessionToken(), issue.expiresAt()));
         } catch (TenantRegistrationException ex) {

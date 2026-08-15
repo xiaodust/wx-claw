@@ -35,6 +35,9 @@ public class PlainTextLlmService {
     @Value("${wxclaw.ai.chat.max-tokens:1024}")
     private int maxTokens;
 
+    @Value("${wxclaw.ai.plan.max-tokens:2048}")
+    private int planMaxTokens;
+
     @Value("${wxclaw.ai.chat.timeout:PT35S}")
     private Duration timeout;
 
@@ -55,12 +58,16 @@ public class PlainTextLlmService {
     public String chat(String prompt, String invocationType) {
         long start = System.currentTimeMillis();
         String model = keyProvider.chatModel();
-        OpenAiChatOptions.Builder optionsBuilder = LlmOptionsBuilder.builder()
+        int tokens = "PLAN".equalsIgnoreCase(invocationType) ? planMaxTokens : maxTokens;
+        LlmOptionsBuilder llmOptionsBuilder = LlmOptionsBuilder.builder()
                 .model(model)
                 .thinkingType(thinkingType)
-                .maxTokens(maxTokens)
-                .timeout(timeout)
-                .buildBuilder();
+                .maxTokens(tokens)
+                .timeout(timeout);
+        if ("PLAN".equalsIgnoreCase(invocationType)) {
+            llmOptionsBuilder.jsonObjectMode();
+        }
+        OpenAiChatOptions.Builder optionsBuilder = llmOptionsBuilder.buildBuilder();
         LlmInvocationRecorder.InvocationHandle handle = invocationRecorder.start(
                 invocationType, "OPENAI_COMPATIBLE", model, requestPayload(prompt, model));
         try {

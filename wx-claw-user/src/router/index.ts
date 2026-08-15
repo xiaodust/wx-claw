@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { AUTH_TOKEN_STORAGE } from '../api/client'
+import { AUTH_FLAG_STORAGE } from '../api/client'
 import HomeView from '../views/HomeView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import LoginView from '../views/LoginView.vue'
@@ -30,7 +30,7 @@ const router = createRouter({ history: createWebHistory(), routes: [
 ]})
 
 router.beforeEach(to => {
-  const authenticated = Boolean(sessionStorage.getItem(AUTH_TOKEN_STORAGE))
+  const authenticated = sessionStorage.getItem(AUTH_FLAG_STORAGE) === '1'
   if (!authenticated && !PUBLIC_PATHS.has(to.path)) return '/'
   if (authenticated && to.path === '/login') return '/bots'
 })

@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.bot.agent.llm;
 
+import com.dust.wxclawbackfront.config.security.TenantAiKeyCipher;
 import com.dust.wxclawbackfront.tenancy.TenantContext;
 import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import com.dust.wxclawbackfront.tenancy.entity.TenantAiConfig;
@@ -23,7 +24,8 @@ class TenantAiKeyProviderTest {
     @BeforeEach
     void setUp() {
         repository = mock(TenantAiConfigRepository.class);
-        provider = new TenantAiKeyProvider(repository, new AiModelCatalog());
+        provider = new TenantAiKeyProvider(repository, new AiModelCatalog(),
+                new TenantAiKeyCipher("test-key"));
         ReflectionTestUtils.setField(provider, "defaultChatKey", "sk-default-chat");
         ReflectionTestUtils.setField(provider, "defaultChatBaseUrl", "https://ark.cn-beijing.volces.com/api/v3");
         ReflectionTestUtils.setField(provider, "defaultChatModel", "doubao-seed-2-1-turbo-260628");

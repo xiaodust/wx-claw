@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.tenancy.api;
 
+import com.dust.wxclawbackfront.config.security.SessionCookieService;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.ApiError;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.AdminLoginRequest;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.AdminLoginResult;
@@ -15,7 +16,9 @@ import com.dust.wxclawbackfront.tenancy.service.AdminAuthService;
 import com.dust.wxclawbackfront.tenancy.service.TenantAuthService;
 import com.dust.wxclawbackfront.tenancy.service.TenantRegistrationException;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -35,10 +38,15 @@ public class PublicAuthController {
     private final PasswordResetService passwordResetService;
     private final EmailVerificationService emailVerificationService;
     private final AdminAuthService adminAuthService;
+    private final SessionCookieService sessionCookieService;
+
+    @Value("${wxclaw.security.trust-forwarded-headers:false}")
+    private boolean trustForwardedHeaders;
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody(required = false) LoginRequest request,
-                                   HttpServletRequest httpRequest) {
+                                   HttpServletRequest httpRequest,
+                                   HttpServletResponse httpResponse) {
         try {
             if (request == null || request.username() == null || request.username().isBlank()
                     || request.password() == null || request.password().isBlank()) {
@@ -46,6 +54,7 @@ public class PublicAuthController {
                         HttpStatus.BAD_REQUEST);
             }
             AuthResult result = authService.login(request.username(), request.password(), clientIp(httpRequest));
+            sessionCookieService.setSessionCookie(httpResponse, result.sessionToken(), result.expiresAt());
             return ResponseEntity.ok(result);
         } catch (TenantRegistrationException ex) {
             return ResponseEntity.status(ex.status())
@@ -55,7 +64,8 @@ public class PublicAuthController {
 
     @PostMapping("/admin-login")
     public ResponseEntity<?> adminLogin(@RequestBody(required = false) AdminLoginRequest request,
-                                        HttpServletRequest httpRequest) {
+                                        HttpServletRequest httpRequest,
+                                        HttpServletResponse httpResponse) {
         try {
             if (request == null || request.username() == null || request.username().isBlank()
                     || request.password() == null || request.password().isBlank()) {
@@ -64,11 +74,18 @@ public class PublicAuthController {
             }
             AdminLoginResult result = adminAuthService.login(
                     request.username(), request.password(), clientIp(httpRequest));
+            sessionCookieService.setSessionCookie(httpResponse, result.sessionToken(), result.expiresAt());
             return ResponseEntity.ok(result);
         } catch (TenantRegistrationException ex) {
             return ResponseEntity.status(ex.status())
                     .body(new ApiError(ex.errorCode(), ex.getMessage()));
         }
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<OperationResult> logout(HttpServletResponse response) {
+        sessionCookieService.clearSessionCookie(response);
+        return ResponseEntity.ok(new OperationResult("已退出登录"));
     }
 
     @PostMapping("/forgot-password")
@@ -120,10 +137,12 @@ public class PublicAuthController {
     }
 
     private String clientIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            int comma = forwarded.indexOf(',');
-            return (comma > 0 ? forwarded.substring(0, comma) : forwarded).trim();
+        if (trustForwardedHeaders) {
+            String forwarded = request.getHeader("X-Forwarded-For");
+            if (forwarded != null && !forwarded.isBlank()) {
+                int comma = forwarded.indexOf(',');
+                return (comma > 0 ? forwarded.substring(0, comma) : forwarded).trim();
+            }
         }
         return request.getRemoteAddr();
     }

@@ -20,6 +20,10 @@ wxclaw:
   api:
     auth-enabled: true
     bootstrap-key: test-secret
+  security:
+    ai-key-encryption-key: test-encryption-key
+    trust-forwarded-headers: false
+    allow-private-url: false
   tenancy:
     default-tenant-id: default
     require-context: true

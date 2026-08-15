@@ -11,10 +11,15 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.net.URI;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * REST API 的租户上下文入口。
@@ -31,13 +36,19 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
     private final TenantApiKeyAuthenticator authenticator;
     private final TenantAuthService sessionAuthenticator;
     private final AdminAuthService adminAuthenticator;
+    private final SessionCookieService sessionCookieService;
+    private final Set<String> allowedOrigins;
 
     public ApiKeyAuthFilter(TenantApiKeyAuthenticator authenticator,
                             TenantAuthService sessionAuthenticator,
-                            AdminAuthService adminAuthenticator) {
+                            AdminAuthService adminAuthenticator,
+                            SessionCookieService sessionCookieService,
+                            @Value("${wxclaw.api.cors.allowed-origins:http://localhost:3000}") String[] allowedOrigins) {
         this.authenticator = authenticator;
         this.sessionAuthenticator = sessionAuthenticator;
         this.adminAuthenticator = adminAuthenticator;
+        this.sessionCookieService = sessionCookieService;
+        this.allowedOrigins = new HashSet<>(Arrays.asList(allowedOrigins));
     }
 
     @Override
@@ -60,6 +71,19 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
         }
 
         String requestApiKey = request.getHeader("X-API-Key");
+        boolean cookieSession = false;
+        if (requestApiKey == null || requestApiKey.isBlank()) {
+            requestApiKey = sessionCookieService.readSessionCookie(request);
+            cookieSession = requestApiKey != null && !requestApiKey.isBlank();
+        }
+        if (cookieSession && isStateChanging(request.getMethod())) {
+            if (!isSameOriginRequest(request)) {
+                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                response.setContentType("application/json;charset=UTF-8");
+                response.getWriter().write("{\"error\": \"Forbidden\", \"message\": \"Cross-site request rejected\"}");
+                return;
+            }
+        }
 
         // 管理端路径优先识别管理员会话（asess_ 前缀）；其余路径按 API Key -> 租户会话 依次尝试。
         TenantContext context = null;
@@ -86,6 +110,37 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
         } finally {
             // Tomcat 会复用请求线程，认证成功后的所有退出路径都必须清理上下文。
             TenantContextHolder.clear();
+        }
+    }
+
+    private boolean isStateChanging(String method) {
+        return "POST".equalsIgnoreCase(method)
+                || "PUT".equalsIgnoreCase(method)
+                || "PATCH".equalsIgnoreCase(method)
+                || "DELETE".equalsIgnoreCase(method);
+    }
+
+    private boolean isSameOriginRequest(HttpServletRequest request) {
+        String origin = request.getHeader("Origin");
+        String referer = request.getHeader("Referer");
+        String expectedHost = request.getServerName();
+        return isAllowedHeader(origin, expectedHost) || isAllowedHeader(referer, expectedHost);
+    }
+
+    private boolean isAllowedHeader(String value, String expectedHost) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        try {
+            URI uri = URI.create(value.trim());
+            String host = uri.getHost();
+            if (host == null) {
+                return false;
+            }
+            return expectedHost.equalsIgnoreCase(host)
+                    || allowedOrigins.stream().anyMatch(origin -> origin.contains(host));
+        } catch (IllegalArgumentException ex) {
+            return false;
         }
     }
 }

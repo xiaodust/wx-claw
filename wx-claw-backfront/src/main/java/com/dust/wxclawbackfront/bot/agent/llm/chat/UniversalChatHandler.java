@@ -152,6 +152,7 @@ public class UniversalChatHandler implements ChatHandler {
         if (memoryPrompt != null && !memoryPrompt.isBlank()) {
             systemPromptBuilder.append(memoryPrompt);
         }
+        systemPromptBuilder.append("\n\n只回复用户最新一条消息。历史对话仅用于理解上下文，不要重新处理或回答历史中的旧请求。");
         String systemPrompt = systemPromptBuilder.toString();
 
         // 早期上下文：向量记忆召回 + 更早对话摘要，放在 system prompt 之前

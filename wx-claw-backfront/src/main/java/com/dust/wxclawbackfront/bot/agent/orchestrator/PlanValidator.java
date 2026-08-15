@@ -79,9 +79,19 @@ public class PlanValidator {
                     return ValidationResult.invalid("步骤 " + stepNumber + " 的 params 必须是对象");
                 }
                 if (stepNode.has("depends_on") && !stepNode.get("depends_on").isNull()) {
-                    int dependency = stepNode.get("depends_on").asInt(-1);
-                    if (dependency <= 0 || dependency == stepNumber || !stepNumbers.contains(dependency)) {
-                        return ValidationResult.invalid("步骤 " + stepNumber + " 的依赖必须指向前置步骤");
+                    JsonNode dependencyNode = stepNode.get("depends_on");
+                    if (dependencyNode.isArray()) {
+                        for (JsonNode item : dependencyNode) {
+                            int dependency = item.asInt(-1);
+                            if (dependency <= 0 || dependency == stepNumber || !stepNumbers.contains(dependency)) {
+                                return ValidationResult.invalid("步骤 " + stepNumber + " 的依赖必须指向前置步骤");
+                            }
+                        }
+                    } else {
+                        int dependency = dependencyNode.asInt(-1);
+                        if (dependency <= 0 || dependency == stepNumber || !stepNumbers.contains(dependency)) {
+                            return ValidationResult.invalid("步骤 " + stepNumber + " 的依赖必须指向前置步骤");
+                        }
                     }
                 }
             }

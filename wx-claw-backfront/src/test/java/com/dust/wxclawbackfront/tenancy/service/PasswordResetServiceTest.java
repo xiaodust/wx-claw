@@ -2,6 +2,7 @@ package com.dust.wxclawbackfront.tenancy.service;
 
 import com.dust.wxclawbackfront.bot.agent.tools.mail.MailHandler;
 import com.dust.wxclawbackfront.bot.agent.tools.mail.MailSendResult;
+import com.dust.wxclawbackfront.config.security.PasswordPolicy;
 import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import com.dust.wxclawbackfront.tenancy.entity.TenantAccount;
 import com.dust.wxclawbackfront.tenancy.entity.TenantPasswordReset;
@@ -42,7 +43,8 @@ class PasswordResetServiceTest {
     private final MailHandler mailHandler = mock(MailHandler.class);
     private final ObjectProvider<MailHandler> mailProvider = mock(ObjectProvider.class);
     private final PasswordResetService service = new PasswordResetService(
-            accountRepository, resetRepository, sessionRepository, secretHasher, rateLimiter, mailProvider);
+            accountRepository, resetRepository, sessionRepository, secretHasher, rateLimiter, mailProvider,
+            new PasswordPolicy());
 
     @AfterEach
     void tearDown() {

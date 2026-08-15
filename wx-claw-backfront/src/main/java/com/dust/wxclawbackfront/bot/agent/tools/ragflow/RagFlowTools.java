@@ -2,13 +2,21 @@ package com.dust.wxclawbackfront.bot.agent.tools.ragflow;
 
 import com.dust.wxclawbackfront.bot.ragflow.RagFlowClient;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.AiToolProvider;
+import com.dust.wxclawbackfront.bot.agent.tools.shared.FileUploadValidator;
 import com.dust.wxclawbackfront.bot.agent.tools.shared.ToolInvocationLog;
-import lombok.RequiredArgsConstructor;
+import com.dust.wxclawbackfront.config.security.UrlSafetyValidator;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -18,14 +26,26 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 @ConditionalOnBean(RagFlowClient.class)
 public class RagFlowTools implements AiToolProvider {
 
     private final RagFlowClient ragFlowClient;
+    private final UrlSafetyValidator urlSafetyValidator;
+    private final FileUploadValidator fileUploadValidator;
+    private final long maxDownloadBytes;
     private final java.net.http.HttpClient httpClient = java.net.http.HttpClient.newBuilder()
             .connectTimeout(java.time.Duration.ofSeconds(30))
             .build();
+
+    public RagFlowTools(RagFlowClient ragFlowClient,
+                        UrlSafetyValidator urlSafetyValidator,
+                        FileUploadValidator fileUploadValidator,
+                        @Value("${wxclaw.knowledge.max-download-bytes:10485760}") long maxDownloadBytes) {
+        this.ragFlowClient = ragFlowClient;
+        this.urlSafetyValidator = urlSafetyValidator;
+        this.fileUploadValidator = fileUploadValidator;
+        this.maxDownloadBytes = maxDownloadBytes;
+    }
 
     @Override
     public Object getTool() {
@@ -103,6 +123,8 @@ public class RagFlowTools implements AiToolProvider {
             return new KnowledgeUploadResult(false, null, "文件URL必须是完整的 HTTP/HTTPS 地址，不能只传文件名");
         }
 
+        urlSafetyValidator.validatePublicFetchUrl(fileUrl.trim());
+
         if (fileName == null || fileName.isBlank()) {
             // 从URL中提取文件名
             fileName = extractFileNameFromUrl(fileUrl);
@@ -114,6 +136,11 @@ public class RagFlowTools implements AiToolProvider {
         try {
             // 下载文件
             byte[] fileContent = downloadFile(fileUri);
+
+            FileUploadValidator.ValidationResult validation = fileUploadValidator.validate(fileName, fileContent);
+            if (!validation.isValid()) {
+                return new KnowledgeUploadResult(false, null, validation.getError());
+            }
 
             // 上传到RAGFlow
             RagFlowClient.UploadResult result = ragFlowClient.uploadDocument(fileContent, fileName);
@@ -158,14 +185,26 @@ public class RagFlowTools implements AiToolProvider {
                 .GET()
                 .build();
 
-        java.net.http.HttpResponse<byte[]> response = httpClient.send(request,
-                java.net.http.HttpResponse.BodyHandlers.ofByteArray());
+        HttpResponse<InputStream> response = httpClient.send(request,
+                HttpResponse.BodyHandlers.ofInputStream());
 
         if (response.statusCode() / 100 != 2) {
             throw new RuntimeException("下载文件失败: HTTP " + response.statusCode());
         }
 
-        return response.body();
+        try (InputStream in = response.body(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            long total = 0;
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                total += read;
+                if (total > maxDownloadBytes) {
+                    throw new IOException("下载文件超过大小限制");
+                }
+                out.write(buffer, 0, read);
+            }
+            return out.toByteArray();
+        }
     }
 
     /**

@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { AccountInfo, AiConfigEntry, AiConfigs, Bot, Conversation, Message, ModelCatalog, QrInfo, SetupAccountRequest, SetupAccountResult } from '../types/user'
+import type { AccountInfo, AiConfigEntry, AiConfigs, Bot, Conversation, MailConfig, Message, ModelCatalog, QrInfo, SaveMailConfigRequest, SetupAccountRequest, SetupAccountResult } from '../types/user'
 
 export function listBots(): Promise<Bot[]> {
   return api.get('/bots').then(r => r.data)
@@ -63,4 +63,16 @@ export function getAccountInfo(): Promise<AccountInfo> {
 
 export function setupAccount(payload: SetupAccountRequest): Promise<SetupAccountResult> {
   return api.post('/account/setup', payload).then(r => r.data)
+}
+
+export function getMailConfig(): Promise<MailConfig> {
+  return api.get('/mail-config').then(r => r.data)
+}
+
+export function saveMailConfig(payload: SaveMailConfigRequest): Promise<MailConfig> {
+  return api.put('/mail-config', payload).then(r => r.data)
+}
+
+export function clearMailConfig(): Promise<void> {
+  return api.delete('/mail-config').then(r => r.data)
 }

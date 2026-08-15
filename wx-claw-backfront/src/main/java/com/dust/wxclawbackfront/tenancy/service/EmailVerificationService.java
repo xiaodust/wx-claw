@@ -151,6 +151,7 @@ public class EmailVerificationService {
         }
     }
 
+    @Transactional
     @Scheduled(fixedDelayString = "${wxclaw.api.email-code.cleanup-ms:1800000}")
     public void cleanupExpiredCodes() {
         long removed = verificationRepository.deleteByExpiresAtBefore(LocalDateTime.now());

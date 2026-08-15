@@ -1,18 +1,23 @@
 import axios from 'axios'
 
-export const API_KEY_STORAGE = 'wx-claw-admin-api-key'
+export const AUTH_FLAG_STORAGE = 'wx-claw-admin-authenticated'
 
-export const api = axios.create({ baseURL: '/api/admin', timeout: 30000 })
+let apiKey = ''
+
+export function setApiKey(value: string) { apiKey = value }
+export function clearApiKey() { apiKey = '' }
+
+export const api = axios.create({ baseURL: '/api/admin', timeout: 30000, withCredentials: true })
 
 api.interceptors.request.use(config => {
-  const key = sessionStorage.getItem(API_KEY_STORAGE)
-  if (key) config.headers['X-API-Key'] = key
+  if (apiKey) config.headers['X-API-Key'] = apiKey
   return config
 })
 
 api.interceptors.response.use(response => response, error => {
   if (error.response?.status === 401) {
-    sessionStorage.removeItem(API_KEY_STORAGE)
+    clearApiKey()
+    sessionStorage.removeItem(AUTH_FLAG_STORAGE)
     if (location.pathname !== '/login') location.assign('/login')
   }
   return Promise.reject(error)

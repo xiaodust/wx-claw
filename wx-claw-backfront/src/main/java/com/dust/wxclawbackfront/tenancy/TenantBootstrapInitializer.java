@@ -66,6 +66,9 @@ public class TenantBootstrapInitializer implements ApplicationRunner {
     @Value("${wxclaw.ilink.bot-ids:${wxclaw.ilink.default-bot-id:default}}")
     private List<String> botIds;
 
+    @Value("${wxclaw.security.log-generated-bootstrap-secrets:false}")
+    private boolean logGeneratedBootstrapSecrets;
+
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
@@ -105,8 +108,12 @@ public class TenantBootstrapInitializer implements ApplicationRunner {
                     byte[] bytes = new byte[24];
                     secureRandom.nextBytes(bytes);
                     secret = "wxclaw-" + HexFormat.of().formatHex(bytes);
+                    if (logGeneratedBootstrapSecrets) {
                     log.warn("未配置 API_BOOTSTRAP_KEY，已自动生成管理 API Key（仅本次展示，请立即保存）: {}.{}",
                             credentialId, secret);
+                    } else {
+                        log.warn("未配置 API_BOOTSTRAP_KEY，已自动生成但不打印明文。请设置 API_BOOTSTRAP_KEY 后重启；本地开发可临时开启 wxclaw.security.log-generated-bootstrap-secrets=true");
+                    }
                 }
                 credential.setSecretHash(secretHasher.hash(secret));
                 credential.setScopes("*");
@@ -134,8 +141,12 @@ public class TenantBootstrapInitializer implements ApplicationRunner {
                     byte[] bytes = new byte[12];
                     secureRandom.nextBytes(bytes);
                     password = HexFormat.of().formatHex(bytes);
+                    if (logGeneratedBootstrapSecrets) {
                     log.warn("未配置 ADMIN_PASSWORD，已自动生成管理端初始密码（仅本次展示，请立即修改）: username={}, password={}",
                             adminUsername.trim().toLowerCase(), password);
+                    } else {
+                        log.warn("未配置 ADMIN_PASSWORD，已自动生成但不打印明文。请设置 ADMIN_PASSWORD 后重启；本地开发可临时开启 wxclaw.security.log-generated-bootstrap-secrets=true");
+                    }
                 }
                 AdminAccount account = new AdminAccount();
                 account.setUsername(adminUsername.trim().toLowerCase());

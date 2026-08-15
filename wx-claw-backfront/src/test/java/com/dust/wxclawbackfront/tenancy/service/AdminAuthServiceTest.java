@@ -1,5 +1,6 @@
 package com.dust.wxclawbackfront.tenancy.service;
 
+import com.dust.wxclawbackfront.config.security.PasswordPolicy;
 import com.dust.wxclawbackfront.tenancy.TenantContext;
 import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import com.dust.wxclawbackfront.tenancy.api.PublicTenantDtos.AdminLoginResult;
@@ -34,7 +35,7 @@ class AdminAuthServiceTest {
     private final ApiSecretHasher secretHasher = mock(ApiSecretHasher.class);
     private final PublicAuthRateLimiter rateLimiter = mock(PublicAuthRateLimiter.class);
     private final AdminAuthService service = new AdminAuthService(
-            accountRepository, sessionRepository, secretHasher, rateLimiter);
+            accountRepository, sessionRepository, secretHasher, rateLimiter, new PasswordPolicy());
 
     @Test
     void loginIssuesAdminSessionWithHashedToken() {

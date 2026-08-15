@@ -2,6 +2,7 @@ package com.dust.wxclawbackfront.tenancy.service;
 
 import com.dust.wxclawbackfront.bot.agent.tools.mail.MailHandler;
 import com.dust.wxclawbackfront.bot.agent.tools.mail.MailSendResult;
+import com.dust.wxclawbackfront.config.security.PasswordPolicy;
 import com.dust.wxclawbackfront.tenancy.TenantContext;
 import com.dust.wxclawbackfront.tenancy.TenantContextHolder;
 import com.dust.wxclawbackfront.tenancy.entity.TenantAccount;
@@ -54,6 +55,7 @@ public class PasswordResetService {
     private final ApiSecretHasher secretHasher;
     private final PublicAuthRateLimiter rateLimiter;
     private final ObjectProvider<MailHandler> mailHandlerProvider;
+    private final PasswordPolicy passwordPolicy;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -103,7 +105,8 @@ public class PasswordResetService {
     @Transactional
     public void resetPassword(String token, String newPassword) {
         String password = newPassword == null ? "" : newPassword.trim();
-        if (password.length() < 8 || password.length() > 128) {
+        passwordPolicy.validate(password);
+        if (password.length() < 8 || password.length() > 64) {
             throw new TenantRegistrationException("VALIDATION_ERROR", "密码长度需为 8-128 位",
                     HttpStatus.BAD_REQUEST);
         }

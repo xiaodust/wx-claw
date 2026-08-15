@@ -50,7 +50,7 @@ public class ILinkRuntimeManager {
             if (!client.isLoggedIn()) {
                 String qrCodeContent = client.executeLogin();
                 statusRegistry.waitingForQr(key, qrCodeContent);
-                log.info("Bot {} / {} 请扫码登录：\n{}", key.tenantId(), key.botId(), qrCodeContent);
+                log.info("Bot {} / {} 等待扫码登录，请通过前端获取二维码", key.tenantId(), key.botId());
                 client.getLoginFuture().get();
             }
         } catch (Exception ex) {

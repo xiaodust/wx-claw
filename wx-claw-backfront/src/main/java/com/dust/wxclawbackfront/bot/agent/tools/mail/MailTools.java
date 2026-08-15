@@ -25,7 +25,7 @@ public class MailTools implements AiToolProvider {
         return 60;
     }
 
-    private final MailHandler mailHandler;
+    private final TenantMailSender tenantMailSender;
 
     @Tool(name = "send_email", 
           description = "发送邮件给指定收件人。可用于发送通知、告警、报告等。支持纯文本和 HTML 格式。")
@@ -33,7 +33,7 @@ public class MailTools implements AiToolProvider {
     public MailToolResult send(String to, String subject, String content, String contentType) {
         boolean isHtml = "html".equalsIgnoreCase(contentType);
         
-        MailSendResult result = mailHandler.send(to, subject, content, isHtml);
+        MailSendResult result = tenantMailSender.send(to, subject, content, isHtml);
         
         if (result.isSuccess()) {
             return new MailToolResult(true, to, subject, result.getSentAt(), null);
