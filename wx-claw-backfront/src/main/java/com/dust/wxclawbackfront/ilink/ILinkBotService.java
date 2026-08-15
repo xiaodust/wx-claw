@@ -169,10 +169,10 @@ public class ILinkBotService {
                         statusRegistry.reconnecting(key, reconnectAttempts, ex);
                         discardResumeContext = reconnectAttempts >= maxReconnectAttempts;
                         if (discardResumeContext) {
-                            log.warn("Bot {} / {} 登录会话连续重连失败达到上限（{} 次），将清除旧会话并重新扫码登录",
+                            log.debug("Bot {} / {} 登录会话连续重连失败达到上限（{} 次），将清除旧会话并重新扫码登录",
                                     key.tenantId(), key.botId(), maxReconnectAttempts);
                         } else {
-                            log.warn("Bot {} / {} 登录会话已过期，尝试恢复连接 {}/{}: {}",
+                            log.debug("Bot {} / {} 登录会话已过期，尝试恢复连接 {}/{}: {}",
                                     key.tenantId(), key.botId(), reconnectAttempts,
                                     maxReconnectAttempts, ex.getMessage());
                         }
@@ -186,7 +186,7 @@ public class ILinkBotService {
 
             } catch (Exception ex) {
                 if (isQrCodeExpired(ex)) {
-                    log.warn("Bot {} / {} 登录二维码已过期，即将自动刷新",
+                    log.debug("Bot {} / {} 登录二维码已过期，即将自动刷新",
                             key.tenantId(), key.botId());
                     statusRegistry.waitingForQr(key);
                     sleepQuietly(1000L);
@@ -196,10 +196,10 @@ public class ILinkBotService {
                     statusRegistry.error(key, reconnectAttempts, ex);
                     discardResumeContext = reconnectAttempts >= maxReconnectAttempts;
                     if (discardResumeContext) {
-                        log.warn("Bot {} / {} 连续重连失败达到上限（{} 次），将清除旧会话并重新扫码登录",
+                        log.debug("Bot {} / {} 连续重连失败达到上限（{} 次），将清除旧会话并重新扫码登录",
                                 key.tenantId(), key.botId(), maxReconnectAttempts);
                     } else {
-                        log.info("等待 {} 秒后重试...", reconnectDelaySeconds);
+                        log.debug("等待 {} 秒后重试...", reconnectDelaySeconds);
                         sleepQuietly(reconnectDelaySeconds * 1000L);
                     }
                 }
