@@ -48,8 +48,8 @@ public class PublicAuthRateLimiter {
             @Value("${wxclaw.api.password-reset.max-per-ip:20}") int resetPerIp,
             @Value("${wxclaw.api.email-code.max-per-email-and-ip:5}") int emailCodePerEmailAndIp,
             @Value("${wxclaw.api.email-code.max-per-ip:20}") int emailCodePerIp,
-            @Value("${wxclaw.api.admin-login.max-per-user-and-ip:5}") int adminLoginPerUserAndIp,
-            @Value("${wxclaw.api.admin-login.max-per-ip:20}") int adminLoginPerIp) {
+            @Value("${wxclaw.api.admin-login.max-per-user-and-ip:10}") int adminLoginPerUserAndIp,
+            @Value("${wxclaw.api.admin-login.max-per-ip:30}") int adminLoginPerIp) {
         this.maxPerIp = Math.max(1, maxPerIp);
         this.maxPerEmail = Math.max(1, maxPerEmail);
         this.loginPerUserAndIp = Math.max(1, loginPerUserAndIp);
