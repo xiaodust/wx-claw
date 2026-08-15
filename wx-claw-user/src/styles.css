@@ -167,6 +167,51 @@ a { color: var(--accent); }
   box-shadow: 0 0 0 1px var(--accent) inset, 0 0 0 3px rgba(255, 180, 0, 0.12);
 }
 
+@media (max-width: 760px) {
+  .page-title { font-size: 21px; }
+  .page-subtitle { font-size: 12px; margin-bottom: 16px; }
+  .panel { padding: 14px; border-radius: 12px; }
+  .toolbar { gap: 8px; }
+  .toolbar .el-button { flex: 1 1 auto; }
+  .main { padding-left: 12px !important; padding-right: 12px !important; }
+  .cap-actions,
+  .pwd-row,
+  .email-code-row,
+  .cap-row,
+  .model-row {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 8px;
+  }
+  .cap-actions .el-input,
+  .cap-actions .el-select,
+  .cap-actions .el-input-number,
+  .pwd-row .el-input,
+  .email-code-row .el-input,
+  .cap-row .el-input,
+  .cap-row .el-select,
+  .cap-row .el-input-number {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+  .el-dialog {
+    width: 92% !important;
+    max-width: 520px;
+  }
+  .el-table {
+    display: block;
+    overflow-x: auto;
+  }
+  .header {
+    gap: 10px;
+    padding: 0 10px;
+    height: 54px;
+  }
+  .brand-sub { display: none; }
+  .nav :deep(.el-menu-item) { padding: 0 8px; font-size: 12px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
