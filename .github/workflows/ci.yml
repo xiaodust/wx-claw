@@ -21,7 +21,8 @@ jobs:
       - name: Copy Maven settings (aliyun mirror)
         run: cp wx-claw-backfront/maven-settings.xml ~/.m2/settings.xml
       - name: Run tests
-        run: cd wx-claw-backfront && sh ./mvnw -B -ntp verify
+        # 排除需 MySQL 的启动冒烟测试；PromptGoldenEvalRunner(Testcontainers+真实模型)默认不匹配 surefire includes
+        run: cd wx-claw-backfront && sh ./mvnw -B -ntp "-Dtest=!WxClawBackfrontApplicationTests" verify
   admin:
     name: Admin Console (Vue)
     runs-on: ubuntu-latest
