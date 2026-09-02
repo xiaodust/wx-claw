@@ -179,13 +179,8 @@
                         <format>JSON</format>
                     </formats>
                 </configuration>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                    </execution>
-                </executions>
+                <!-- 不绑定默认生命周期：NVD 全量同步需 API Key 且极耗时。
+                     手动运行：./mvnw org.owasp:dependency-check-maven:check -->
             </plugin>
         </plugins>
     </build>
