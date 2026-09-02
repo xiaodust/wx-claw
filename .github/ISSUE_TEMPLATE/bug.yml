@@ -1,0 +1,40 @@
+name: Bug Report
+description: 报告 WX-Claw 使用中遇到的 Bug
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    attributes:
+      label: 问题描述
+      placeholder: 清晰描述出现的问题
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 
+        2. 
+        3. 
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: 期望行为
+    validations:
+      required: false
+  - type: textarea
+    attributes:
+      label: 实际行为
+    validations:
+      required: false
+  - type: textarea
+    attributes:
+      label: 环境信息
+      placeholder: |
+        - OS:
+        - JDK/Node 版本:
+        - 部署方式（Docker/原生）:
+        - 关键日志:
+    validations:
+      required: false

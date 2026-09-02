@@ -19,6 +19,10 @@
 | [docs/PROJECT_DOCUMENTATION.md](docs/PROJECT_DOCUMENTATION.md) | 项目开发与维护全案（数据库/安全/测试/待办） | 维护者/贡献者 |
 | [CHANGELOG.md](CHANGELOG.md) | 版本历史 v1.0 → v3.0 | 所有人 |
 
+## 截图
+
+![官网首页](docs/screenshots/home.png)
+
 ## 核心特性
 
 - **Agent 编排系统** - LLM 驱动的多步任务规划（`规划 → 校验重试 → 失败降级对话`），自动拆解复杂请求并按依赖执行
