@@ -21,7 +21,9 @@ jobs:
       - name: Copy Maven settings (aliyun mirror)
         run: cp wx-claw-backfront/maven-settings.xml ~/.m2/settings.xml
       - name: Run tests
-        run: cd wx-claw-backfront && ./mvnw -B -ntp verify
+        run: |
+          chmod +x ./mvnw
+          cd wx-claw-backfront && ./mvnw -B -ntp verify
   admin:
     name: Admin Console (Vue)
     runs-on: ubuntu-latest
