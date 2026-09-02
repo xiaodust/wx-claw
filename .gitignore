@@ -104,3 +104,10 @@ docs/memory-improvement-plan.md
 
 # 压测资产（含本机明文口令与 API Key、种子 SQL、jtl/html 结果产物），不随仓库公开
 docs/loadtest/
+
+# 本地安全审计工具与产物（gitleaks binary / NVD 缓存 / 报告），不入仓
+tools/gitleaks/
+tools/*.zip
+scripts/security/
+docs/audit/
+*/dependency-check-report.html
