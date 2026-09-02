@@ -2,6 +2,9 @@
 
 一个多租户的微信 ILink 智能体平台：基于 Spring AI 的 Agent 编排系统实现多工具协同调度与多模态回复，并配套官网、用户控制台与管理端三个 Web 端。
 
+> [!IMPORTANT]
+> **合规与免责声明**：本项目通过第三方微信接入通道（ILink）实现智能体消息收发，与腾讯公司及微信官方产品无任何关联，亦非官方 SDK。项目仅供技术学习与研究使用；使用者须自行评估并遵守微信平台相关服务条款、当地法律法规及所对接账号的服务协议。因使用本项目导致的账号限制、服务中断或其他风险，由使用者自行承担。
+
 ## 版本信息
 
 当前版本：**v3.0**
@@ -312,10 +315,6 @@ docker compose -f docker-compose.yml up -d
 ### 2. 克隆项目
 
 ```bash
-# GitLab 仓库
-git clone https://codeserver.youkeda.com/dustheart/wx-claw.git
-
-# 或 GitHub 镜像
 git clone https://github.com/xiaodust/wx-claw.git
 
 cd wx-claw
@@ -447,9 +446,10 @@ JOB_HELPER_MCP_ENABLED=false
 ### 使用 cpolar 临时公网访问
 
 ```powershell
-D:\\cpolar.exe authtoken 你的token
-D:\\cpolar.exe http 3000 -inspect-addr 127.0.0.1:4042 -log stdout
-D:\\cpolar.exe http 3001 -inspect-addr 127.0.0.1:4043 -log stdout
+# 任意内网穿透工具均可（cpolar / ngrok / cloudflared 等）
+cpolar authtoken <你的token>          # 仅首次使用 cpolar 时需要
+cpolar http 3000 -inspect-addr 127.0.0.1:4042 -log stdout
+cpolar http 3001 -inspect-addr 127.0.0.1:4043 -log stdout
 ```
 
 将 cpolar 返回的 HTTPS 地址填入 `.env`：
@@ -897,4 +897,4 @@ logging:
 
 ## 许可证
 
-[MIT License](LICENSE)
+[Apache-2.0 License](LICENSE)

@@ -1,4 +1,4 @@
-FROM a88323zq5m8jpcsqo5.xuanyuan.run/maven:3.9-eclipse-temurin-21 AS build
+FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /app
 
 COPY pom.xml .
@@ -9,7 +9,7 @@ COPY src ./src
 RUN cp src/main/resources/application.example.yml src/main/resources/application.yml
 RUN mvn -q -DskipTests package
 
-FROM a88323zq5m8jpcsqo5.xuanyuan.run/eclipse-temurin:21-jre-jammy
+FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 
 RUN useradd -r -u 1001 app
