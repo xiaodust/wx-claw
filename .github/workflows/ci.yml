@@ -21,36 +21,36 @@ jobs:
       - name: Copy Maven settings (aliyun mirror)
         run: cp wx-claw-backfront/maven-settings.xml ~/.m2/settings.xml
       - name: Run tests
-        run: |
-          chmod +x ./mvnw
-          cd wx-claw-backfront && ./mvnw -B -ntp verify
+        run: cd wx-claw-backfront && sh ./mvnw -B -ntp verify
   admin:
     name: Admin Console (Vue)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: wx-claw-admin
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
-      - run: npm ci || npm install
-      - run: npm run build
+          cache-dependency-path: wx-claw-admin/package-lock.json
+      - name: Install & build
+        working-directory: wx-claw-admin
+        run: |
+          npm ci
+          npm run build
   user:
     name: User Console (Vue)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: wx-claw-user
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
-      - run: npm ci || npm install
-      - run: npm run build
+          cache-dependency-path: wx-claw-user/package-lock.json
+      - name: Install & build
+        working-directory: wx-claw-user
+        run: |
+          npm ci
+          npm run build
