@@ -2,6 +2,7 @@ FROM a88323zq5m8jpcsqo5.xuanyuan.run/maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /app
 
 COPY pom.xml .
+COPY maven-settings.xml /root/.m2/settings.xml
 RUN mvn -q dependency:go-offline
 
 COPY src ./src
